@@ -1,6 +1,6 @@
 # Fork 改造手术方案（bqv/dsh-android → 我们自己的客户端）
 
-> 基线：`/tmp/dsh-android-prior`（`bqv/dsh-android` v0.6.6，MPL-2.0）。140 个 .kt / 8.0 万行；342 个 JVM 测试（model 47 / ui 40 / term 10 / scroll 9 / net 8 / widget 6 …），全部可无设备运行。
+> 基线：`/tmp/dsh-android-prior`（`bqv/dsh-android` v0.6.6，MPL-2.0）。main 140 个 .kt / 5.8 万行 + test 127 个 .kt；实测 **1 116 个 @Test**（README 里的 342 已过时）。其中 47 个文件跑 Robolectric / `createComposeRule`，其余纯 JVM。
 > 本文只讲“怎么改、按什么顺序改、每步验收”，视觉规范见 [DESIGN.md](DESIGN.md)，构建与 CI 见 [BUILD-AND-CI.md](BUILD-AND-CI.md)。
 
 ## 1. 第一步：让它成为“我们的仓库”（半天）
@@ -46,13 +46,13 @@
 - `upstream` 拉取后，用 `git cherry-pick` 合入 `main`；冲突高发文件（我们会大改的）应**提前标注**：
   - `ui/theme/DshTheme.kt`、`ui/ChatScreen.kt`、`ui/SessionsDrawer.kt`、`ui/components/Composer.kt`、`ui/SettingsContent.kt`
 - 建议把这几个文件**先原样拷贝成我们的新文件**（如 `ui/theme/AppTheme.kt`），上游文件保留不动 → 后续上游更新零冲突，我们的改动集中在自己的文件里。
-- 每个上游版本升级建 issue + 一次全量测试跑（342 个 JVM 测试是主要防线）。
+- 每个上游版本升级建 issue + 一次全量测试跑（1 116 个 @Test 是主要防线）。
 
 ## 5. 测试与 CI
 
 | 项 | 现状 | 我们怎么做 |
 |---|---|---|
-| 单测 | 342 个纯 JVM（无需设备/模拟器） | `bash build.sh :app:testDebugUnitTest`；CI 里作为构建前门禁 |
+| 单测 | 1 116 个 @Test（47 个走 Robolectric，无需真机） | `bash build.sh :app:testDebugUnitTest`；CI 里作为构建前门禁 |
 | UI 测试 | 无 androidTest（上游仅少量） | 先不引入；用 Roborazzi 截图测试作为**视觉回归**（换皮阶段必备） |
 | 构建 | `build.sh` 唯一入口；无 wrapper；JDK 17 + Gradle 8.7 + `/opt/android-sdk` | CI 用 `ubuntu-latest` 复现 toolchain；本地见 [BUILD-AND-CI.md](BUILD-AND-CI.md) |
 | 签名 | release 走环境变量（`SIGNING_STORE_FILE` 等 4 个）或 CI secrets | **首发前定死 keystore**，否则 debug 签名包无法被正式包覆盖安装 |
@@ -74,7 +74,7 @@
 | # | 任务 | 验收 |
 |---|---|---|
 | 1 | 建仓 + 分支 + NOTICE + 上游 remote | `git remote -v`、`main` 能跑 CI |
-| 2 | 改包名/应用名/图标（§2 全清单） | 手机安装后显示新名，342 测试仍绿 |
+| 2 | 改包名/应用名/图标（§2 全清单） | 手机安装后显示新名，1 116 个测试仍绿 |
 | 3 | 抽 `:core:protocol` + `:core:model`（§3 M1/M2） | 模块可独立编译，单测迁移后全绿 |
 | 4 | 建 `:design` 骨架（`DshTheme` 适配 + `ColorMode` 7 档 + Miuix 依赖） | 设置页能切外观并持久化 |
 | 5 | Scaffold 换装（TopBar + FloatingBottomBar + pager） | 底栏三页可切换 |

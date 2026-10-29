@@ -17,7 +17,7 @@
 ## 2. 本地能做什么（开发内循环）
 
 ```sh
-# 1) 纯 JVM 单测（fork 的 net/ 有 8 个，模型层 47 个，共 342 个全部无需设备）
+# 1) 纯 JVM 单测（共 1 116 个 @Test，其中 47 个跑 Robolectric；全部无需真机）
 ./gradlew :core:protocol:test          # 拆分后
 
 # 2) 静态检查

@@ -10,7 +10,7 @@
 | 0.1 | 建私有仓库，`origin`=自己、`upstream`=bqv | 仓库 | `git remote -v` 正确 | — |
 | 0.2 | 改包名/应用名/图标/About | 提交 | 全仓无旧包名；APK 安装显示新名 | 0.1 |
 | 0.3 | `NOTICE.md` + 修改文件头标注 | 文档 | MPL 义务齐备 | 0.2 |
-| 0.4 | CI：`build.yml` 出 APK + 新增 `verify.yml` 跑 342 单测 | 工作流 | 两个 workflow 绿 | 0.2 |
+| 0.4 | CI：`build.yml` 出 APK + 新增 `verify.yml` 跑 1 116 个单测 | 工作流 | 两个 workflow 绿 | 0.2 |
 | 0.5 | 首次真机冒烟（连本实例，聊天+审批+文件） | 记录 | 全链路通过 | 0.4 |
 
 ## 阶段 1 · 结构（1 周）

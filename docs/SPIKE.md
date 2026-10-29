@@ -6,7 +6,7 @@
 
 | 项目 | 许可 | 规模 | 架构 | 依赖 Host 插件 | 适配本实例（免登录 + 0.2.2） | 结论 |
 |---|---|---|---|---|---|---|
-| `bqv/dsh-android` | MPL-2.0 | 140 个 .kt / 8.0 万行 / 342 JVM 测试 / v0.6.6 | 纯原生 Compose，自研 `net/`（DshClient 1155 行、EndpointResolver 673、RemoteMux 575、CertTrust 273、Multipart 152、PersistentCookieJar 122） | **否**（只用官方 HTTP+WS 面） | 需验证：v0.6.6 面向较早 dsh；本实例加了 `dsh-linkless-access`（免登录），需确认其登录页支持"无 Cookie 直连" | **首选评估对象**（架构正、许可宽松、代码可读） |
+| `bqv/dsh-android` | MPL-2.0 | 140 个 main .kt / 5.8 万行 / 1 116 个 @Test / v0.6.6 | 纯原生 Compose，自研 `net/`（DshClient 1155 行、EndpointResolver 673、RemoteMux 575、CertTrust 273、Multipart 152、PersistentCookieJar 122） | **否**（只用官方 HTTP+WS 面） | 需验证：v0.6.6 面向较早 dsh；本实例加了 `dsh-linkless-access`（免登录），需确认其登录页支持"无 Cookie 直连" | **首选评估对象**（架构正、许可宽松、代码可读） |
 | `Hakunm/dsh-android-app` | **AGPL-3.0** | 12 个 .kt，模块化程度低，v1.0.0，29 star | Compose，`data/DshClient.kt` 单文件协议层 | **是**（`dsh-workspace` 插件 + 授权根） | 需要客户端装插件，本实例未装 | **只做功能参照，代码不可并入**（AGPL 传染） |
 | 自研 | — | — | 按 PLAN.md §3.2 | 否 | 完全可控 | 前两者都不满足时采用 |
 

@@ -9,7 +9,7 @@
 
 | 项 | 结论 |
 |---|---|
-| **最重要的事** | **已经有人做出来了**，而且不止一个：`bqv/dsh-android`（MPL-2.0，v0.6.6，纯协议、不需要装 Host 插件，140 个 Kotlin 文件 / 8.0 万行 / 342 个 JVM 测试）与 `Hakunm/dsh-android-app`（AGPL-3.0，v1.0.0，29 star，功能更全但依赖 Host 插件 `dsh-workspace`）。规划的第一决策不是"怎么写"，而是**"fork 谁 / 借鉴谁 / 还是从零写"** |
+| **最重要的事** | **已经有人做出来了**，而且不止一个：`bqv/dsh-android`（MPL-2.0，v0.6.6，纯协议、不需要装 Host 插件，140 个 Kotlin 文件 / 5.8 万行 / **1 116 个 JVM 测试**）与 `Hakunm/dsh-android-app`（AGPL-3.0，v1.0.0，29 star，功能更全但依赖 Host 插件 `dsh-workspace`）。规划的第一决策不是"怎么写"，而是**"fork 谁 / 借鉴谁 / 还是从零写"** |
 | 技术底座 | Kotlin + Jetpack Compose（fork 自 `bqv/dsh-android`，MPL-2.0）；**不用 WebView 承载主界面**，纯原生 |
 | 为什么可行 | 非浏览器客户端是**官方设计内**路径：`GET /connect?token=…&interactions=answer` 签 Cookie；一元调用 `POST /api/<ns>/<method>`；流 = 单条 WebSocket `/api/remote.mux` 多路复用；人机交互（审批/提问）走 `$events` 转发事件 |
 | 协议复杂度 | 39 个 namespace / 197 个 endpoint（其中 20 个是流），但**聊天客户端只需要 `session` 的 ~10 个 + `$events`**，其余按需 |
@@ -100,7 +100,7 @@ open endpoint="$events" payload={"args":{}}
 
 | 层 | 来源 | 许可 | 说明 |
 |---|---|---|---|
-| 协议 + 数据 + 聊天渲染 | **fork `bqv/dsh-android`**（MPL-2.0，v0.6.6） | 保留 MPL，改动文件标注 | 140 个 .kt / 8.0 万行 / 342 个 JVM 测试；已实测能完整跑通"发消息→流式→审批→结束" |
+| 协议 + 数据 + 聊天渲染 | **fork `bqv/dsh-android`**（MPL-2.0，v0.6.6） | 保留 MPL，改动文件标注 | 140 个 .kt / 5.8 万行 / **1 116 个 JVM 测试**（README 的 342 已过时）；已实测能完整跑通"发消息→流式→审批→结束" |
 | 视觉与交互 | **KernelSU-Style-UI-Kit 的观感** + **Miuix 组件库（Apache-2.0）** | 只借观感，**不复制 GPL 代码** | 浮动玻璃底栏、7 档外观、分段列表、大圆角卡片 |
 | 被否决 | 从零自研（10 周且要重踩全部协议坑）、Hakunm 项目（AGPL 传染 + 依赖 Host 插件） | — | — |
 
@@ -154,12 +154,12 @@ open endpoint="$events" payload={"args":{}}
 
 ## 5. 里程碑（fork 路线 + KernelSU 换皮）
 
-> 关键差异：M0/M2 的大部分工作 fork 里**已经做完了**（342 个 JVM 测试可直接跑），我们的投入主要在 **M0（让仓库变成我们的）+ M2（换皮）**。
+> 关键差异：M0/M2 的大部分工作 fork 里**已经做完了**（1 116 个 JVM 测试可直接跑），我们的投入主要在 **M0（让仓库变成我们的）+ M2（换皮）**。
 
 ### M0 · 仓库接管（3–5 天）
 - 建私有仓库，`origin` = 自己的 fork、`upstream` = bqv；分支 `main` + `restyle/*` + `release/*`
 - 改包名（`uk.xa0.dsh` → `io.github.<你>.dsh`）、应用名、图标、About 文案；`NOTICE.md` 记录上游与 MPL 义务
-- CI 跑通：`build.yml` 出 debug APK，新增 `verify.yml` 跑 342 个 JVM 测试
+- CI 跑通：`build.yml` 出 debug APK，新增 `verify.yml` 跑 1 116 个 JVM 测试
 - **验收**：CI 出的 APK 装到自己手机上，能连本实例、聊天、审批、看文件；全仓已无旧包名残留
 
 ### M1 · 结构性就位（1 周）
@@ -178,7 +178,7 @@ open endpoint="$events" payload={"args":{}}
 - 消息气泡、状态点、工具卡折叠行、统计胶囊换皮（**保留 `ChatRows` 的信息密度**，不动渲染逻辑）
 - 动效：切页弹簧、弹窗 scale、流式段落淡入、危险操作触觉
 - 深色 / AMOLED / 大字体 / 无障碍回归
-- **验收**：语义色与 Web 端一致，342+ 测试全绿，截图测试无意外差异
+- **验收**：语义色与 Web 端一致，1 116 个测试 + 截图测试全绿，截图测试无意外差异
 
 ### M4 · 差异化与发布（1–2 周）
 - 通知（任务完成 / 等待审批 → 本地通知，点击直达）；多实例切换；平板与折叠屏适配

@@ -85,3 +85,33 @@ object KsuTokens {
 | 底栏 | 液态玻璃一句话 | **三层结构 + 滚动隐藏 + 降级路径** |
 | 令牌 | 未提 | **新建 `KsuTokens.kt`**（原创，弥补参考项目缺失） |
 | WebView Markdown | 列为可选 | **明确不用** |
+
+## 7. 换皮的真实工作量（来自 fork 实读，非估计）
+
+`research/06-bqv-ui.md` 给了几个必须先知道的数据：
+
+| 事实 | 数据 | 对换皮的含义 |
+|---|---|---|
+| 裸尺寸 | main 里 **542 处 `N.dp`**，`ChatScreen.kt` 57 处、`Composer.kt` 38 处 | 改圆角/间距必须逐个文件改，**不能靠换主题一次性生效** |
+| 圆角直调 | **164 处 `RoundedCornerShape(...)`** | 其中大部分应改为 `KsuTokens.Radius` |
+| 颜色硬编码 | `Color(0x…)` 共 101 处，**100 处在 `DshTheme.kt`** | 颜色反而干净：只需改令牌文件 |
+| Material 容器 | 全仓 **0 处** `Scaffold` / `TopAppBar` / `Card` / `Button` / `OutlinedTextField` | 容器全是自绘 `Box + clip + border` → **换皮不涉及覆盖 Material 内部样式**，是好事 |
+| 导航 | 声明了 `navigation-compose` 但**零 import**；实际是 `AppPhase` 枚举 + 抽屉 + 11 个 Sheet + `ViewTabs` | 加底栏 pager 是新增，不是替换，风险低 |
+| 状态 | `DshViewModel.kt` **9055 行** / 19 个 StateFlow / 87 字段 / 267 个函数，零 Compose import | 换皮完全不碰它（这是护栏） |
+| 改名 | 267 个 `.kt` 的 package 行 + 1053 个 import + 3 处 XML/工作流；**唯一 IDE 重构改不到的字符串**是 `Attention.kt:42` 的 `EXTRA_SESSION = "uk.xa0.dsh.session"` | 改名清单必须含这一项，否则通知点击失效 |
+| 首帧闪白 | `res/values/colors.xml` 的 `dsh_window_bg = #0B0F14` 与 Compose 的 `bgBase = #151517` **不一致** | 换肤/暗色切换会闪；换皮时必须同步窗口底色 |
+
+### 修正后的换皮顺序（替代 DESIGN.md 的 D1–D7）
+
+| 步 | 内容 | 触碰 |
+|---|---|---|
+| **D0** | `KsuTokens` 落地 + `colors.xml` 窗口底色同步 | 新文件 + `res/values/colors.xml` |
+| **D1** | `DshTheme.kt` 换血：保留语义字段、注入外观层 | 单文件 360 行 |
+| **D2** | `ChatScreen.kt` 外框 + 浮动底栏 + pager | 大文件，先补截图测试 |
+| **D3** | 抽屉 / 搜索栏 | `SessionsDrawer.kt` 2283 行 |
+| **D4** | 设置页行件 | `SettingsContent.kt` 1136 行 |
+| **D5** | Sheet 统一（11 个） | `Sheets.kt` 968 + `AutomationSheet.kt` 899 |
+| **D6** | 聊天行**仅外壳** | `ChatRows.kt` 1852 行 |
+| **D7** | 动效与触觉 | 各处 |
+
+**明确保留不动**：`ui/markdown/**`（原生 Compose 渲染）、`scroll/TailFollow`、`model/`、`net/`、`term/`、`TerminalScreen` 的 Canvas 绘制、`TerminalInputView` 的 IME 处理。
