@@ -87,44 +87,32 @@
 | `SetupScreen.kt` | 首次配置（URL/账号/证书） | 250 | M | `:49`，单列表单 |
 | `Modifiers.kt` | `clickableNoRipple`:22 / `rememberTouchGate`:60 / `pinchCellSize`:202 | 247 | S | 无主题耦合 |
 | `BalanceSheet.kt` | 余额 sheet | 217 | M | `:55` |
-| `WorkspaceDragGesture.kt` | 拖拽几何（纯函数） | 231 | — | `isOutsideDragBounds`:227 |
-| `SubagentRollup.kt` | 子代理汇总（纯） | 198 | — | `indexSubagentRollups`:82 |
-| `ModelTriggerState.kt` | 模型触发器文案（纯） | 155 | — | `modelTriggerState`:37 |
-| `BackGate.kt` | 返回二次确认 | 93 | S | `:42`，AlertDialog |
-| `StartupScreen.kt` | 启动页 | 87 | S | `:54` |
+| `WorkspaceDragGesture.kt` / `SubagentRollup.kt` / `ModelTriggerState.kt` | 纯逻辑：拖拽几何 231 / 子代理汇总 198 / 模型触发器文案 155 | 584 | — | `isOutsideDragBounds`:227、`indexSubagentRollups`:82、`modelTriggerState`:37；无 Compose |
+| `BackGate.kt` / `StartupScreen.kt` | 返回二次确认 93 / 启动页 87 | 180 | S | `BackGate.kt:42`（AlertDialog）、`StartupScreen.kt:54` |
 
 ### 2.2 `ui/components`（28 文件 · 11 688 行）
 
 | file | 角色 | LOC | 影响 | 备注 |
 |---|---|---|---|---|
-| `ChatRows.kt` | **全部聊天行**：User/Assistant/Live/Reasoning/ToolCall/ToolCallTree/Todo/Notice/Approval/Goal/TurnProcess | 1852 | **L** | 24 @Composable；`UserMessageRow`:135、`AssistantMessageRow`:637、`ToolCallRow`:776、`ApprovalCard`:1412；66 处裸 dp（全仓最多） |
+| `ChatRows.kt` | **全部聊天行**：User/Assistant/Live/Reasoning/ToolCall/Tree/Todo/Notice/Approval/Goal/TurnProcess | 1852 | **L** | 24 @Composable；`UserMessageRow`:135、`AssistantMessageRow`:637、`ToolCallRow`:776、`ApprovalCard`:1412；66 处裸 dp（全仓最多）；另有 `DshIcons.kt`(114, `:22`) 的自有 SVG path |
 | `FilesPanel.kt` | 文件面板：浏览/预览/SVG/下载 | 1369 | **L** | `:167`；`SvgPreview`:1300（androidsvg 渲染，非 WebView） |
 | `Composer.kt` | 输入卡 + 工具栏 | 969 | **L** | `:151`，12 @Composable，见 §3.4 |
 | `JobsCard.kt` | 任务座 + sheet + 输出面板 | 808 | M | `JobsSeat`:79 / `JobsSheet`:148 / `JobOutputPanel`:596 |
 | `QueueDock.kt` | 待发队列坞 | 640 | M | `:125` |
-| `SessionStatsPills.kt` | 统计胶囊 + 展开面板 | 491 | M | `:103`；`StatPillButton`:284 |
-| `WorkspaceBrowser.kt` | 目录浏览模态 | 477 | M | `:77` |
-| `SearchRow.kt` | grep/glob 工具卡 | 429 | M | `SearchCallRow`:184 |
-| `AskQuestionRow.kt` | 已答提问转录行 | 420 | M | `AskQuestionCallRow`:259 |
+| `SessionStatsPills.kt` / `WorkspaceBrowser.kt` | 统计胶囊 491（`:103`，`StatPillButton`:284）/ 目录浏览模态 477（`:77`） | 968 | M | 都自带展开面板 |
+| `SearchRow.kt` / `AskQuestionRow.kt` | grep·glob 工具卡 429（`SearchCallRow`:184）/ 已答提问行 420（`AskQuestionCallRow`:259） | 849 | M | 都是转录内工具卡 |
 | `BashRow.kt` | shell 调用终端卡 | 407 | M | `BashCallRow`:151 |
-| `DiffRow.kt` | 补丁卡（LCS 折叠） | 401 | M | `diffCardModel`:116 |
-| `ReadRow.kt` | 读文件卡 | 379 | M | `ReadCallRow`:200 |
+| `DiffRow.kt` / `ReadRow.kt` | 补丁卡 401（`diffCardModel`:116，LCS 折叠）/ 读文件卡 379（`ReadCallRow`:200） | 780 | M | 两卡共用 IN/OUT 骨架 |
 | `DeliverableRow.kt` | 产物 chips + 交付卡 | 368 | M | `:78` |
 | `CommandMenu.kt` | composer `/` 与 `@` 双菜单 | 339 | M | `CommandMenu`:157 / `ReferenceMenu`:252 |
 | `DshInput.kt` | **基础件**：`DshMark`:65 / `DshWordmark`:91 / `DshTextField`:108 / `DshPrimaryButton`:285 | 308 | M | 无 M3 TextField，自绘 hairline 输入框 |
 | `QuestionCard.kt` | 待答提问卡（阻塞式） | 292 | M | `:70` |
 | `WebRow.kt` | web 检索/抓取卡 | 270 | M | `WebCallRow`:117 |
-| `ReadImageRow.kt` | 图片读取卡 | 269 | S | `ReadImageCallRow`:107 |
-| `FileDownloadControl.kt` | 下载按钮 + 进度 | 230 | S | `:83` |
-| `PlanRow.kt` | `todo_write` 摘要行 | 149 | S | `PlanCallRow`:77 |
-| `CertificateSection.kt` | 证书信任块 | 147 | S | `:43` |
+| `ReadImageRow.kt` / `FileDownloadControl.kt` / `PlanRow.kt` / `CertificateSection.kt` | 图片卡 269 / 下载控件 230 / `todo_write` 摘要 149 / 证书块 147 | 715 | S | `ReadImageCallRow`:107、`PlanCallRow`:77、`CertificateSection`:43 |
 | `StateDot.kt` | 5 态状态点（ONGOING 8 格追逐） | 136 | S | `Canvas`:98，自绘动画 |
-| `ComposerImeUndo.kt` | IME undo/redo 桥 | 128 | — | 非视觉 |
 | `TodoGlyph.kt` | 待办三态字形（14×14 画板） | 123 | S | `Canvas`:78/100/112 |
-| `DshIcons.kt` | 自有 SVG path 图标 | 114 | S | `:22`；其余用 material-icons-extended |
 | `SubagentReadOnlyComposer.kt` | 只读占位（替换 composer） | 78 | S | `:40` |
-| `DshKeyboardOptions.kt` | 键盘契约（纯） | 49 | — | `:29` |
-| `ComposerShortcuts.kt` | Ctrl+Z/Y 映射（纯） | 46 | — | `:34` |
+| `ComposerImeUndo.kt` / `DshKeyboardOptions.kt` / `ComposerShortcuts.kt` | 纯逻辑：IME undo 桥 128 / 键盘契约 49 / Ctrl+Z·Y 映射 46 | 223 | — | 非视觉，换皮不碰 |
 
 ### 2.3 子包（8 文件 · 2 108 行）
 
@@ -136,8 +124,7 @@
 | `search/SessionSearchRows.kt` | 搜索行 + 文案（逐字对齐 Web） | 274 | M | `SessionSearchCopy` |
 | `scroll/TailFollow.kt` | 顶锚列表尾随（替代 reverseLayout） | 234 | — | `:60` |
 | `composer/ComposerTriggers.kt` | 光标精确 `/`/`@` 检测（纯） | 200 | — | `:68` |
-| `settings/SettingsLocalFacts.kt` | 本地凭据/cookie 事实 | 68 | — | `:40` |
-| `composer/ComposerDraft.kt` | 发送失败回填规则（纯） | 67 | — | `:36` |
+| `settings/SettingsLocalFacts.kt` / `composer/ComposerDraft.kt` | 本地凭据事实 68（`:40`）/ 发送失败回填 67（`:36`） | 135 | — | 纯逻辑 |
 
 ---
 
@@ -170,7 +157,7 @@
 | `ModalBottomSheet`(+state) | 5 + 5 | 所有 sheet |
 | `Switch` / `DropdownMenu(Item)` | 2 / 2+2 | 抽屉过滤、行菜单 |
 | `ModalNavigationDrawer`/`ModalDrawerSheet`/`DrawerState` | 各 1 | 抽屉 |
-| `Scaffold` / `TopAppBar` / `Card` / `Surface` / `Button` / `OutlinedTextField` | **0（全仓 grep 无命中）** | 见下 |
+| `Scaffold` / `TopAppBar` / `Card` / `Surface` / `Button` / `OutlinedTextField` | **0** | 全仓 grep 无命中 |
 
 即**没有 Scaffold、TopAppBar、M3 Card/Button**；所有容器都是 `Box/Column/Row + .clip() + .background() + .border(0.5.dp)` 自绘，`DshTextField`/`DshPrimaryButton` 自建于 `ui/components/DshInput.kt:108,285`。→ 没有 Material 组件的内部样式需要覆盖。
 

@@ -10,10 +10,10 @@
 | 项 | 结论 |
 |---|---|
 | **最重要的事** | **已经有人做出来了**，而且不止一个：`bqv/dsh-android`（MPL-2.0，v0.6.6，纯协议、不需要装 Host 插件，140 个 Kotlin 文件 / 8.0 万行 / 342 个 JVM 测试）与 `Hakunm/dsh-android-app`（AGPL-3.0，v1.0.0，29 star，功能更全但依赖 Host 插件 `dsh-workspace`）。规划的第一决策不是"怎么写"，而是**"fork 谁 / 借鉴谁 / 还是从零写"** |
-| 技术路线（若自研） | 纯 Kotlin + Jetpack Compose，自研传输层；WebView 只作"协议还没跟上的那几天"的兜底入口，不做主界面 |
+| 技术底座 | Kotlin + Jetpack Compose（fork 自 `bqv/dsh-android`，MPL-2.0）；**不用 WebView 承载主界面**，纯原生 |
 | 为什么可行 | 非浏览器客户端是**官方设计内**路径：`GET /connect?token=…&interactions=answer` 签 Cookie；一元调用 `POST /api/<ns>/<method>`；流 = 单条 WebSocket `/api/remote.mux` 多路复用；人机交互（审批/提问）走 `$events` 转发事件 |
 | 协议复杂度 | 39 个 namespace / 197 个 endpoint（其中 20 个是流），但**聊天客户端只需要 `session` 的 ~10 个 + `$events`**，其余按需 |
-| 最大风险 | ① 协议无版本号、随 alpha 演进；② 聊天渲染（工具卡片 48 类、CoT、Markdown/公式/代码）；③ 移动网络长连接与后台保活 |
+| 最大风险 | ① 协议无版本号、随 alpha 演进（fork 已消化大部分）；② **换皮回归**（`ChatScreen.kt` 3267 行）；③ GPL 污染（参考仓库不可复制）；④ 移动网络长连接与后台保活 |
 | 首版建议 | P0 = 登录 + 会话列表/搜索/新建 + 聊天（流式、工具卡片、中断/重试）+ 审批与提问 + 模型切换 + 图片/附件 + 通知 |
 | 决策（已定） | **fork `bqv/dsh-android` + 视觉交互采用 KernelSU 风格（Miuix 观感，Apache-2.0 实现，不复制 GPL 代码）**；工期 **约 5–6 周**到“自己天天用” |
 
@@ -237,3 +237,4 @@ Kotlin 2.4.x + Compose BOM 2026.09；Ktor 3.6.1（OkHttp 引擎，HTTP 与 WS �
 | [DESIGN-TOKENS.md](DESIGN-TOKENS.md) | 设计规范 v2：实测刻度表、`KsuTokens` 代码骨架、底栏行为规格、许可安全资产清单 |
 | [FORK-SURGERY.md](FORK-SURGERY.md) | fork 改造手术：改包名清单、模块拆分、上游同步、MPL 义务、第一周任务 |
 | [BUILD-AND-CI.md](BUILD-AND-CI.md) | 构建与 CI：aarch64 不能打包的实测结论、本地能做什么、Actions 出包、签名与分发 |
+| [ROADMAP.md](ROADMAP.md) | 任务板：阶段 0–4 可验收任务表、关键路径与并行建议、每周节奏、风险闸门 |
