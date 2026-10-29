@@ -1,0 +1,106 @@
+# 构建与 CI（在 aarch64 Debian 上开发，在 GitHub Actions 上出包）
+
+> 事实采集时间 2026-10-30；对象：本机（Debian forky/sid，**aarch64**，3 GB RAM，47 GB 空闲）+ fork 候选 `bqv/dsh-android`。
+
+## 1. 本机能不能直接出 APK？—— 结论：不能（但能跑单测）
+
+| 检查项 | 结果 | 含义 |
+|---|---|---|
+| `uname -m` | `aarch64` | 官方 Android SDK 的 **aapt2 / d8 / adb 只发 x86_64** 包；无 aarch64 版 |
+| `java` | 无 → 已 `apt install openjdk-17-jdk-headless`（17.0.21） | **JVM 侧可行** |
+| `aapt2` / `d8` / `adb` | 均无；`apt policy android-sdk` = 无候选 | 打包链路缺件 |
+| `apt policy gradle` | 候选 4.8（太老，AGP 8.x 需 8.x） | 不能直接用 Debian 的 gradle |
+| RAM | 3 GB（gradle.properties 要 `-Xmx2560m`） | 勉强够，并行构建会 OOM |
+
+**结论**：本机可以**编译纯 Kotlin（协议层）并跑 JVM 单测**，但**不能**跑 `assembleDebug`（缺 aapt2 与平台包）。所以**打包全部交给 GitHub Actions**，本地只做“逻辑正确性”验证。
+
+## 2. 本地能做什么（开发内循环）
+
+```sh
+# 1) 纯 JVM 单测（fork 的 net/ 有 8 个，模型层 47 个，共 342 个全部无需设备）
+./gradlew :core:protocol:test          # 拆分后
+
+# 2) 静态检查
+./gradlew detekt ktlintCheck
+
+# 3) 协议 spike（无 Android 依赖的独立 JVM 程序，见 SPIKE.md）
+#    JDK 17 已就绪：用 JDK 自带的 java.net.http.WebSocket + HttpClient 即可，不引入额外依赖
+```
+
+> 没有 wrapper 时 `./gradlew` 需联网下载 Gradle 发行版（约 130 MB）；受限网络用 `ALL_PROXY=http://127.0.0.1:7890`。
+
+## 3. GitHub Actions 出包（推荐路径）
+
+fork 已有两条工作流，直接沿用：
+
+| 工作流 | 触发 | 作用 | 要改的 |
+|---|---|---|---|
+| `.github/workflows/build.yml` | push main / PR | 出 **debug APK** 产物（`dsh-android-debug-<sha>`），30 分钟超时 | artifact 名与应用名；确认 `paths-ignore` 仍排除 `docs/**` |
+| `.github/workflows/release.yml` | push tag `v*` | 出 **release APK** 挂到 GitHub Release，正文取 `docs/releases/<tag>.md` | 包名相关文案；**配好签名 secrets** |
+
+关键设计（值得保留）：
+- 用 runner 的 JDK/Gradle 复现 `.toolchain/` 布局，再调用项目自己的 `build.sh` —— 本地与 CI 不是两套构建定义
+- `concurrency` 按 ref 去重，新 push 取消旧构建
+- release 走 `RELEASE_KEYSTORE_BASE64` / `RELEASE_KEYSTORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD`；缺失时回退 debug key（**但 debug 签名的包无法被正式包覆盖安装**）
+
+### 3.1 建议新增第三条工作流 `verify.yml`
+
+```yaml
+name: Verify
+on: [push, pull_request]
+jobs:
+  jvm-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - run: ./gradlew :core:protocol:test :core:model:test --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: test-reports, path: '**/build/reports/tests/**' }
+```
+> 目的：把逻辑层门禁从 30 分钟的 Android 构建里摘出来，PR 反馈从十几分钟降到几分钟。
+
+## 4. 版本与签名纪律
+
+| 项 | 规则 |
+|---|---|
+| `versionCode` | 从 1 起单调递增、**永不重用**；CI 可用 `git rev-list --count HEAD` 或语义版本映射 |
+| `versionName` | `1.0.0` 起步；预发 `1.0.0-beta.1`；debug 包追加 `-debug` |
+| 签名 | **首发前生成并固化 keystore**（RSA 4096 / 有效期 25 年以上），私钥进 CI secrets + 加密备份；丢失 = 已发布用户无法升级 |
+| 产物命名 | `dsh-android-<versionName>.apk` + 同名 `.sha256` |
+| 覆盖安装 | 同包名不同签名无法覆盖；因此 debug 与 release **包名后缀不同**（`.debug`） |
+
+## 5. 分发（自托管场景）
+
+| 方式 | 要求 | 备注 |
+|---|---|---|
+| GitHub Releases | tag + APK + `docs/releases/<tag>.md` 变更日志 | fork 已内建；Obtainium 可直接订阅 |
+| Obtainium | 仓库地址 + release APK **稳定命名** | 建议 APK 名不含随机 sha |
+| F-Droid | 可复现构建、源码与许可证齐全 | MPL/GPL 都可；注意 Miuix 依赖与体积 |
+| Play 商店 | 生成式 AI 政策 + targetSdk 门槛（2026 年起 ≥35） | 建议 1.0 之后再考虑；当前 targetSdk=34 会被拦 |
+
+## 6. 冒烟验证（拿到 APK 后 5 分钟）
+
+```sh
+adb install -r dsh-android-<ver>.apk
+adb shell am start -n <pkg>/.MainActivity
+adb logcat -s DSH:* AndroidRuntime:E | head -40
+# 应用内：填地址 → 登录 → 列会话 → 发一句 → 看流式 → 触发一次审批
+```
+
+另保留**无头 JVM 冒烟**（不依赖手机）：
+```sh
+java -jar tools/protocol-smoke.jar --url https://dsh.osai.eu.org:8443 --session <id> "你好"
+```
+
+## 7. 已知坑
+
+| 坑 | 现象 | 处理 |
+|---|---|---|
+| aarch64 无 aapt2 | `:app:processDebugResources` 找不到 aapt2 | 不在本机打包，走 CI |
+| Gradle daemon 连不上 | “Could not connect to Kotlin compile daemon” | 把 `XDG_DATA_HOME` 指到项目内（fork 的 `build.sh` 已处理） |
+| Robolectric 要写 home | 单测因锁文件失败 | 单独 `user.home`（fork 已处理：`.toolchain/robolectric-home`） |
+| 3 GB RAM | 并行构建 OOM | `org.gradle.parallel=false`、`-Xmx1536m` |
+| 代理 | 依赖下载超时 | `ALL_PROXY=http://127.0.0.1:7890` |

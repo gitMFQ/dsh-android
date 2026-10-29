@@ -15,7 +15,7 @@
 | 协议复杂度 | 39 个 namespace / 197 个 endpoint（其中 20 个是流），但**聊天客户端只需要 `session` 的 ~10 个 + `$events`**，其余按需 |
 | 最大风险 | ① 协议无版本号、随 alpha 演进；② 聊天渲染（工具卡片 48 类、CoT、Markdown/公式/代码）；③ 移动网络长连接与后台保活 |
 | 首版建议 | P0 = 登录 + 会话列表/搜索/新建 + 聊天（流式、工具卡片、中断/重试）+ 审批与提问 + 模型切换 + 图片/附件 + 通知 |
-| 工期（自研，单人全职） | M0 协议验证 1 周 → M1 骨架 2 周 → M2 聊天闭环 3 周 → M3 交互闭环 2 周 → M4 打磨 2 周 ≈ **10 周**；若 fork 先行项目，预计 **3–5 周** 可到"自己用得上" |
+| 决策（已定） | **fork `bqv/dsh-android` + 视觉交互采用 KernelSU 风格（Miuix 观感，Apache-2.0 实现，不复制 GPL 代码）**；工期 **约 5–6 周**到“自己天天用” |
 
 ---
 
@@ -96,17 +96,20 @@ open endpoint="$events" payload={"args":{}}
 
 ## 3. 路线选择：fork 先行项目 vs 自研
 
-### 3.1 三条路（新增，优先考虑）
+### 3.1 决策：**已定 = fork `bqv/dsh-android`**，视觉与交互采用 KernelSU 风格（Miuix）
 
-| 路线 | 做法 | 工期 | 风险 |
+| 层 | 来源 | 许可 | 说明 |
 |---|---|---|---|
-| **① Fork `bqv/dsh-android`**（推荐先评估） | MPL-2.0，**纯协议、不装 Host 插件**；140 个 Kotlin 文件 / 8.0 万行 / 342 个 JVM 测试，含聊天、轨迹、审批、终端、文件、证书信任、断线重启。改包名/品牌后补差距（多实例、通知、平板） | **3–5 周**到可用 | 上游单人维护、v0.6.6 面向较早 dsh 版本；MPL 要求修改过的文件开源 |
-| ①' 参考 `Hakunm/dsh-android-app` | AGPL-3.0，29 star，功能更全（聊天/审批/工作区/文件编辑/模型管理，中英双语），但**依赖 Host 插件 `dsh-workspace`** 并需在插件里配置授权根 | 仅作功能参照 | **AGPL 传染，代码不可并入闭源/私有项目**（连 SAAS 也要开源） |
-| ② 借鉴协议层 + 自写 UI | 复用 bqv 的 `net/`（`DshClient` 1155 行、`EndpointResolver` 673、`RemoteMux` 575、`CertTrust` 273、`Multipart` 152、`PersistentCookieJar` 122 等 ~4000 行），UI 与领域层自写 | 6–8 周 | 协议层与其数据模型耦合，剥离成本中等 |
-| ③ 从零自研 | 按本文档从骨架开始 | 10 周 | 协议踩坑全自己买单 |
+| 协议 + 数据 + 聊天渲染 | **fork `bqv/dsh-android`**（MPL-2.0，v0.6.6） | 保留 MPL，改动文件标注 | 140 个 .kt / 8.0 万行 / 342 个 JVM 测试；已实测能完整跑通"发消息→流式→审批→结束" |
+| 视觉与交互 | **KernelSU-Style-UI-Kit 的观感** + **Miuix 组件库（Apache-2.0）** | 只借观感，**不复制 GPL 代码** | 浮动玻璃底栏、7 档外观、分段列表、大圆角卡片 |
+| 被否决 | 从零自研（10 周且要重踩全部协议坑）、Hakunm 项目（AGPL 传染 + 依赖 Host 插件） | — | — |
 
-> 关键事实：bqv 项目**证明了"不用 WebView、不装 Host 插件也能完整实现"**这条路（它的 `docs/research/mobile-remote.md` 已确认 DSH 本身**没有**移动端/配对/token 签发能力，`dsh` CLI 无 remote/mobile/pair 子命令）。Hakunm 项目则证明"加一个 Host 插件能换来实现速度与更全的功能"，但把用户绑定到插件。
-> **因此推荐：先花 1–2 天做 ① 的可行性评估（跑起来 + 对照本实例接口逐项验证），再决定 ①/②/③；功能清单以 ①' 为准做对照。**
+三条硬约束（决定了一切细节）：
+1. **不能复制参考仓库的 .kt**（GPL-3.0 会传染整个 APK）；只能读它的截图/结构，用 Apache-2.0 的 Miuix 重新实现。
+2. **不能丢 `DshColors` 语义层**（`DshTheme.colors.*` 在代码里出现 244 次，工具/审批状态色依赖它），换皮只换"外观"，不换语义。
+3. **不能把原生 Markdown 换成 WebView**（`MarkdownView.kt` 注释明确 No WebView），流式渲染靠它。
+
+详见 [DESIGN.md](/root/dsh-android/docs/DESIGN.md)（设计系统落地）、[FORK-SURGERY.md](/root/dsh-android/docs/FORK-SURGERY.md)（改造手术）、[BUILD-AND-CI.md](/root/dsh-android/docs/BUILD-AND-CI.md)（构建与出包）。
 
 ### 3.2 如果自研（或 fork 后重构）的分层
 
@@ -149,25 +152,41 @@ open endpoint="$events" payload={"args":{}}
 
 ---
 
-## 5. 里程碑（以"自研/借鉴"为基准；fork 路线可直接跳过 M1）
+## 5. 里程碑（fork 路线 + KernelSU 换皮）
 
-### M0 · 协议验证（1 周，纯 JVM，无 Android）
-- 命令行 JVM 程序：登录（Cookie 与免登录两模式）→ `session/list` → `session/follow` 打开会话 → `session/prompt` → 打印流式帧 → 收到审批 waterfall → `$events/result` 回传 → `session/cancel`
-- 产出 `protocol-fixtures/*.jsonl`（真实帧样本）+ `docs/PROTOCOL.md` 定稿
-- **验收**：真机网络环境下完成一次"发消息 → 流式 → 工具调用 → 审批 → 结束"
-- **风险出口**：卡住则退回 WebView 壳方案
+> 关键差异：M0/M2 的大部分工作 fork 里**已经做完了**（342 个 JVM 测试可直接跑），我们的投入主要在 **M0（让仓库变成我们的）+ M2（换皮）**。
 
-### M1 · 工程骨架 + 会话列表（2 周）
-Gradle 多模块、CI 出 APK、`DshTransport`（认证/一元/WS/$events/重连）、登录页（地址 + token/Cookie/免登录 + **分步诊断** DNS→TLS→connect→cookie→probe）、会话列表（分组/搜索/新建/归档）
+### M0 · 仓库接管（3–5 天）
+- 建私有仓库，`origin` = 自己的 fork、`upstream` = bqv；分支 `main` + `restyle/*` + `release/*`
+- 改包名（`uk.xa0.dsh` → `io.github.<你>.dsh`）、应用名、图标、About 文案；`NOTICE.md` 记录上游与 MPL 义务
+- CI 跑通：`build.yml` 出 debug APK，新增 `verify.yml` 跑 342 个 JVM 测试
+- **验收**：CI 出的 APK 装到自己手机上，能连本实例、聊天、审批、看文件；全仓已无旧包名残留
 
-### M2 · 聊天闭环（3 周）
-`session/follow` 管线（snapshot 基线 + 增量 + 断线重取）、流式渲染（合批）、Markdown/代码/公式/图片、工具卡片（**先做"8 类高频 + 通用兜底卡片"**，不要逐个复刻 48 类）、输入框（多行/停止/@ 文件// 命令/附件）
+### M1 · 结构性就位（1 周）
+- 抽 `:core:protocol`（`net/` ~4000 行纯 Kotlin）+ `:core:model`（`model/`，47 个单测）
+- 建 `:design` 模块：保留 `DshTheme` 语义层 + 引入 Miuix（Apache-2.0）+ `ColorMode` 7 档（跟随/亮/暗/AMOLED/Monet×3）
+- 补 **Roborazzi 截图测试**（换皮的安全网：`ChatScreen.kt` 3267 行，没有截图测试不敢改）
+- **验收**：模块可独立编译、单测全绿、设置页能切外观并持久化
 
-### M3 · 交互闭环（2 周）
-审批（批准/拒绝/规则）与 `ask_user_question`、`$events/result` 回执、超时与冲突；通知（任务完成 / 等待审批 → 本地通知，点击直达）；产出文件预览；会话 rename/fork/归档/工作区切换
+### M2 · 外壳换装（1.5 周，对应 DESIGN 的 D2–D5）
+- `FloatingBottomBar`（按 Miuix 官方 Apache-2.0 示例重写）+ 4 目的地 pager（Chat / Trajectory / Files / Settings），宽屏自动切侧栏 Rail
+- TopBar 折叠、抽屉换装（搜索栏 / 分段列表 / 分组排序）、设置页与关于页换装
+- Sheet/Dialog 统一（审批、提问、模型选择）：默认底部 Sheet，危险操作红卡 + 二次确认
+- **验收**：三页通过底栏切换流畅；设置页视觉与参考项目对齐；审批走 Sheet
 
-### M4 · 打磨与内测（2 周）
-弱网/切后台/旋转/深色/大字体/无障碍；万条消息滚动与内存；崩溃日志与"导出诊断包"；签名、版本号、内测分发（APK 直发 / Obtainium）
+### M3 · 聊天视觉精修（1 周，对应 DESIGN 的 D6–D7）
+- 消息气泡、状态点、工具卡折叠行、统计胶囊换皮（**保留 `ChatRows` 的信息密度**，不动渲染逻辑）
+- 动效：切页弹簧、弹窗 scale、流式段落淡入、危险操作触觉
+- 深色 / AMOLED / 大字体 / 无障碍回归
+- **验收**：语义色与 Web 端一致，342+ 测试全绿，截图测试无意外差异
+
+### M4 · 差异化与发布（1–2 周）
+- 通知（任务完成 / 等待审批 → 本地通知，点击直达）；多实例切换；平板与折叠屏适配
+- 弱网与断线重连压测；"导出诊断包"
+- 签名 keystore 固化、Obtainium 可订阅、变更日志、内测
+- **验收**：10 人内测一周无 P0 崩溃
+
+> 合计 **约 5–6 周**到"自己天天用"，比纯自研的 10 周省一半以上，且省掉协议踩坑。
 
 ---
 
@@ -211,4 +230,10 @@ Kotlin 2.4.x + Compose BOM 2026.09；Ktor 3.6.1（OkHttp 引擎，HTTP 与 WS �
 | [research/02-api-surface.md](research/02-api-surface.md) | 197 端点清单、P0 端点的请求/响应、端到端时序图、HITL 通道、破约检测 |
 | [research/03-ui-feature-map.md](research/03-ui-feature-map.md) | Web GUI 信息架构、流式渲染、48 类工具卡片、主题 token、Android 页面映射与取舍 |
 | [research/04-android-stack.md](research/04-android-stack.md) | 技术路线对比、依赖版本、TLS/保活、模块结构、先行项目调研、分发 |
+| [research/05-ksu-kit.md](research/05-ksu-kit.md) | KernelSU-Style-UI-Kit 设计系统盘点：双皮肤机制、组件清单、实测刻度、许可结论 |
+| [research/06-bqv-ui.md](research/06-bqv-ui.md) | fork 基线 UI 层盘点：27k 行分布、换皮影响评级、耦合热点、移植清单 |
 | [SPIKE.md](SPIKE.md) | 1–2 天开工验证清单（协议最小闭环 + 先行项目跑通 + 决策会），含常见坑与 v0.1.0 验收定义 |
+| [DESIGN.md](DESIGN.md) | 设计系统落地：信息架构、组件取舍、与 fork 的冲突点、交付顺序 D1–D7 |
+| [DESIGN-TOKENS.md](DESIGN-TOKENS.md) | 设计规范 v2：实测刻度表、`KsuTokens` 代码骨架、底栏行为规格、许可安全资产清单 |
+| [FORK-SURGERY.md](FORK-SURGERY.md) | fork 改造手术：改包名清单、模块拆分、上游同步、MPL 义务、第一周任务 |
+| [BUILD-AND-CI.md](BUILD-AND-CI.md) | 构建与 CI：aarch64 不能打包的实测结论、本地能做什么、Actions 出包、签名与分发 |
