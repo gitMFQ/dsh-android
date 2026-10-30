@@ -21,10 +21,13 @@
 
 | # | 任务 | 产出 | 验收 | 依赖 |
 |---|---|---|---|---|
-| 0.5.1（L1） | **只升 Kotlin**：1.9.24 → **2.4.21** + `org.jetbrains.kotlin.plugin.compose`；删 `composeOptions`；`kotlinOptions`→`compilerOptions`。**AGP / compileSdk 全不动** | 构建文件 | `assembleDebug` + **1 116 测试全绿** | 0.4 |
+| **L1** ✅ 完成 2026-10-30 | **只升 Kotlin**：1.9.24 → **2.4.21** + `org.jetbrains.kotlin.plugin.compose`；删 `composeOptions`；`kotlinOptions`→`compilerOptions`；Robolectric 4.13→4.17。**AGP / compileSdk 全不动** | 已合入 `master` | **CI 实测 `tests=1116 failures=0 errors=0 skipped=0`** + 19.8 MB APK | — |
 | 0.5.2（L2） | AGP 8.5.2 → **8.13.2**；Gradle 8.7 → **8.13**；compileSdk **36**；BOM → 2026.05.00 | 构建文件 | 同上 + 配置缓存通过 | 0.5.1 |
 | 0.5.3（L3） | AGP → **9.3.1**；Gradle → **9.5.0**；compileSdk **37**；buildTools 37.0.0；BOM → **2026.09.00** | 构建文件 | 同上四项 | 0.5.2 |
 | 0.5.4（L4） | 引入 miuix **0.9.4** 最小集（ui / preference / icons / squircle） | 依赖 | 同上 + `dependencyInsight` 无旧 foundation 残留 | 0.5.3 |
+
+> **L1 实测记录（2026-10-30）**：仓库 <https://github.com/gitMFQ/dsh-android>；Verify 工作流 `tests=1116 failures=0 errors=0 skipped=0`；Build 工作流产出可安装 APK。
+> 本机（aarch64 Debian）只能验证到 Gradle 配置阶段（`gradle help` 成功）；资源编译与测试必须在 CI —— 原因见 [BUILD-AND-CI.md](BUILD-AND-CI.md) §0。
 
 > 两个 **仍然不要**：**不引 `miuix-blur`**（模块 minSdk 33，我们 26 —— 除非把 minSdk 抬到 33，那会丢掉 Android 8–12 用户）；**不引 `miuix-nav`**（虽然 0.9.4 有，但它要求把所有路由改成 `@Serializable NavKey`）。
 > **JDK**：AGP 9 需要 JDK 17+，miuix 自身用 21。本机目前只有 17，若 CI/本地报错需 `apt install openjdk-21-jdk-headless`。
