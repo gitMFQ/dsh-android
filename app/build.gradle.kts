@@ -102,17 +102,17 @@ android {
     }
 }
 
-// AGP 9 compiles Kotlin itself, so the options live in AGP's own DSL instead of
-// a Kotlin plugin extension. Same JVM target, same two opt-ins.
-androidComponents {
-    onVariants { variant ->
-        variant.kotlinOptions.apply {
-            jvmTarget.set("17")
-            freeCompilerArgs.addAll(
-                "-opt-in=kotlin.RequiresOptIn",
-                "-opt-in=kotlinx.coroutines.FlowPreview",
-            )
-        }
+// AGP 9 brings its own Kotlin support, and it still exposes a project-level
+// `kotlin { }` extension (TaskManager creates the "kotlin-extension"
+// configuration for it). Applying org.jetbrains.kotlin.android is what AGP 9
+// refuses, not configuring Kotlin itself.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        freeCompilerArgs.addAll(
+            "-opt-in=kotlin.RequiresOptIn",
+            "-opt-in=kotlinx.coroutines.FlowPreview",
+        )
     }
 }
 
