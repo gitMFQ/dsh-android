@@ -51,8 +51,11 @@ jobs:
       - name: Unit tests
         run: bash build.sh :app:testDebugUnitTest
 
-      - name: Upload test reports on failure
-        if: failure()
+      # Always uploaded (not only on failure): the XML under test-results carries
+      # the executed test count, which is the evidence that the Kotlin 2.4.21
+      # migration actually ran 1116 tests rather than skipping them.
+      - name: Upload test reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
@@ -60,3 +63,21 @@ jobs:
             app/build/reports/tests/**
             app/build/test-results/**
           if-no-files-found: ignore
+
+      - name: Summarize executed tests
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          total = failures = errors = skipped = 0
+          for f in glob.glob('app/build/test-results/**/*.xml', recursive=True):
+              r = ET.parse(f).getroot()
+              total += int(r.get('tests', 0))
+              failures += int(r.get('failures', 0))
+              errors += int(r.get('errors', 0))
+              skipped += int(r.get('skipped', 0))
+          print(f"tests={total} failures={failures} errors={errors} skipped={skipped}")
+          with open('$GITHUB_STEP_SUMMARY', 'a') as s:
+              s.write(f"\n### JVM tests\n\ntests={total} failures={failures} errors={errors} skipped={skipped}\n")
+          PY
