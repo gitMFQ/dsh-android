@@ -10,6 +10,7 @@
 | Gradle | **9.8.2** | `services.gradle.org/versions/current` |
 | AGP | **9.5.0**（9.6.0 仅 alpha） | Google Maven `com.android.tools.build:gradle` |
 | Kotlin | **2.4.21**（2.5.0 仅 Beta） | Maven Central `kotlin-gradle-plugin` |
+| Kotlin 地板 | **≥2.3.0**（1.9.24 读不了任何在售 miuix 的 metadata；实测 0.9.4 需 2.4.0） | kotlinc 编译探针实测 |
 | Compose BOM | **2026.09.00** | Google Maven `androidx.compose:compose-bom` |
 | androidx.compose.ui | *1.12.1*（1.13 仅 beta） | Google Maven |
 | Robolectric | **4.17** | Maven Central |
@@ -85,23 +86,36 @@ miuix-squircle = { module = "top.yukonga.miuix.kmp:miuix-squircle", version.ref 
 
 > `miuix-nav` 现在可用了（0.9.4 才有），但仍**不建议**：根导航保持 fork 的 `AppPhase`，避免迁移全部路由到 `@Serializable NavKey`。
 
-## 6. 升级顺序（每步一个闸门）
+## 6. 升级阶梯（每级一个闸门；★=经二次验证的关键纠正）
 
-| 步 | 动作 | 闸门 |
-|---|---|---|
-| L1 | Gradle 8.7 → **9.8.2**（wrapper） | `./gradlew --version` |
-| L2 | AGP 8.5.2 → **9.5.0**；compileSdk 37；buildTools 37 | `assembleDebug` 通过 |
-| L3 | Kotlin 1.9.24 → **2.4.21**；删 `composeOptions`；加 compose 插件；`kotlinOptions`→`compilerOptions` | **1 116 个测试全绿**（此时**还没加 miuix**） |
-| L4 | Compose BOM → **2026.09.00**（Kotlin 2.4 + compose 插件） | 同上 + 截图基线 |
-| L5 | 加 miuix **0.9.4** 最小集 | 编译 + 手点三页 |
+> **重要纠正**：原计划的「先升 Kotlin，再跳 AGP 9」顺序不成立——**Kotlin 2.x 与 AGP 8.5.2 不兼容**，且 miuix **没有任何版本**能用 compileSdk 35（见下）。必须走三级阶梯。
 
-> L1–L4 是**纯升级、可独立回滚**；L5 才引入新依赖。这四步里任何一步炸了，都不会和 miuix 的问题混在一起。
+### 6.1 ★ 两个被实测推翻的假设
+
+| 假设 | 实测结论 |
+|---|---|
+| 「miuix 0.9.2 只要 compileSdk 35，可以不换 Gradle」 | **假**。`miuix-ui-android` 的 **0.9.0 / 0.9.2 / 0.9.4 三个版本 AAR 全部 `minCompileSdk=37`**（我独立下载解包复核过）。**没有中间站** |
+| 「Gradle 9.8.2 是随便选的」 | 不精确。**AGP 9.5.0 的 `GRADLE_MIN_VERSION = 9.6.0`**（反编译 `VersionCheckPlugin$Companion` 得到），9.8.2 满足；AGP 9.1.0 要求 9.3.1 |
+
+### 6.2 阶梯
+
+| 级 | 内容 | 接 miuix | 闸门 |
+|---|---|---|---|
+| **L0** | 基线：AGP 8.5.2 / Gradle 8.7 / Kotlin 1.9.24 / BOM 2024.09 / compileSdk 34 | 无 | 1 116 测试全绿（现状） |
+| **L1** | Kotlin **2.4.21** + `plugin.compose`；**AGP 8.13.2** + **Gradle 8.13**；compileSdk **36**；buildTools 36 | 无 | `assembleDebug` + 1 116 测试 + 配置缓存 |
+| **L2** | AGP **9.5.0** + Gradle **9.6.0+**（用 9.8.2）；compileSdk **37**；buildTools 37.0.0 | 无 | 同上四项 |
+| **L3** | Compose BOM **2026.09.00** + miuix **0.9.4** 最小集 | 0.9.4 | 同上 + `dependencyInsight` 确认无旧 foundation 残留 |
+| **L4** | + `miuix-nav`（可选） | 0.9.4 全量 | 同上 + 返回栈回归 |
+
+**为什么 L1 要停在 AGP 8.13 / compileSdk 36**：Kotlin 2.4 的编译器迁移（`composeOptions` 删除、`kotlinOptions`→`compilerOptions`）是最容易出错的一步，把它和 AGP 9 的大跳分开，失败时能立刻定位是谁的锅。
+
+> **绝不**把五个版本 + miuix 依赖放进一个提交。即使工期紧，L1 与 L2 也必须两个提交。
 
 ## 7. 已知必须验证的点（本机做不了）
 
 | 点 | 为什么 | 怎么验证 |
 |---|---|---|
-| AGP 9 是否要求 JDK 21 | 本机只装了 JDK 17 | CI 用 `setup-java` 指定 21；本地若报错就 `apt install openjdk-21-jdk-headless` |
+| AGP 9 的最低 JDK | 未取到常量（jar 内检索失败）；**但已验证 JDK 17 能跑**：kotlinc 2.3.0 可读 major-65 类、D8 8.5.27 能 dex 它 | CI 用 17 起步，若报错再上 21 |
 | Robolectric 与 compileSdk 37 | **已验证支持**（4.17 内置 SDK 37 映射） | CI 跑测试确认 |
 | miuix 0.9.4 在 AGP 9 下的 manifest 合并 | 未实测 | CI `assembleDebug` |
 | aapt2 37 在 aarch64 | 本机无 aarch64 aapt2 | 只能 CI（见 BUILD-AND-CI.md） |

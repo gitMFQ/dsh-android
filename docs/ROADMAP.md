@@ -20,11 +20,9 @@
 
 | # | 任务 | 产出 | 验收 | 依赖 |
 |---|---|---|---|---|
-| 0.5.1 | Gradle wrapper 8.7 → **9.8.2** | `gradle/wrapper` | `./gradlew --version` 输出 9.8.2 | 0.4 |
-| 0.5.2 | AGP 8.5.2 → **9.5.0**；compileSdk 34 → **37**；buildTools → 37；`packaging` DSL 迁移 | 构建文件 | `assembleDebug` 通过（第一次可能暴露 AGP 9 的 DSL 移除） | 0.5.1 |
-| 0.5.3 | Kotlin 1.9.24 → **2.4.21**；删 `composeOptions`；加 `org.jetbrains.kotlin.plugin.compose`；`kotlinOptions` → `compilerOptions` | 构建文件 | **1 116 个测试全绿**（此时**还没加 miuix**，可独立回滚） | 0.5.2 |
-| 0.5.4 | Compose BOM → **2026.09.00** | 依赖 | 同上 + 截图基线更新 | 0.5.3 |
-| 0.5.5 | 引入 miuix **0.9.4** 最小集（ui / preference / icons / squircle） | 依赖声明 | 编译通过；三页能跑 | 0.5.4 |
+| 0.5.1（L1） | Kotlin 1.9.24 → **2.4.21** + `plugin.compose`（删 `composeOptions`、`kotlinOptions`→`compilerOptions`）；**AGP 8.13.2**；**Gradle 8.13**；compileSdk **36** | 构建文件 | `assembleDebug` + **1 116 测试全绿** + 配置缓存 | 0.4 |
+| 0.5.2（L2） | AGP **9.5.0** + Gradle **9.8.2**（AGP 9.5 要求 ≥9.6.0）；compileSdk **37**；buildTools 37.0.0 | 构建文件 | 同上四项 | 0.5.1 |
+| 0.5.3（L3） | Compose BOM **2026.09.00** + miuix **0.9.4** 最小集（ui / preference / icons / squircle） | 依赖 | 同上 + `dependencyInsight` 无旧 foundation 残留 | 0.5.2 |
 
 > 两个 **仍然不要**：**不引 `miuix-blur`**（模块 minSdk 33，我们 26 —— 除非把 minSdk 抬到 33，那会丢掉 Android 8–12 用户）；**不引 `miuix-nav`**（虽然 0.9.4 有，但它要求把所有路由改成 `@Serializable NavKey`）。
 > **JDK**：AGP 9 需要 JDK 17+，miuix 自身用 21。本机目前只有 17，若 CI/本地报错需 `apt install openjdk-21-jdk-headless`。
@@ -108,6 +106,6 @@
 | **Kotlin 2.x 迁移卡住** | 0.5.1 测试红且 2 天内无法收敛 | 先只升 Kotlin 不加 miuix，逐测试修复；若仍不行 → 走"方案 B"：不引 miuix，纯自绘外观（工期 +1 周，但零工具链风险） |
 | 换皮回归失控 | 截图测试差异文件 > 20 个/次 | 缩小改动粒度，先补测试 |
 | ChatScreen 改不动 | 单文件改动 > 300 行仍无法通过编译/测试 | 拆文件（把 Scaffold 段抽成 `ChatScaffold.kt`） |
-| 全量升级连环失败 | AGP 9 / Kotlin 2.4 / Compose 1.12 任一步炸且 3 天内收敛不了 | **降级路线**：AGP 8.6 + Kotlin 2.4 + compileSdk 35 + **miuix 0.9.2**（见 research/08 的 S1–S4，不换 Gradle/buildTools） |
+| 全量升级连环失败 | AGP 9 / Kotlin 2.4 / Compose 1.12 任一步炸且 3 天内收敛不了 | **没有可比这更低、又能装 miuix 的路**（所有 miuix 版本都要 compileSdk 37）。只能二选一：① 继续修（优先）② **放弃 miuix、外观全自绘**，工具链停在 L1（AGP 8.13 / compileSdk 36） |
 | Sauce 依赖断供 | miuix 停更或 Maven 撤包 | 源码已 Apache-2.0，可 vendored（`/tmp/miuix`）自建 |
 | 上游停更/大改 | upstream 3 个月无提交或有破坏性改动 | 冻结 fork，自持；不再 cherry-pick |
