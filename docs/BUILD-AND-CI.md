@@ -2,6 +2,26 @@
 
 > 事实采集时间 2026-10-30；对象：本机（Debian forky/sid，**aarch64**，3 GB RAM，47 GB 空闲）+ fork 候选 `bqv/dsh-android`。
 
+## 0. 实测更新（2026-10-30，本轮真跑过）
+
+| 步骤 | 结果 | 证据 |
+|---|---|---|
+| 装 JDK 17 | ✅ | `openjdk 17.0.21.0.3`（apt） |
+| 装 Gradle 8.7 | ✅ | 下载 134 MB，`gradle --version` 正常 |
+| 装 Android platform-34 | ✅ | `platform-34-ext7_r03.zip`（注意：`platform-34_r03.zip` 是 404） |
+| 装 build-tools 35 | ✅ 但**无用** | 解出来是 `android-15/`，`aapt2` 是 **x86_64** ELF，本机 aarch64 跑不了 |
+| **Gradle 配置阶段** | ✅ **通过** | `gradle help` → `BUILD SUCCESSFUL`（Kotlin 2.4.21 + AGP 8.5.2 插件解析成功） |
+| `:app:compileDebugKotlin` | ❌ 在 `processDebugResources` 挂 | `AAPT2 ... Syntax error: "(" unexpected`（x86_64 二进制被当脚本执行） |
+| 找 aarch64 aapt2 | ❌ 全部失败 | 官方 SDK 无 aarch64；Termux 的 aapt2 是 **Android bionic**（`/system/bin/linker64`），glibc 下跑不了；Termux 依赖库也随之无效 |
+| Debian `aapt` | ✅ 装了，但那是 **aapt1**（`Android Asset Packaging Tool v0.2-debian`），AGP 只要 aapt2 |
+
+**结论修正**：本机**能验证 Gradle 配置/插件解析**，**不能**编译资源与打包，**也不能**跑那 1 116 个测试（它们依赖 `processDebugResources` 产出的 R 类）。**全部验证必须走 CI**。
+
+### 0.1 网络坑（重要，CI 不需要但本机会）
+
+- `dl.google.com` / `repo.maven.apache.org` 单文件可达（curl 200），但 **Gradle 并行解析器会卡死**（10+ 分钟零进展、缓存不增长）。
+- 解决：`settings.gradle.kts` 里把 **Aliyun 镜像放最前**（`maven.aliyun.com/repository/google|public|gradle-plugin`，实测 ~1s 响应），官方源保留为回退。这一改动**只在本地有意义**，CI 可以保留（无害）。
+
 ## 1. 本机能不能直接出 APK？—— 结论：不能（但能跑单测）
 
 | 检查项 | 结果 | 含义 |
