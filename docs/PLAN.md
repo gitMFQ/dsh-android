@@ -15,7 +15,7 @@
 | 协议复杂度 | 39 个 namespace / 197 个 endpoint（其中 20 个是流），但**聊天客户端只需要 `session` 的 ~10 个 + `$events`**，其余按需 |
 | 最大风险 | ① 协议无版本号、随 alpha 演进（fork 已消化大部分）；② **换皮回归**（`ChatScreen.kt` 3267 行）；③ GPL 污染（参考仓库不可复制）；④ 移动网络长连接与后台保活 |
 | 首版建议 | P0 = 登录 + 会话列表/搜索/新建 + 聊天（流式、工具卡片、中断/重试）+ 审批与提问 + 模型切换 + 图片/附件 + 通知 |
-| 决策（已定） | **fork `bqv/dsh-android` + 视觉交互采用 KernelSU 风格（Miuix 观感，Apache-2.0 实现，不复制 GPL 代码）**；工期 **约 5–6 周**到“自己天天用” |
+| 决策（已定） | **fork `bqv/dsh-android` + KernelSU 风格（Miuix 实现，不复制 GPL 代码）+ 全量升级到最新工具链 + 中英双语**；工期 **约 7–9 周**到「自己天天用」 |
 
 ---
 
@@ -240,3 +240,5 @@ Kotlin 2.4.x + Compose BOM 2026.09；Ktor 3.6.1（OkHttp 引擎，HTTP 与 WS �
 | [FORK-SURGERY.md](FORK-SURGERY.md) | fork 改造手术：改包名清单、模块拆分、上游同步、MPL 义务、第一周任务 |
 | [BUILD-AND-CI.md](BUILD-AND-CI.md) | 构建与 CI：aarch64 不能打包的实测结论、本地能做什么、Actions 出包、签名与分发 |
 | [ROADMAP.md](ROADMAP.md) | 任务板：阶段 0–4 可验收任务表、关键路径与并行建议、每周节奏、风险闸门 |
+| [I18N.md](I18N.md) | 多语言规划：债务量化、语言优先级、DSH 术语表、抽取顺序、CI 门禁、翻译工作流 |
+| [research/09-toolchain-latest.md](research/09-toolchain-latest.md) | 全量升级矩阵：最新版本实测、配对约束、AGP 9 DSL 改动清单、升级 5 步 |

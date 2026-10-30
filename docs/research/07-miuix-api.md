@@ -22,7 +22,7 @@
 
 | Composable | 用途 | 关键参数（默认值） | 稳定性 | 证据 |
 |---|---|---|---|---|
-| `Scaffold` | 根壳；**唯一 overlay 宿主** | `topBar`/`bottomBar`/`snackbarHost`/`floatingToolbar`、`popupHost={MiuixPopupHost()}`、`contentWindowInsets` | 稳定 | `U/basic/Scaffold.kt:79,90` |
+| `Scaffold` | 根壳；**唯一 overlay 宿主** | `topBar`/`bottomBar`/`snackbarHost`/`floatingToolbar`、`popupHost={MiuixPopupHost()}`、`contentWindowInsets` | 稳定 | `U/basic/Scaffold.kt:79,88` |
 | `Surface` ×2 | 基面 / 可点击面 | `shape`、`color`、`contentColor`、`border`、`shadowElevation` | 稳定 | `U/basic/Surface.kt:46,89` |
 | `Card` ×2 | 卡片 | `cornerRadius=16.dp`、`pressFeedbackType=None`、`onClick`/`onLongPress` | 稳定 | `U/basic/Card.kt:50,87`；`CardDefaults.CornerRadius` `:190` |
 | `Button` / `TextButton` | 主/文本按钮 | `cornerRadius=16.dp`、`minWidth=58.dp`、`minHeight=40.dp`、`colors` | 稳定 | `U/basic/Button.kt:50,111`；`ButtonDefaults` `:152-174` |
@@ -60,13 +60,13 @@
 | `Text` ×4 | 文本 | `style=LocalTextStyles.current.main`、`autoSize: TextAutoSize?` | 稳定 | `U/basic/Text.kt:90,108` |
 | `RowScope.DropdownArrowEndAction` / `DropdownImpl` | **需求⑦"带箭头的行"** | `actionColor`、`item`/`optionSize` | 稳定 | `U/basic/Dropdown.kt:45,81,220` |
 
-> ⚠️ **Overlay* 必须落在 `Scaffold` 的 `popupHost` 内**否则不渲染（`docs/components/overlaydialog.md:5-16`；默认值见 `U/basic/Scaffold.kt:90`）。聊天 App 若不套 Miuix Scaffold，用 `Window*` 变体。
+> ⚠️ **Overlay* 必须落在 `Scaffold` 的 `popupHost` 内**否则不渲染（`docs/components/overlaydialog.md:5-16`；默认值见 `U/basic/Scaffold.kt:88`）。聊天 App 若不套 Miuix Scaffold，用 `Window*` 变体。
 
 ### 1.2 miuix-preference（依赖 ui：`README.md:30`）
 
 | Composable | 用途 | 关键参数 | 证据 |
 |---|---|---|---|
-| `ArrowPreference` | **需求③⑦带右箭头设置行**（内嵌 `MiuixIcons.Basic.ArrowRight`） | `title`、`summary`、`onClick`、`endActions`、`holdDownState` | `P/preference/ArrowPreference.kt:49`；箭头绘制 `:100-113` |
+| `ArrowPreference` | **需求③⑦带右箭头设置行**（内嵌 `MiuixIcons.Basic.ArrowRight`） | `title`、`summary`、`onClick`、`endActions`、`holdDownState` | `P/preference/ArrowPreference.kt:49`；箭头绘制 `:96-113` |
 | `SwitchPreference` | 开关行 | `checked`、`onCheckedChange: (Boolean)->Unit`（非空）、`switchColors` | `P/preference/SwitchPreference.kt:45` |
 | `CheckboxPreference` / `RadioButtonPreference` | 复选/单选行 | `checked`/`selected`、`checkboxLocation`/`radioButtonLocation` | `P/preference/CheckboxPreference.kt:49`、`P/preference/RadioButtonPreference.kt:52` |
 | `SliderPreference` / `RangeSliderPreference` | 滑条行 | `value`、`valueText`、`keyPoints` | `P/preference/SliderPreference.kt:83,212` |
@@ -89,10 +89,10 @@
 
 | # | 需求 | 承接 | 具体 API | 结论 | 缺口 / 落法 |
 |---|---|---|---|---|---|
-| R1 | 悬浮底部导航 | ui | `FloatingNavigationBar`+`...Item` | ✅ | `U/basic/NavigationBar.kt:275,377`；官方限 2–5 项（`docs/components/navigationbar.md:5`）；**item 只渲染 icon，label 仅作 contentDescription**（`:399-414`）→ 要"图标+文字"得自己包一层或用 `NavigationBar(mode=IconWithSelectedLabel)` |
+| R1 | 悬浮底部导航 | ui | `FloatingNavigationBar`+`...Item` | ✅ | `U/basic/NavigationBar.kt:275,377`；官方限 2–5 项（`docs/components/navigationbar.md:5`）；**item 只渲染 icon，label 仅作 contentDescription**（`:403-416`）→ 要"图标+文字"得自己包一层或用 `NavigationBar(mode=IconWithSelectedLabel)` |
 | R2 | 搜索栏 + 展开动画 | ui | `SearchBar`+`InputField` | ✅ | 展开动画 `expandHorizontally+slideIn`（`U/basic/SearchBar.kt:106-113`）；展开区自绘；配 blur 时 `InputField(color=Color.Transparent)`（`:170`） |
 | R3 | 分段 / 分组设置列表 | ui+preference | `TabRow`/`TabRowWithContour`、`BasicComponent`、`*Preference`、`SmallTitle`、`HorizontalDivider` | ⚠️ | **`TabRow` 入参是 `List<String>`，无 content slot**（`U/basic/TabRow.kt:88`）→ 带图标/计数的分段控件需手写（可复用 `squircleClip/Border`+`selectable`） |
-| R4 | 对话框（alert + 自定义内容） | ui | `OverlayDialog`（`content` 即自定义区）/ `WindowDialog` | ✅ | 需 `Scaffold.popupHost`（`U/basic/Scaffold.kt:90`）；无 Scaffold 用 `WindowDialog`（`U/window/WindowDialog.kt:54`） |
+| R4 | 对话框（alert + 自定义内容） | ui | `OverlayDialog`（`content` 即自定义区）/ `WindowDialog` | ✅ | 需 `Scaffold.popupHost`（`U/basic/Scaffold.kt:88`）；无 Scaffold 用 `WindowDialog`（`U/window/WindowDialog.kt:54`） |
 | R5 | 底部弹层 | ui | `OverlayBottomSheet` / `WindowBottomSheet` | ✅ | `enableNestedScroll` 已处理列表内滚动（`U/overlay/OverlayBottomSheet.kt:46`） |
 | R6 | 开关 / 滑条 / 复选 | ui | `Switch`、`Checkbox`、`RadioButton`、`Slider/RangeSlider` | ✅ | `Switch` 支持拖拽+触觉（`U/basic/Switch.kt:66-120`） |
 | R7 | 带箭头的输入行 | ui+preference | `ArrowPreference`、`RowScope.DropdownArrowEndAction`、`TextField.trailingIcon` | ✅ | 箭头用内置 `MiuixIcons.Basic.ArrowRight/ArrowUpDown`（`U/icon/basic/ArrowRight.kt:14`、`ArrowUpDown.kt:14`） |
@@ -111,14 +111,14 @@
 | 两个重载：`MiuixTheme(controller=…)` 与 `MiuixTheme(colors=…)`，均注入 `LocalColors/LocalTextStyles/LocalIndication/LocalContentColor/LocalOverscrollFactory`；controller 版额外给 `LocalColorSchemeMode` | `U/theme/MiuixTheme.kt:24-44`、`:55-72` |
 | 读取：`MiuixTheme.colorScheme`/`.textStyles`/`.colorSchemeMode`/`.isDynamicColor` | `U/theme/MiuixTheme.kt:74-96` |
 | **`colors=` 重载下 `colorSchemeMode==null` → `isDynamicColor=false`**（`Switch` 等走非动态默认色） | `U/theme/MiuixTheme.kt:83-96`、`U/basic/Switch.kt:230` |
-| `Colors` 是 `@Stable class`，**53 个角色**（`primary/onPrimary/…/sliderBackground`），字段 `internal set`，提供公开 `copy(...)` | `U/theme/Colors.kt:68-122,230-338` |
-| 现成构造器：`lightColorScheme(...)`/`darkColorScheme(...)`，53 角色全是可覆写命名参数（种色 `#FF3482FF`） | `U/theme/Colors.kt:341-450,451-618` |
-| `TextStyles` 是 `@Stable class`，**14 角色**；工厂 `defaultTextStyles(...)` | `U/theme/TextStyles.kt:36-50,114-144` |
+| `Colors` 是 `@Stable class`，**53 个角色**（`primary/onPrimary/…/sliderBackground`），字段 `internal set`，提供公开 `copy(...)` | `U/theme/Colors.kt:68-122,230-559` |
+| 现成构造器：`lightColorScheme(...)`/`darkColorScheme(...)`，53 角色全是可覆写命名参数（种色 `#FF3482FF`） | `U/theme/Colors.kt:341-449,451-504` |
+| `TextStyles` 是 `@Stable class`，**14 角色**；工厂 `defaultTextStyles(...)` | `U/theme/TextStyles.kt:36-51,114-144` |
 | 组件默认字色不写死：`Text(style=LocalTextStyles.current.main)`，颜色由 `onBackground` 注入 | `U/basic/Text.kt:108`、`docs/guide/textstyles.md:8` |
 | 自定义亮/暗色：`ThemeController(System/Light/Dark/Monet*, lightColors=…, darkColors=…, isDark=null)` | `U/theme/ThemeController.kt:228-243,246-274`；枚举 `ColorSchemeMode` `:51` |
 | **Monet 支持**：`MonetSystem/MonetLight/MonetDark`；有 `keyColor` → `colorsFromSeed`（materialKolor），无 → `platformDynamicColors()` | `U/theme/ThemeController.kt:256-274,61`；`U/theme/DynamicColors.kt:9`（`expect`） |
 | Android 取色：API33+ 读 `Settings.Secure.theme_customization_overlay_packages`→ API31-32 读 `system_accent*`→ **<31 回落固定紫 `#FF6750A4`** | `A/theme/DynamicColors.android.kt:26-45`、`U/theme/ThemeController.kt:201` |
-| `paletteStyle` 10 种 / `colorSpec` Spec2021/2025（Spec2025 仅 4 风格；Cmf 恒 2026） | `U/theme/ThemeController.kt:31-58`、`docs/guide/theme.md:59-66` |
+| `paletteStyle` 10 种 / `colorSpec` Spec2021/2025（Spec2025 仅 4 风格；Cmf 恒 2026） | `U/theme/ThemeController.kt:31-58`、`docs/guide/theme.md:113-114,128` |
 | **无公开 M3 适配器**：`colorsFromSeed`、`mapMd3RolesToMiuixColorsCommon`、`MonetRoles` 均 `internal` | `U/theme/ThemeController.kt:61,201`、`U/theme/MonetMapping.kt:86,11` |
 | 显示挖孔修正由 `MiuixTheme` 自动挂载（API30+），`LocalDisplayCutoutFixEnabled=false` 可关 | `U/theme/MiuixTheme.kt:28`、`U/theme/ProvideDisplayCutoutFix.kt:24`、`A/theme/ProvideDisplayCutoutFix.android.kt:30,36` |
 
@@ -164,7 +164,7 @@ fun MiuixThemeFromMaterial3(m3: ColorScheme, dark: Boolean, content: @Composable
 | 事实 | 证据 |
 |---|---|
 | 命名：`MiuixIcons.<Name>`（= Regular 别名）→ `MiuixIcons.Light/Normal/Regular/Medium/Demibold.<Name>` | `I/Settings.kt:15,242`、`C/icon/MiuixIcons.kt:6-13` |
-| ui 内置 7 个 Basic（ArrowRight/ArrowUpDown/Check/Close/Search/SearchCleanup/Sidebar），20dp | `U/icon/basic/*.kt:14-15`、`docs/guide/icons.md:76-86` |
+| ui 内置 7 个 Basic（ArrowRight/ArrowUpDown/Check/Close/Search/SearchCleanup/Sidebar），20dp | `U/icon/basic/*.kt:14-15`、`docs/guide/icons.md:70-83` |
 | 扩展图标 `defaultWidth/Height=24.dp`、viewport 1208.4，延迟构建 + 缓存 | `I/Settings.kt:22-27` |
 | **全部是标准 `ImageVector`** → Material 图标可同排混用：`Icon(imageVector)`、`NavigationBarItem(icon=)`、`NavigationRailItem(icon=)` 入参均 `ImageVector` | `U/basic/Icon.kt:53`、`U/basic/NavigationBar.kt:148`、`U/basic/NavigationRail.kt:332` |
 | 本库**不**打包 `material-icons`，需自行加依赖 | `miuix-ui/build.gradle.kts:60-68` |
@@ -219,21 +219,21 @@ fun MiuixThemeFromMaterial3(m3: ColorScheme, dark: Boolean, content: @Composable
 | `navGraphicsTransition{relativeDepth…}` / `NavDisplayEffects(cornerClipRadius, cornerClipMode, dimAmount=0.5f, blockInputDuringTransition, backdropColor)` | 自造转场（读 float 深度，deferred 不重组）；圆角/scrim 是正交层 | `N/transition/NavTransition.kt:131`、`N/core/NavDisplayEffects.kt:63-69` |
 | `NavSwipeDirection`（默认 None）/ `navDirectionalTransition` / `NavMotion(commit/cancel/programmatic)` | 侧滑关闭需**逐路由 opt-in** | `N/transition/NavTransition.kt:24,81,133`、`N/transition/NavMotion.kt:20` |
 | `rememberNavSystemCornerRadius()` | Android 读 `RoundedCorner`（API31+）→ dimen → 0.dp | `N/core/NavSystemCornerRadius.kt:18`、`androidMain/…/NavSystemCornerRadius.android.kt:30` |
-| **v1 明确不做**：overlay destination、shared-element、KSP 路由、result channel | `docs/guide/miuix-nav.md:340-360` |
+| **v1 明确不做**：overlay destination、shared-element、KSP 路由、result channel | `docs/guide/miuix-nav.md:367-377` |
 
-**建议（聊天客户端）**：**不采用**。(1) 收益仅"连续深度转场 + 预测性返回 + iOS 侧滑"，而我们的根导航是 `when(phase)` 三屏 + 会话栈在 ViewModel（见 `06-bqv-ui.md` §1.3），换 `NavDisplay` 要求路由改成 `@Serializable` 的 `NavKey` 层级并重建 lifecycle/ViewModel 归属（`N/core/NavKey.kt:21-24`、`docs/guide/miuix-nav.md:305-330`）——纯重构、不加功能；(2) 额外拖入 `navigationevent 1.2.0`+`lifecycle 2.11.0`+`kotlinx-serialization-json`+`collections-immutable`（`miuix-nav/build.gradle.kts:56-64`）；(3) v1 无 result channel，"从选人群页返回会话"仍需自建 result 总线（`docs/guide/miuix-nav.md:330-338`）。**若要 iOS 手感，只借旁路工具** `Modifier.pagerGestureOverride`（`U/utils/PagerGestureUtils.kt:169,201,223`），不必引整个 nav。
+**建议（聊天客户端）**：**不采用**。(1) 收益仅"连续深度转场 + 预测性返回 + iOS 侧滑"，而我们的根导航是 `when(phase)` 三屏 + 会话栈在 ViewModel（见 `06-bqv-ui.md` §1.3），换 `NavDisplay` 要求路由改成 `@Serializable` 的 `NavKey` 层级并重建 lifecycle/ViewModel 归属（`N/core/NavKey.kt:21-24`、`docs/guide/miuix-nav.md:310-317`）——纯重构、不加功能；(2) 额外拖入 `navigationevent 1.2.0`+`lifecycle 2.11.0`+`kotlinx-serialization-json`+`collections-immutable`（`miuix-nav/build.gradle.kts:56-64`）；(3) v1 无 result channel，"从选人群页返回会话"仍需自建 result 总线（`docs/guide/miuix-nav.md:353-365`）。**若要 iOS 手感，只借旁路工具** `Modifier.pagerGestureOverride`（`U/utils/PagerGestureUtils.kt:169,201,223`），不必引整个 nav。
 
 ## 8. 已知限制 / Android 注意点
 
 | 限制 | 值 / 表现 | 证据 |
 |---|---|---|
-| Compose Multiplatform | **1.12.2**（用到 `Modifier.dropShadow`、`LocalOverscrollFactory`、`TextAutoSize` 等新面） | `gradle/libs.versions.toml:10`、`README.md:8`、`U/basic/Snackbar.kt:495-506`、`U/basic/Text.kt:90` |
+| Compose Multiplatform | **1.12.2**（用到 `Modifier.dropShadow`、`LocalOverscrollFactory`、`TextAutoSize` 等新面） | `gradle/libs.versions.toml:10`、`README.md:8`、`U/basic/Snackbar.kt:405,495-506`、`U/basic/Text.kt:90` |
 | Kotlin | **2.4.21**（`kotlin.reflect.KClass` 无父类遍历 → `entry{}` 必须逐具体类型注册） | `gradle/libs.versions.toml:3`、`README.md:7`、`N/core/NavDisplay.kt:171-177` |
 | 全库 minSdk | **24** | `build-logic/src/main/kotlin/BuildConfig.kt:14` |
 | `miuix-blur` minSdk | **33**（模块级硬常量） | `miuix-blur/build.gradle.kts:31` |
 | shader 生效线 | API33（RuntimeShader）；RenderEffect 线 API31 | `miuix-shader/src/androidMain/…/RuntimeShader.android.kt:18`、`RenderEffect.android.kt:12` |
 | Monet 系统取色线 | API31+（33+ 才读 seed/style/spec JSON）；<31 固定基线紫 | `A/theme/DynamicColors.android.kt:26-45`、`U/theme/ThemeController.kt:201` |
-| API26-27 焦点回收 bug（SearchBar 收不起来） | `hasFocusReassignBug = SDK_INT <= O_MR1`，库内已"禁 TextField+pointerInput"绕开 | `miuix-core/src/androidMain/…/Utils.android.kt:24`、`U/basic/SearchBar.kt:225-232` |
+| API26-27 焦点回收 bug（SearchBar 收不起来） | `hasFocusReassignBug = SDK_INT <= O_MR1`，库内已"禁 TextField+pointerInput"绕开 | `miuix-core/src/androidMain/…/Utils.android.kt:24`、`U/basic/SearchBar.kt:226-229` |
 | 显示挖孔修正仅 API30+ | `MiuixTheme` 内自动执行，`LocalDisplayCutoutFixEnabled` 可关 | `A/theme/ProvideDisplayCutoutFix.android.kt:36`、`U/theme/ProvideDisplayCutoutFix.kt:24` |
 | Overlay* 依赖 `Scaffold.popupHost` | 不在 Miuix `Scaffold` 内**不渲染**（不报错） | `docs/components/overlaydialog.md:5-16` |
 | `PullToRefresh` 仅触屏环境 | 桌面/网页无效 | `docs/components/pulltorefresh.md:6` |

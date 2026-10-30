@@ -13,17 +13,21 @@
 | 0.4 | CI：`build.yml` 出 APK + 新增 `verify.yml` 跑 1 116 个单测 | 工作流 | 两个 workflow 绿 | 0.2 |
 | 0.5 | 首次真机冒烟（连本实例，聊天+审批+文件） | 记录 | 全链路通过 | 0.4 |
 
-## 阶段 0.5 · 工具链升级（3–5 天，**必须先做**）
+## 阶段 0.5 · 全量升级到最新（5–7 天，**必须先做**）
 
-> miuix 0.9.2 要求 Kotlin 2.4.x + androidx compose 1.11.x + compileSdk 35 + AGP 8.6+。fork 现在是 Kotlin 1.9.24 / AGP 8.5.2 / compileSdk 34 / BOM 2024.09。**Kotlin 2.x 是躲不掉的**（1.9 读不了 miuix 的 metadata）。详见 [research/08-miuix-compat.md](research/08-miuix-compat.md) §7。
+> 决定：**全部升到最新**。目标组合见 [research/09-toolchain-latest.md](research/09-toolchain-latest.md)：
+> **Gradle 9.8.2 · AGP 9.5.0 · Kotlin 2.4.21 · Compose BOM 2026.09.00 · compileSdk/buildTools 37 · JDK 21 · miuix 0.9.4**
 
 | # | 任务 | 产出 | 验收 | 依赖 |
 |---|---|---|---|---|
-| 0.5.1 | Kotlin 1.9.24 → 2.4.x，`composeOptions` 换成 `org.jetbrains.kotlin.plugin.compose`，`kotlinOptions` → `compilerOptions` | 构建文件 | **1 116 个 JVM 测试全绿**（此时**还没引入 miuix**，可独立回滚） | 0.4 |
-| 0.5.2 | AGP 8.5.2 → 8.6+，compileSdk 34 → 35，Compose 升到 androidx 1.11.x | 构建文件 | `assembleDebug` 通过 + 测试全绿 | 0.5.1 |
-| 0.5.3 | 引入 miuix 0.9.2 最小集（`miuix-ui` / `miuix-preference` / `miuix-icons` / `miuix-squircle`，**不含 blur**） | 依赖声明 | 编译通过；三页能跑 | 0.5.2 |
+| 0.5.1 | Gradle wrapper 8.7 → **9.8.2** | `gradle/wrapper` | `./gradlew --version` 输出 9.8.2 | 0.4 |
+| 0.5.2 | AGP 8.5.2 → **9.5.0**；compileSdk 34 → **37**；buildTools → 37；`packaging` DSL 迁移 | 构建文件 | `assembleDebug` 通过（第一次可能暴露 AGP 9 的 DSL 移除） | 0.5.1 |
+| 0.5.3 | Kotlin 1.9.24 → **2.4.21**；删 `composeOptions`；加 `org.jetbrains.kotlin.plugin.compose`；`kotlinOptions` → `compilerOptions` | 构建文件 | **1 116 个测试全绿**（此时**还没加 miuix**，可独立回滚） | 0.5.2 |
+| 0.5.4 | Compose BOM → **2026.09.00** | 依赖 | 同上 + 截图基线更新 | 0.5.3 |
+| 0.5.5 | 引入 miuix **0.9.4** 最小集（ui / preference / icons / squircle） | 依赖声明 | 编译通过；三页能跑 | 0.5.4 |
 
-> 三个 **不要**：不引 `miuix-blur`（模块 minSdk 33，我们 26）；不引 `miuix-nav`（0.9.2 无此模块，我们也不需要）；不为 miuix 抬 minSdk。
+> 两个 **仍然不要**：**不引 `miuix-blur`**（模块 minSdk 33，我们 26 —— 除非把 minSdk 抬到 33，那会丢掉 Android 8–12 用户）；**不引 `miuix-nav`**（虽然 0.9.4 有，但它要求把所有路由改成 `@Serializable NavKey`）。
+> **JDK**：AGP 9 需要 JDK 17+，miuix 自身用 21。本机目前只有 17，若 CI/本地报错需 `apt install openjdk-21-jdk-headless`。
 
 ## 阶段 1 · 结构（1 周）
 
@@ -52,6 +56,21 @@
 | 3.1 | 消息气泡/状态点/工具卡折叠行/统计胶囊换皮 | 界面 | 语义色不变；`DshTheme.colors` 调用点不变 | 2.6 |
 | 3.2 | 动效：切页弹簧、弹窗 scale、流式段落淡入、危险操作触觉 | 打磨 | 60fps；无卡顿 | 3.1 |
 | 3.3 | 深色/AMOLED/大字体/无障碍回归 | 测试 | 无 P0 视觉缺陷 | 3.2 |
+
+## 阶段 3.5 · 多语言（1.5–2 周，与阶段 2–3 交错进行）
+
+> 现状：`strings.xml` 只有 6 条、`stringResource()` 调用 **0 次**、约 1 000–1 200 条硬编码界面文案。规划见 [I18N.md](I18N.md)。
+> **原则：换哪个文件就抽哪个文件**，不要先全换皮再统一抽（那是同一批文件改两遍）。
+
+| # | 任务 | 产出 | 验收 | 依赖 |
+|---|---|---|---|---|
+| 3.5.1 | 建 `strings.xml` 骨架 + 语言切换 API（appcompat backport）+ 设置页「语言」项 | 骨架 | API 26 真机切换生效 | 0.5.5 |
+| 3.5.2 | 抽 `SettingsContent.kt` / `AboutScreen.kt`（低风险，随 D3/D4 一起做） | 资源 | 两页 0 硬编码 | 3.5.1 |
+| 3.5.3 | 抽 `SessionsDrawer.kt` / `ChatScreen.kt` / `Sheets.kt`（随 D2/D3/D5 一起做） | 资源 | 聊天链路 0 硬编码 | 3.5.2 |
+| 3.5.4 | 抽 `ui/components/**`（工具卡片） | 资源 | 全量 | 3.5.3 |
+| 3.5.5 | 出 zh 翻译 + 抽检；CI 加「无硬编码 UI 文案」门禁 | 翻译 | 中文界面无残留英文 | 3.5.4 |
+
+> 截图测试要**先固定 locale**（`@Config(qualifiers = "en")`）再抽，否则基线天天漂移。
 
 ## 阶段 4 · 差异化与发布（1–2 周）
 
@@ -89,6 +108,6 @@
 | **Kotlin 2.x 迁移卡住** | 0.5.1 测试红且 2 天内无法收敛 | 先只升 Kotlin 不加 miuix，逐测试修复；若仍不行 → 走"方案 B"：不引 miuix，纯自绘外观（工期 +1 周，但零工具链风险） |
 | 换皮回归失控 | 截图测试差异文件 > 20 个/次 | 缩小改动粒度，先补测试 |
 | ChatScreen 改不动 | 单文件改动 > 300 行仍无法通过编译/测试 | 拆文件（把 Scaffold 段抽成 `ChatScaffold.kt`） |
-| Miuix 版本冲突 | Gradle 解析冲突或 Compose 版本不兼容 | **锁 0.9.2**，不要追 0.9.4（会逼出 AGP 9 + Gradle 9 + compileSdk 37 连锁升级） |
+| 全量升级连环失败 | AGP 9 / Kotlin 2.4 / Compose 1.12 任一步炸且 3 天内收敛不了 | **降级路线**：AGP 8.6 + Kotlin 2.4 + compileSdk 35 + **miuix 0.9.2**（见 research/08 的 S1–S4，不换 Gradle/buildTools） |
 | Sauce 依赖断供 | miuix 停更或 Maven 撤包 | 源码已 Apache-2.0，可 vendored（`/tmp/miuix`）自建 |
 | 上游停更/大改 | upstream 3 个月无提交或有破坏性改动 | 冻结 fork，自持；不再 cherry-pick |
