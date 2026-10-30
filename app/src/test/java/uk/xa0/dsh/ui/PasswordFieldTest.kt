@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -140,16 +139,19 @@ class PasswordFieldTest {
      * requirement directly ("the secret must not be on screen") and does not
      * depend on that bug.
      */
-    private fun maskedField() = rule.onNode(
-        hasSetTextAction() and SemanticsMatcher.expectValue(
-            SemanticsProperties.EditableText,
-            AnnotatedString(OBFUSCATED_SECRET),
-        ),
-    )
+    private fun maskedField() = rule.onNode(hasSetTextAction() and maskingText())
 
-    private companion object {
-        /** `PasswordVisualTransformation`'s bullet, once per character of "hunter2". */
-        const val OBFUSCATED_SECRET = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+    /**
+     * Whether the field's published text is obfuscated.
+     *
+     * Matches on "the visible run is bullets, or is empty" rather than on one
+     * exact string, because the field is also queried before anything is typed —
+     * an empty masked field publishes an empty run, and a matcher pinned to seven
+     * bullets would fail to find it.
+     */
+    private fun maskingText() = SemanticsMatcher("editable text is obfuscated") { node ->
+        val shown = node.config.getOrNull(SemanticsProperties.EditableText)?.text
+        shown != null && shown.all { it == '\u2022' }
     }
 
     @Test
