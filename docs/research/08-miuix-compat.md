@@ -41,11 +41,10 @@
 
 ### 2.1 三个 0.9.x 的依赖矩阵（`.pom` + `.module` variants 实读）
 
-| 版本 | compose.foundation | kotlin-stdlib | materialkolor | m3-window-size-class | navigationevent | 发布日（`curl -I` last-modified） |
+| 版本 | compose.foundation | kotlin-stdlib | materialkolor | m3-window-size-class | navigationevent | 发布日（`curl -I`） |
 |---|---|---|---|---|---|---|
-| 0.9.0 | 1.10.3 | 2.3.20 | 4.1.1 | 1.9.0 | `org.jetbrains.androidx:1.0.1` | Thu, 02 Apr 2026 |
-| 0.9.2 | 1.11.1 | 2.4.0 | 4.1.1 | 1.9.0 | `org.jetbrains.androidx:1.1.0` | Fri, 05 Jun 2026 |
-| **0.9.4** | **1.12.0** | **2.4.20** | 5.0.1 | **1.12.0-alpha03** | **`androidx.navigationevent:1.1.2`** | Sun, 20 Sep 2026 |
+| 0.9.0 / 0.9.2 | 1.10.3 / 1.11.1 | 2.3.20 / 2.4.0 | 4.1.1 | 1.9.0 | `org.jetbrains.androidx:1.0.1` / `1.1.0` | 2026-04-02 / 2026-06-05 |
+| **0.9.4** | **1.12.0** | **2.4.20** | 5.0.1 | **1.12.0-alpha03** | **`androidx.navigationevent:1.1.2`** | 2026-09-20 |
 
 模块首版实测（`MC <a>/maven-metadata.xml` 首条）：`preference/blur/core`=0.9.0、`squircle/shader`=0.9.2、`icons`=0.8.0-rc01、`nav`=0.9.4-rc01、`shapes`=**仅 0.9.0**（0.9.2 起改名 squircle）。
 
@@ -221,8 +220,7 @@ fork release 目前 `isMinifyEnabled=false`（`:88`）⇒ 上述为上界；开 
 
 ## 7. 风险：1116 个 JVM 测试会坏在哪
 
-fork 现实（实测）：单模块（`F:settings.gradle.kts:18`）、主源 267 个 .kt、**1116 个 `@Test`**（model 437 / ui 231 / term 186 / widget 78 / net 77 / scroll 25 / markdown 19 / diag 13 / components 12 / composer 10）、**47 个测试文件跑 Robolectric**（`@RunWith(RobolectricTestRunner)` + `@Config(sdk=[34], application=HarnessApplication::class)`）、**37 个用 `createComposeRule`**、无 kapt/KSP/serialization。
-> `F:README.md:63` 仍写"342 tests"，已过时；以 `grep -rho '@Test' app/src/test | wc -l` = 1116 为准。
+fork 现实（实测）：单模块（`F:settings.gradle.kts:18`）、主源 267 个 .kt、**1116 个 `@Test`**（model 437 / ui 231 / term 186 / widget 78 / net 77 / scroll 25 / markdown 19 / diag 13 / components 12 / composer 10）、**47 个测试文件跑 Robolectric**（`@RunWith(RobolectricTestRunner)` + `@Config(sdk=[34], application=HarnessApplication::class)`）、**37 个用 `createComposeRule`**、无 kapt/KSP/serialization。`F:README.md:63` 仍写"342 tests"，已过时，以 `grep -rho '@Test' app/src/test | wc -l` = 1116 为准。
 
 | 序 | 风险面 | 失败形态 | 证据 |
 |---|---|---|---|
@@ -262,13 +260,12 @@ fork 现实（实测）：单模块（`F:settings.gradle.kts:18`）、主源 267
 
 **有**，但等于退回单模块时代（聚合坐标 `miuix` 发到 0.8.8 为止，0.9.0 起才拆 9 模块）。
 
-| 方案 | miuix | Kotlin | AGP | Gradle | compileSdk | androidx foundation | 模块面 |
-|---|---|---|---|---|---|---|---|
-| **最省（近乎零改）** | **0.2.9** | 2.0.21 | **8.5.2 ✓** | **8.7 ✓** | **34 ✓** | 1.7.0（`minCompileSdk=34`） | 仅单体（509,073 B、`minCompileSdk=1`、minSdk 26、class `major 61`/`mv=[2,0,0]`） |
-| 折中 | 0.3.8 | 2.1.20 | 8.7.2 | 8.12.1 | 34–35 | 1.8.0-beta02（35） | 单体（978,131 B、`mv=[2,1,0]`） |
-| 较可用 | 0.4.9 | 2.2.20 | 8.11.1 | 8.14 | 35 | 1.8.2（35） | 单体（947,707 B、`mv=[2,2,0]`） |
-| 有独立 icons | 0.8.8 | 2.3.20 | 9.0.0 | 9.1.0 | **36** | 1.10.5（`minAGP=8.6.0`） | `miuix` + `miuix-icons` |
-| 全功能 | 0.9.4 | 2.4.20 | 9.3.1 | 9.5.0 | **37** | 1.12.0（`minAGP=9.1.0`） | 9 模块 |
+| 方案 | miuix | Kotlin | AGP / Gradle | compileSdk | androidx foundation | 模块面 |
+|---|---|---|---|---|---|---|
+| **最省（近乎零改）** | **0.2.9** | 2.0.21 | **8.5.2 ✓ / 8.7 ✓** | **34 ✓** | 1.7.0（`minCompileSdk=34`） | 仅单体（509,073 B、`minCompileSdk=1`、minSdk 26、`major 61`/`mv=[2,0,0]`） |
+| 折中 / 较可用 | 0.3.8 / 0.4.9 | 2.1.20 / 2.2.20 | 8.7.2 / 8.12.1 · 8.11.1 / 8.14 | 34–35 / 35 | 1.8.0-beta02 / 1.8.2（35） | 单体（978,131 B `mv=[2,1,0]` / 947,707 B `mv=[2,2,0]`） |
+| 有独立 icons | 0.8.8 | 2.3.20 | 9.0.0 / 9.1.0 | **36** | 1.10.5（`minAGP=8.6.0`） | `miuix` + `miuix-icons` |
+| 全功能 | 0.9.4 | 2.4.20 | 9.3.1 / 9.5.0 | **37** | 1.12.0（`minAGP=9.1.0`） | 9 模块 |
 
 **最小可行组合**：`miuix 0.2.9` + `Kotlin 2.0.21` + `AGP 8.5.2` + `Gradle 8.7` + `compileSdk 34` + `androidx Compose 1.7.x` —— fork 现状**除 Kotlin 与 compose 插件外全部满足**，约 1 天工作量。
 **代价**：`miuix-preference/blur/nav` 都不存在（首版 0.9.0/0.9.0/0.9.4-rc01），`miuix-icons` 要 0.8.0-rc01 起；且 0.2.9 包结构为 `anim/basic/extra/icon/miuix/theme/utils`（`classes.jar` 顶层目录实测），与 [07-miuix-api.md](07-miuix-api.md) 盘点的 0.9.4 API **不是同一套** ⇒ 07 文档全部路径无法复用，等于重写接入层。**只在"必须这周出 Miuix 观感"时才值得。**
@@ -279,8 +276,7 @@ fork 现实（实测）：单模块（`F:settings.gradle.kts:18`）、主源 267
 |---|---|---|
 | AGP 9.5.0 的最低 JDK | 未取到常量（jar 内字符串检索失败） | 若要求 21，改 `F:build.sh:11` 一处 |
 | AGP 9.x DSL 细节 | 仅确认 `BuildFeaturesImpl`/`ComposeOptionsImpl` 仍存在 | `F:app/build.gradle.kts:42-106` 可能需少量改写；`packaging`（`:100`）已是新写法 |
-| 本机能否真跑 Gradle | **否**（`/opt/android-sdk` 缺失、`gradle` 命令不存在） | 结论来自构件元数据 + kotlinc/D8 实验，**非完整构建验证** |
-| Robolectric 4.13 × Compose 1.12 | 未测 | 已按"升 4.17"给保守方案 |
+| 本机能否真跑 Gradle / Robolectric 4.13×Compose 1.12 | **否**（`/opt/android-sdk` 缺失、`gradle` 命令不存在）；后者未测 | 结论来自构件元数据 + kotlinc/D8 实验，**非完整构建验证**；已按"升 4.17"给保守方案 |
 | `miuix-navigation3-*` / `miuix-shapes` | 不在源码树（`U:settings.gradle.kts:45-53`）；shapes 仅 0.9.0 | 未来使用需重新评估 |
 
 ## 10. 判定（问题 7）

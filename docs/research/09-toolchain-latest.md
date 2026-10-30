@@ -1,5 +1,7 @@
 # 全量升级到最新：工具链矩阵（实测版本）
 
+> ⚠️ **本文的版本结论已被 [10-version-lock.md](10-version-lock.md) 修正**：AGP 9.5.0 与 Gradle 9.8.2 **超出 Kotlin 2.4.21 官方兼容矩阵上限**（AGP ≤9.3.1、Gradle ≤9.7.0）。**执行请以 10 为准**（AGP 9.3.1 + Gradle 9.5.0）。本文保留作为「最新版本一览」与 DSL 改动清单的依据。
+
 > 用户决定：**全部升到最新，并采用 miuix 0.9.4**。本文给出「最新」的确切含义、版本配对、以及本仓库必须改的每一处 DSL。
 > 版本均于 2026-10-30 实查 Maven Central / Google Maven / services.gradle.org。
 

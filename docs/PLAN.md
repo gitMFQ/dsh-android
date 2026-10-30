@@ -241,4 +241,5 @@ Kotlin 2.4.x + Compose BOM 2026.09；Ktor 3.6.1（OkHttp 引擎，HTTP 与 WS �
 | [BUILD-AND-CI.md](BUILD-AND-CI.md) | 构建与 CI：aarch64 不能打包的实测结论、本地能做什么、Actions 出包、签名与分发 |
 | [ROADMAP.md](ROADMAP.md) | 任务板：阶段 0–4 可验收任务表、关键路径与并行建议、每周节奏、风险闸门 |
 | [I18N.md](I18N.md) | 多语言规划：债务量化、语言优先级、DSH 术语表、抽取顺序、CI 门禁、翻译工作流 |
-| [research/09-toolchain-latest.md](research/09-toolchain-latest.md) | 全量升级矩阵：最新版本实测、配对约束、AGP 9 DSL 改动清单、升级 5 步 |
+| [research/09-toolchain-latest.md](research/09-toolchain-latest.md) | 全量升级矩阵：最新版本实测、配对约束、AGP 9 DSL 改动清单 |
+| [research/10-version-lock.md](research/10-version-lock.md) | **最终版本锁**：AGP 9.3.1 / Gradle 9.5.0（受 Kotlin 2.4.21 官方矩阵约束）、五级升级阶梯 |

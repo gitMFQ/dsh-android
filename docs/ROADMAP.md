@@ -16,13 +16,15 @@
 ## 阶段 0.5 · 全量升级到最新（5–7 天，**必须先做**）
 
 > 决定：**全部升到最新**。目标组合见 [research/09-toolchain-latest.md](research/09-toolchain-latest.md)：
-> **Gradle 9.8.2 · AGP 9.5.0 · Kotlin 2.4.21 · Compose BOM 2026.09.00 · compileSdk/buildTools 37 · JDK 21 · miuix 0.9.4**
+> **Gradle 9.5.0 · AGP 9.3.1 · Kotlin 2.4.21 · Compose BOM 2026.09.00 · compileSdk/buildTools 37 · JDK 17 · miuix 0.9.4**
+> 为什么不是「最新」的 AGP 9.5.0 / Gradle 9.8.2：**超出 Kotlin 2.4.21 官方矩阵上限**（AGP ≤9.3.1、Gradle ≤9.7.0）。论证见 [research/10-version-lock.md](research/10-version-lock.md)。
 
 | # | 任务 | 产出 | 验收 | 依赖 |
 |---|---|---|---|---|
-| 0.5.1（L1） | Kotlin 1.9.24 → **2.4.21** + `plugin.compose`（删 `composeOptions`、`kotlinOptions`→`compilerOptions`）；**AGP 8.13.2**；**Gradle 8.13**；compileSdk **36** | 构建文件 | `assembleDebug` + **1 116 测试全绿** + 配置缓存 | 0.4 |
-| 0.5.2（L2） | AGP **9.5.0** + Gradle **9.8.2**（AGP 9.5 要求 ≥9.6.0）；compileSdk **37**；buildTools 37.0.0 | 构建文件 | 同上四项 | 0.5.1 |
-| 0.5.3（L3） | Compose BOM **2026.09.00** + miuix **0.9.4** 最小集（ui / preference / icons / squircle） | 依赖 | 同上 + `dependencyInsight` 无旧 foundation 残留 | 0.5.2 |
+| 0.5.1（L1） | **只升 Kotlin**：1.9.24 → **2.4.21** + `org.jetbrains.kotlin.plugin.compose`；删 `composeOptions`；`kotlinOptions`→`compilerOptions`。**AGP / compileSdk 全不动** | 构建文件 | `assembleDebug` + **1 116 测试全绿** | 0.4 |
+| 0.5.2（L2） | AGP 8.5.2 → **8.13.2**；Gradle 8.7 → **8.13**；compileSdk **36**；BOM → 2026.05.00 | 构建文件 | 同上 + 配置缓存通过 | 0.5.1 |
+| 0.5.3（L3） | AGP → **9.3.1**；Gradle → **9.5.0**；compileSdk **37**；buildTools 37.0.0；BOM → **2026.09.00** | 构建文件 | 同上四项 | 0.5.2 |
+| 0.5.4（L4） | 引入 miuix **0.9.4** 最小集（ui / preference / icons / squircle） | 依赖 | 同上 + `dependencyInsight` 无旧 foundation 残留 | 0.5.3 |
 
 > 两个 **仍然不要**：**不引 `miuix-blur`**（模块 minSdk 33，我们 26 —— 除非把 minSdk 抬到 33，那会丢掉 Android 8–12 用户）；**不引 `miuix-nav`**（虽然 0.9.4 有，但它要求把所有路由改成 `@Serializable NavKey`）。
 > **JDK**：AGP 9 需要 JDK 17+，miuix 自身用 21。本机目前只有 17，若 CI/本地报错需 `apt install openjdk-21-jdk-headless`。
