@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
@@ -128,13 +129,31 @@ class PasswordFieldTest {
     }
 
     /**
-     * The password node, found by the one semantic a masked `BasicTextField`
-     * publishes: `Password`. That it matches is itself the masking assertion —
-     * Compose only sets it while `PasswordVisualTransformation` is in force.
+     * The field while it is masking, found by what the user would actually read:
+     * the editable text Compose publishes is the obfuscated run, not the secret.
+     *
+     * This used to match on the `Password` semantic. Compose 1.11 stopped
+     * publishing it reliably: `CoreTextFieldSemanticsModifier.updateNodeSemantics`
+     * reads `previousIsPassword`, compares it, and never assigns `this.isPassword`,
+     * so the node keeps the value it was created with and the semantic cannot
+     * change when the eye is tapped. Asserting on the visible text states the
+     * requirement directly ("the secret must not be on screen") and does not
+     * depend on that bug.
      */
-    private fun maskedField() = rule.onNode(
-        hasSetTextAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.Password),
-    )
+    private fun maskedField() = rule.onNode(hasSetTextAction() and maskingText())
+
+    /**
+     * Whether the field's published text is obfuscated.
+     *
+     * Matches on "the visible run is bullets, or is empty" rather than on one
+     * exact string, because the field is also queried before anything is typed —
+     * an empty masked field publishes an empty run, and a matcher pinned to seven
+     * bullets would fail to find it.
+     */
+    private fun maskingText() = SemanticsMatcher("editable text is obfuscated") { node ->
+        val shown: String? = node.config.getOrNull(SemanticsProperties.EditableText)?.text
+        shown != null && shown.all { character: Char -> character == '\u2022' }
+    }
 
     @Test
     fun `a password starts masked and says what the control would do`() {

@@ -1,15 +1,14 @@
 plugins {
+    // No `org.jetbrains.kotlin.android`: AGP 9 compiles Kotlin itself and
+    // rejects the old plugin outright. The Compose compiler is still a separate
+    // plugin and still versioned with Kotlin.
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    // Kotlin 2.0 moved the Compose compiler out of AGP and into this plugin.
-    // Its version always equals the Kotlin version, so it is declared in the
-    // root build file and applied here without a version.
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "uk.xa0.dsh"
-    compileSdk = 36
+    compileSdk = 37
 
     // A release key can be supplied entirely through the environment, which is how
     // CI signs without a keystore in the repository:
@@ -33,12 +32,12 @@ android {
 
     // This box ships build-tools 35.0.0/36.0.0 but not AGP's default 34.0.0,
     // and there is no writable SDK root to auto-download into.
-    buildToolsVersion = "36.0.0"
+    buildToolsVersion = "37.0.0"
 
     defaultConfig {
         applicationId = "uk.xa0.dsh"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 15
         versionName = "0.6.6"
     }
@@ -103,8 +102,10 @@ android {
     }
 }
 
-// Kotlin 2.x moved the compiler options off `android { kotlinOptions { } }` and
-// onto the Kotlin extension itself. Same opt-ins, same JVM target, new home.
+// AGP 9 brings its own Kotlin support, and it still exposes a project-level
+// `kotlin { }` extension (TaskManager creates the "kotlin-extension"
+// configuration for it). Applying org.jetbrains.kotlin.android is what AGP 9
+// refuses, not configuring Kotlin itself.
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -116,7 +117,7 @@ kotlin {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.13.1")

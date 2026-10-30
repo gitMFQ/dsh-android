@@ -1,8 +1,7 @@
 plugins {
-    id("com.android.application") version "8.13.2" apply false
-    // L1: Kotlin 1.9.24 -> 2.4.21. Compose compilation moved from AGP's
-    // `composeOptions.kotlinCompilerExtensionVersion` to this first-party plugin
-    // in Kotlin 2.0; see app/build.gradle.kts for the other half of that move.
-    id("org.jetbrains.kotlin.android") version "2.4.21" apply false
+    // AGP 9.0+ has Kotlin support built in: it compiles Kotlin itself, so the
+    // org.jetbrains.kotlin.android plugin must NOT be applied any more (AGP fails
+    // the build if it is). The Compose compiler plugin is still ours to apply.
+    id("com.android.application") version "9.3.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.21" apply false
 }

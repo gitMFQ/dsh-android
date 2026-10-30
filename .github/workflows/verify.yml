@@ -40,9 +40,9 @@ jobs:
           set -euo pipefail
           mkdir -p .toolchain/android-home .toolchain/xdg-data
           ln -s "$JAVA_HOME" .toolchain/jdk-17.0.20.1+1
-          curl -fsSL --retry 3 https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/gradle.zip
+          curl -fsSL --retry 3 https://services.gradle.org/distributions/gradle-9.5.0-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d .toolchain
-          test -x .toolchain/gradle-8.13/bin/gradle
+          test -x .toolchain/gradle-9.5.0/bin/gradle
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
 
       # L1 gate: the whole 1116-test suite on Kotlin 2.4.21. This is the step that

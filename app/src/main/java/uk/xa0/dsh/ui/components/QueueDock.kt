@@ -311,7 +311,9 @@ fun QueueDock(
                                 .fillMaxWidth()
                                 // Rows land and retire with a fade and a slide, so a
                                 // queue that is filling while open reads as motion.
-                                .animateItemPlacement(),
+                                // `animateItem()` is the name that survived; the
+                                // `...Placement` spelling was removed in Compose 1.8.
+                                .animateItem(),
                         ) {
                             if (index > 0) {
                                 Box(
