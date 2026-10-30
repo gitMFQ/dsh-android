@@ -115,3 +115,73 @@ object KsuTokens {
 | **D7** | 动效与触觉 | 各处 |
 
 **明确保留不动**：`ui/markdown/**`（原生 Compose 渲染）、`scroll/TailFollow`、`model/`、`net/`、`term/`、`TerminalScreen` 的 Canvas 绘制、`TerminalInputView` 的 IME 处理。
+
+## 8. KernelSU 覆盖不到的地方 → 用 Miuix（Apache-2.0）
+
+我们的策略是**两段式**：
+
+| 层 | 来源 | 说明 |
+|---|---|---|
+| 观感与壳（KernelSU 风格独有） | 自写（原创） | 浮动底栏、7 档外观、卡片式设置、`KsuTokens` |
+| **其余一切通用控件** | **`compose-miuix-ui/miuix`（Apache-2.0）** | 下拉、开关、滑条、输入框、对话框、底部弹层、侧栏、刷新、进度、图标 |
+
+### 8.1 Miuix 能直接替我们做的（`research/07-miuix-api.md` 实测）
+
+| 我们要的 | Miuix 组件 | 模块 |
+|---|---|---|
+| 悬浮底栏 | `FloatingNavigationBar` / `FloatingNavigationBarItem` | miuix-ui |
+| 搜索栏 | `SearchBar` + `InputField` | miuix-ui |
+| 对话框 | `OverlayDialog` | miuix-ui |
+| 底部弹层 | `OverlayBottomSheet` | miuix-ui |
+| 开关 / 滑条 | `Switch`、`Slider`、`RangeSlider`、`VerticalSlider` | miuix-ui |
+| 输入框 | `TextField`（3 个重载，新版 `TextFieldState`） | miuix-ui |
+| 宽屏侧栏 | `NavigationRail` + `rememberNavigationRailState` | miuix-ui |
+| 下拉刷新 | `PullToRefresh` + `rememberPullToRefreshState`（需中文化 4 条文案） | miuix-ui |
+| 进度 | `Linear/Circular/InfiniteProgressIndicator` | miuix-ui |
+| Snackbar | `SnackbarHost` + `showSnackbar` | miuix-ui |
+| 标签行 | `TabRow` / `TabRowWithContour` | miuix-ui |
+| 设置行 | `ArrowPreference`、`SwitchPreference`、`CheckboxPreference`、`RadioButtonPreference`、`SliderPreference`、`OverlayDropdownPreference`、`OverlaySpinnerPreference` | miuix-preference |
+| 图标 | `MiuixIcons.*`（156 个扩展 + 7 个基础，普通 `ImageVector`，**可与 Material 图标混用**） | miuix-icons |
+| 超椭圆圆角 | `squircleSurface` / `squircleClip` / `squircleBorder` / `Path.addSquircleRect` | miuix-squircle |
+
+### 8.2 Miuix **没有**、必须自写或留 Material3 的（共 5 处）
+
+| 缺口 | 事实 | 我们的做法 |
+|---|---|---|
+| **Toast** | 全库 grep `Toast` = 0 | 复用 fork 已有的 toast host，或用 `FloatingToolbar` 包一层 |
+| **骨架屏 / Shimmer** | grep `Skeleton` / `Shimmer` = 0 | 自写（约 60 行，用 `Brush.linearGradient` 位移） |
+| **分段控件（带任意 content）** | `TabRow` 入参是 `List<String>`，**没有 content slot** | 自写 `SegmentedColumn`（约 200 行） |
+| **Markdown 渲染** | 库里没有 | **继续用 fork 的原生 Compose 渲染**（`MarkdownView.kt`） |
+| **Chip / Avatar / FlowRow / 日期选择** | 全部 0 命中 | Chip 用 `Surface`+`Row` 自写；头像用 squircle 近似圆形 |
+
+### 8.3 主题对接（关键：不要两套色）
+
+- Miuix 有 `MiuixTheme(colors = …)` 与 `MiuixTheme(controller = …)` 两个重载，`Colors` 有 **53 个角色**，并提供 53 个命名参数的 `lightColorScheme(...)` / `darkColorScheme(...)`。
+- **没有公开的 M3 → Miuix 适配器**（`colorsFromSeed`、`mapMd3RolesToMiuixColorsCommon` 都是 `internal`）。
+- 所以：**我们自己写映射**，在 `AppTheme` 里同时构造 `DshColors`（语义层，244 处调用点不动）与 `MiuixTheme.Colors`（外观层），由同一份 `KsuTokens` 驱动。映射对照表见 `research/07-miuix-api.md` §8（M3 角色 → Miuix 角色）。
+
+```kotlin
+// 示意：一份外观设置驱两套主题
+@Composable
+fun AppTheme(mode: ColorMode, content: @Composable () -> Unit) {
+    val ksu = KsuTokens.of(mode)              // 自建：surface/container/outline/radius/type
+    val miuix = ksu.toMiuixColors()          // 自写映射：53 个角色
+    val dsh = ksu.toDshColors()              // 语义层：accent/success/warn/error/label*
+    MiuixTheme(colors = miuix) {
+        DshTheme(colors = dsh) { content() }
+    }
+}
+```
+
+### 8.4 硬约束（决定升级路线）
+
+| 约束 | 值 | 影响 |
+|---|---|---|
+| Kotlin | **2.4.x**（0.9.0 起就要 2.3+） | fork 的 1.9.24 **必升**；Kotlin 1.9 读不了它的 metadata |
+| Compose | 0.9.2 → CMP 1.11.1（androidx compose 1.11.x）；0.9.4 → CMP 1.12.0 | 我们的 BOM 2024.09 必须升 |
+| AGP | 0.9.2 → **8.6+**；0.9.4 → **9.1+** | **选 0.9.2**：只差一版，不用动 Gradle 9 |
+| compileSdk | 0.9.2 → **35**；0.9.4 → 37 | 34 → 35 比 34 → 37 温和得多 |
+| `miuix-blur` minSdk | **33** | 我们 26 → **不引 blur**，玻璃效果自写 + API<31 降级 |
+| 无 `androidx.compose.material3` 依赖 | 只依赖 `material3-window-size-class` | **可与现有 M3 同栈共存**，可渐进替换 |
+
+**结论：用 miuix 0.9.2，不追 0.9.4。** 0.9.4 会逼出 AGP 9 + Gradle 9 + compileSdk 37 + build-tools 37 的连锁升级；0.9.2 的组件面已经够用（除 `miuix-nav`，而我们不需要它）。完整代价见 `research/08-miuix-compat.md`，落地顺序见其中 §7 的 S1–S4。

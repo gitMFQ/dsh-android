@@ -101,7 +101,7 @@ open endpoint="$events" payload={"args":{}}
 | 层 | 来源 | 许可 | 说明 |
 |---|---|---|---|
 | 协议 + 数据 + 聊天渲染 | **fork `bqv/dsh-android`**（MPL-2.0，v0.6.6） | 保留 MPL，改动文件标注 | 140 个 .kt / 5.8 万行 / **1 116 个 JVM 测试**（README 的 342 已过时）；已实测能完整跑通"发消息→流式→审批→结束" |
-| 视觉与交互 | **KernelSU-Style-UI-Kit 的观感** + **Miuix 组件库（Apache-2.0）** | 只借观感，**不复制 GPL 代码** | 浮动玻璃底栏、7 档外观、分段列表、大圆角卡片 |
+| 视觉与交互 | **KernelSU-Style-UI-Kit 的观感** + **Miuix 组件库 0.9.2（Apache-2.0）** | 只借观感，**不复制 GPL 代码** | 浮动玻璃底栏、7 档外观、分段列表、大圆角卡片；KernelSU 覆盖不到的一律用 Miuix（对话框/弹层/开关/滑条/输入框/侧栏/刷新/进度/图标/squircle） |
 | 被否决 | 从零自研（10 周且要重踩全部协议坑）、Hakunm 项目（AGPL 传染 + 依赖 Host 插件） | — | — |
 
 三条硬约束（决定了一切细节）：
@@ -232,6 +232,8 @@ Kotlin 2.4.x + Compose BOM 2026.09；Ktor 3.6.1（OkHttp 引擎，HTTP 与 WS �
 | [research/04-android-stack.md](research/04-android-stack.md) | 技术路线对比、依赖版本、TLS/保活、模块结构、先行项目调研、分发 |
 | [research/05-ksu-kit.md](research/05-ksu-kit.md) | KernelSU-Style-UI-Kit 设计系统盘点：双皮肤机制、组件清单、实测刻度、许可结论 |
 | [research/06-bqv-ui.md](research/06-bqv-ui.md) | fork 基线 UI 层盘点：27k 行分布、换皮影响评级、耦合热点、移植清单 |
+| [research/07-miuix-api.md](research/07-miuix-api.md) | Miuix 组件面盘点：30+ composable、15 项需求覆盖矩阵、主题映射、Android 限制 |
+| [research/08-miuix-compat.md](research/08-miuix-compat.md) | 接入代价：三版本依赖矩阵、minCompileSdk 实测、Kotlin/AGP 升级 S1–S4、体积 |
 | [SPIKE.md](SPIKE.md) | 1–2 天开工验证清单（协议最小闭环 + 先行项目跑通 + 决策会），含常见坑与 v0.1.0 验收定义 |
 | [DESIGN.md](DESIGN.md) | 设计系统落地：信息架构、组件取舍、与 fork 的冲突点、交付顺序 D1–D7 |
 | [DESIGN-TOKENS.md](DESIGN-TOKENS.md) | 设计规范 v2：实测刻度表、`KsuTokens` 代码骨架、底栏行为规格、许可安全资产清单 |

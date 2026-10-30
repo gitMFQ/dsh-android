@@ -13,6 +13,18 @@
 | 0.4 | CI：`build.yml` 出 APK + 新增 `verify.yml` 跑 1 116 个单测 | 工作流 | 两个 workflow 绿 | 0.2 |
 | 0.5 | 首次真机冒烟（连本实例，聊天+审批+文件） | 记录 | 全链路通过 | 0.4 |
 
+## 阶段 0.5 · 工具链升级（3–5 天，**必须先做**）
+
+> miuix 0.9.2 要求 Kotlin 2.4.x + androidx compose 1.11.x + compileSdk 35 + AGP 8.6+。fork 现在是 Kotlin 1.9.24 / AGP 8.5.2 / compileSdk 34 / BOM 2024.09。**Kotlin 2.x 是躲不掉的**（1.9 读不了 miuix 的 metadata）。详见 [research/08-miuix-compat.md](research/08-miuix-compat.md) §7。
+
+| # | 任务 | 产出 | 验收 | 依赖 |
+|---|---|---|---|---|
+| 0.5.1 | Kotlin 1.9.24 → 2.4.x，`composeOptions` 换成 `org.jetbrains.kotlin.plugin.compose`，`kotlinOptions` → `compilerOptions` | 构建文件 | **1 116 个 JVM 测试全绿**（此时**还没引入 miuix**，可独立回滚） | 0.4 |
+| 0.5.2 | AGP 8.5.2 → 8.6+，compileSdk 34 → 35，Compose 升到 androidx 1.11.x | 构建文件 | `assembleDebug` 通过 + 测试全绿 | 0.5.1 |
+| 0.5.3 | 引入 miuix 0.9.2 最小集（`miuix-ui` / `miuix-preference` / `miuix-icons` / `miuix-squircle`，**不含 blur**） | 依赖声明 | 编译通过；三页能跑 | 0.5.2 |
+
+> 三个 **不要**：不引 `miuix-blur`（模块 minSdk 33，我们 26）；不引 `miuix-nav`（0.9.2 无此模块，我们也不需要）；不为 miuix 抬 minSdk。
+
 ## 阶段 1 · 结构（1 周）
 
 | # | 任务 | 产出 | 验收 | 依赖 |
@@ -26,12 +38,12 @@
 
 | # | 任务 | 产出 | 验收 | 依赖 |
 |---|---|---|---|---|
-| 2.1 | `FloatingBottomBar`（Miuix 官方 Apache 示例重写 + API<31 降级） | 组件 | 三档设备均正常 | 1.3 |
-| 2.2 | 4 目的地 pager（Chat/Trajectory/Files/Settings），宽屏 Rail | 导航 | 切页弹簧流畅，旋转后状态保持 | 2.1 |
+| 2.1 | 浮动底栏：`MiuixIcons` + 自绘玻璃层（`Modifier.blur` API31+/描边高光；API<31 纯色）**或** 直接用 `FloatingNavigationBar` | 组件 | 三档设备均正常 | 0.5.3 |
+| 2.2 | 4 目的地 pager（Chat/Trajectory/Files/Settings），宽屏切 `NavigationRail` | 导航 | 切页弹簧流畅，旋转后状态保持 | 2.1 |
 | 2.3 | TopBar 折叠 + 状态胶囊（连接/运行/待审批） | 组件 | 滚动折叠无跳变 | 2.1 |
 | 2.4 | 抽屉换装（搜索栏/分段列表/分组排序/归档） | 界面 | 分组排序可用，截图无回归 | 2.2 |
 | 2.5 | 设置页 + 关于页换装 | 界面 | 视觉对齐参考；项全部可达 | 1.3 |
-| 2.6 | Sheet/Dialog 统一（审批/提问/模型选择），危险操作红卡 | 组件 | 审批走 Sheet + 二次确认 | 2.5 |
+| 2.6 | Sheet/Dialog 统一：`OverlayBottomSheet` / `OverlayDialog`（**必须挂在 Miuix `Scaffold.popupHost` 下**）；危险操作红卡 + 二次确认 | 组件 | 审批走 Sheet + 二次确认 | 2.5 |
 
 ## 阶段 3 · 聊天精修（1 周）
 
@@ -74,7 +86,9 @@
 
 | 闸门 | 触发条件 | 处理 |
 |---|---|---|
+| **Kotlin 2.x 迁移卡住** | 0.5.1 测试红且 2 天内无法收敛 | 先只升 Kotlin 不加 miuix，逐测试修复；若仍不行 → 走"方案 B"：不引 miuix，纯自绘外观（工期 +1 周，但零工具链风险） |
 | 换皮回归失控 | 截图测试差异文件 > 20 个/次 | 缩小改动粒度，先补测试 |
 | ChatScreen 改不动 | 单文件改动 > 300 行仍无法通过编译/测试 | 拆文件（把 Scaffold 段抽成 `ChatScaffold.kt`） |
-| Miuix 版本冲突 | Gradle 解析冲突或 Compose 版本不兼容 | 降级为方案 B（自绘外观，不引依赖） |
+| Miuix 版本冲突 | Gradle 解析冲突或 Compose 版本不兼容 | **锁 0.9.2**，不要追 0.9.4（会逼出 AGP 9 + Gradle 9 + compileSdk 37 连锁升级） |
+| Sauce 依赖断供 | miuix 停更或 Maven 撤包 | 源码已 Apache-2.0，可 vendored（`/tmp/miuix`）自建 |
 | 上游停更/大改 | upstream 3 个月无提交或有破坏性改动 | 冻结 fork，自持；不再 cherry-pick |
