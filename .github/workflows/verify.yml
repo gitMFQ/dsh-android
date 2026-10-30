@@ -1,0 +1,62 @@
+name: Verify
+
+# Repository gates that do not need a device and are cheap enough to run on every
+# push. Kept separate from build.yml so a red test names the test, not an APK job.
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jvm-tests:
+    name: JVM tests (${{ matrix.task }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # build.sh wants `.toolchain/gradle-<v>/bin/gradle` and a JAVA_HOME at
+      # `.toolchain/jdk-17.0.20.1+1`; reproduce both exactly as build.yml does.
+      - name: Lay out .toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p .toolchain/android-home .toolchain/xdg-data
+          ln -s "$JAVA_HOME" .toolchain/jdk-17.0.20.1+1
+          curl -fsSL --retry 3 https://services.gradle.org/distributions/gradle-8.7-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d .toolchain
+          test -x .toolchain/gradle-8.7/bin/gradle
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+
+      # L1 gate: the whole 1116-test suite on Kotlin 2.4.21. This is the step that
+      # proves the compiler migration did not break anything, before any of the
+      # AGP / Compose / miuix upgrades land on top of it.
+      - name: Unit tests
+        run: bash build.sh :app:testDebugUnitTest
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            app/build/reports/tests/**
+            app/build/test-results/**
+          if-no-files-found: ignore

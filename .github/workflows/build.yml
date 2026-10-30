@@ -11,14 +11,14 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths-ignore:
       # Documentation alone cannot change the APK.
       - 'docs/**'
       - '**.md'
       - 'LICENSE'
   pull_request:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
