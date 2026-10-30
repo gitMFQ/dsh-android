@@ -1,6 +1,10 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // Kotlin 2.0 moved the Compose compiler out of AGP and into this plugin.
+    // Its version always equals the Kotlin version, so it is declared in the
+    // root build file and applied here without a version.
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -66,21 +70,14 @@ android {
         systemProperty("user.home", fakeHome.absolutePath)
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    // No `composeOptions { kotlinCompilerExtensionVersion = ... }` here: since
+    // Kotlin 2.0 the Compose compiler ships with the Kotlin plugin (see the
+    // `org.jetbrains.kotlin.plugin.compose` application above), and AGP rejects
+    // a hand-pinned extension version.
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-opt-in=kotlin.RequiresOptIn",
-            "-opt-in=kotlinx.coroutines.FlowPreview",
-        )
     }
 
     buildTypes {
@@ -102,6 +99,18 @@ android {
             "/META-INF/{AL2.0,LGPL2.1}",
             "/META-INF/DEPENDENCIES",
             "/META-INF/INDEX.LIST",
+        )
+    }
+}
+
+// Kotlin 2.x moved the compiler options off `android { kotlinOptions { } }` and
+// onto the Kotlin extension itself. Same opt-ins, same JVM target, new home.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        freeCompilerArgs.addAll(
+            "-opt-in=kotlin.RequiresOptIn",
+            "-opt-in=kotlinx.coroutines.FlowPreview",
         )
     }
 }
@@ -145,7 +154,9 @@ dependencies {
     // — which is the only place it can be tested at all.
     testImplementation("org.json:json:20240303")
     // The scroll harness: a real Compose layout and real touch input, on the JVM.
-    testImplementation("org.robolectric:robolectric:4.13")
+    // 4.17 is the release that understands Kotlin 2.4 class metadata; 4.13 predates
+    // the Kotlin 2.x toolchain entirely and fails at class-parsing time.
+    testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
