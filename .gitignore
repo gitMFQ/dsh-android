@@ -33,3 +33,6 @@ __pycache__/
 
 # Scratch file for `git commit -F`; never part of the repository.
 .commitmsg.tmp
+
+# Tooling scratch (not project content)
+.dsh/

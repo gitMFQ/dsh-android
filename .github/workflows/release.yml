@@ -60,10 +60,10 @@ jobs:
           mkdir -p .toolchain/android-home .toolchain/xdg-data
           ln -s "${JAVA_HOME:?setup-java should have set JAVA_HOME}" .toolchain/jdk-17.0.20.1+1
           curl -fsSL --retry 3 \
-            "https://services.gradle.org/distributions/gradle-8.7-bin.zip" \
+            "https://services.gradle.org/distributions/gradle-8.13-bin.zip" \
             -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d .toolchain
-          test -x .toolchain/gradle-8.7/bin/gradle
+          test -x .toolchain/gradle-8.13/bin/gradle
           test -n "${ANDROID_SDK_ROOT:-}" || { echo "ANDROID_SDK_ROOT is unset"; exit 1; }
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
           cat local.properties
