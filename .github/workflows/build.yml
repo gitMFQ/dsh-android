@@ -45,7 +45,7 @@ jobs:
         id: toolchain
         run: |
           echo "jdk=17" >> "$GITHUB_OUTPUT"
-          echo "gradle=8.7" >> "$GITHUB_OUTPUT"
+          echo "gradle=8.13" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -72,7 +72,7 @@ jobs:
             "https://services.gradle.org/distributions/gradle-${version}-bin.zip" \
             -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d .toolchain
-          # Already named gradle-<version>; build.sh looks for gradle-8.7.
+          # Already named gradle-<version>; build.sh looks for gradle-8.13.
           test -x ".toolchain/gradle-${version}/bin/gradle"
 
           test -n "${ANDROID_SDK_ROOT:-}" || { echo "ANDROID_SDK_ROOT is unset"; exit 1; }

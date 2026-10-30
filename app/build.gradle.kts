@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "uk.xa0.dsh"
-    compileSdk = 34
+    compileSdk = 36
 
     // A release key can be supplied entirely through the environment, which is how
     // CI signs without a keystore in the repository:
@@ -33,12 +33,12 @@ android {
 
     // This box ships build-tools 35.0.0/36.0.0 but not AGP's default 34.0.0,
     // and there is no writable SDK root to auto-download into.
-    buildToolsVersion = "35.0.0"
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "uk.xa0.dsh"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 15
         versionName = "0.6.6"
     }

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build the DSH Android app.
 #
-# The toolchain (JDK 17 + Gradle 8.7) and the Gradle/SDK caches all live under
+# The toolchain (JDK 17 + Gradle 8.13) and the Gradle/SDK caches all live under
 # .toolchain/ so nothing is written to $HOME and the build works inside a
 # workspace-write sandbox. /opt/android-sdk supplies the platform and build-tools.
 set -e
@@ -41,7 +41,7 @@ if ! flock -n 9; then
     flock 9
 fi
 
-exec "$ROOT/.toolchain/gradle-8.7/bin/gradle" \
+exec "$ROOT/.toolchain/gradle-8.13/bin/gradle" \
     -g "$GRADLE_USER_HOME" \
     --no-daemon \
     "$@"
