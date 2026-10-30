@@ -3,6 +3,7 @@
 > **一句话**：DSH 插件用一个**只读 Remote** 交出一份 JSON 面板描述，Android 端用**固定 14 种块**通用渲染；App 不加载任何代码，面板只能通过**声明的 op → 端点**读写，且**永远不能**接管审批/提问座位。
 > **证据约定**：`$P/` = `/usr/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/`；`F/` = fork 基线 `bqv/dsh-android@v0.6.6` 本机副本 `/tmp/dsh-android-prior`（与 `docs/research/06-bqv-ui.md` 同一份代码，行号为该副本真实行号）；`R/` = 本仓 `docs/research/`。**「设计值」= 本协议自定、宿主未强制的阈值**，实现时不得当成宿主事实引用。
 > 本文件把 `docs/PLUGIN-ARCHITECTURE.md:99-112`（面板 JSON 雏形）与 `:68-70`（审批必须写死）从「方向」落成「可实现的 schema」。
+> ⚠️ **行号会漂移**：本仓 `/root/dsh-android` 目前只有 docs，无 Android 源码；所有 `F/...` 的 Kotlin 行号指向 `/tmp/dsh-android-prior`（bqv v0.6.6 / `bd0848a`）。M0 改包名/搬模块后需**按符号名重新定位**，不要依赖行号。
 
 ## 0. 结论与非目标
 
@@ -126,6 +127,7 @@
 | 规则 | 内容 |
 |---|---|
 | 广告能力 | `panels/list` 的 args 带 `{"supports":[1],"client":"dsh-android/0.1"}`（新增端点，无历史包袱）；宿主按**最大公共版本**返回，返回版本 > 支持版本时 App 显示「需升级 App」而不解析 |
+| **不能依赖宿主版本** | 宿主**没有** `panels/*` 端点、**没有**客户端注册通道、**ready 帧也不带版本号**（`HostVersion.kt:59-67` 只给 `home`）。所以版本协商**只能**靠 `schemaVersion` 自述 + `panels/list` 的 args 广告 |
 | 文档自述 | 每份 `PanelDoc.schemaVersion` 必须 ≤ 请求里的最大值，否则整份拒收（`UnsupportedSchema` 占位页） |
 | 未知块 | 未知 `type` → `Unknown(type, rawJson)` → 占位卡「此版本不支持 `<type>`，App 升级后可用」，**绝不抛异常**（解析器用 `JsonElement` 兜底，见 §9） |
 | 未知字段 | 忽略（kotlinx.serialization `ignoreUnknownKeys = true`），不因新增可选字段而整页失败 |
@@ -146,8 +148,9 @@
         "request": { "sessionId": { "$item": "sessionId" }, "id": { "$item": "id" }, "limit": 20 } } },
     { "op": "delete",  "endpoint": "schedule/delete",  "args": {
         "sessionId": { "$item": "sessionId" }, "id": { "$item": "id" } } },
-    { "op": "setEnabled", "endpoint": "schedule/setEnabled", "args": {
-        "sessionId": { "$item": "sessionId" }, "id": { "$item": "id" }, "enabled": { "$input": "on" } } }
+    { "op": "update", "endpoint": "schedule/update", "args": {
+        "sessionId": { "$item": "sessionId" }, "id": { "$item": "id" },
+        "expected": { "$item": "record" }, "change": { "$input": "change" } } }
   ],
   "refreshers": [ { "on": "schedule/changed", "op": "tasks" } ],
   "blocks": [
@@ -165,7 +168,8 @@
           "labelMap": { "true": "运行中", "false": "已结束" },
           "toneMap":  { "true": "running", "false": "idle" } },
         { "type": "toggle", "id": "tg", "label": "启用", "valuePath": "active",
-          "op": "setEnabled", "optimistic": false },
+          "op": "setEnabled", "optimistic": false,
+          "disabledReason": "宿主暂未提供启停端点（schedule 仅有 update/delete/history）" },
         { "type": "actions", "id": "act", "items": [
             { "label": "运行记录", "op": "history" },
             { "label": "删除", "op": "delete", "danger": true,
@@ -262,3 +266,4 @@ data class BlockContext(
 | 冒领审批 | §6 四条 + 注册表层面禁止引用审批组件；代码评审硬门槛 |
 
 > 与既有文档的关系：本文细化了 `docs/PLUGIN-ARCHITECTURE.md:99-112`；不改动 `docs/DESIGN.md` 的视觉语言，只要求面板壳复用 `DshTheme` 语义色与 `KsuTokens` 形状（`docs/DESIGN-TOKENS.md:21`）。
+> 逐条主张的证据底账（27 条 path:line + 负向结论 + 自定值清单）见 [research/12-block-schema-evidence.md](research/12-block-schema-evidence.md)。
