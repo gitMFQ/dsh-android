@@ -21,6 +21,8 @@
 | ② 数据 | **既有 Remote**（无需新写） | App 用 `ns/method` 直接调用，结果喂给对应区块 |
 | ③ 能力发现 | **既有 `pluginInventory/list`** | 宿主装了哪些插件 → 决定 App 显示哪些面板 |
 
+> **分发要点**（决定插件能否被市场收录）：`dsh plugin add` 只是转发 pnpm，装到 `$DSH_HOME/profiles/<name>/node_modules` 后自动 `reconcile()` 并追加进 `dsh.profile.bundles`。市场索引是 **format:1**，收录硬条件是**有 `dsh.bundle.patch` 且非 private**（`packages/util/plugin-market-index/src/types.ts:94-102`）。所以我们的面板插件应**同时具备**：`dsh.bundle.patch`（可被市场收录）+ 宿主服务（提供 Remote）+ `engines.dsh`（声明兼容范围）。
+
 **核心约束**：App **只渲染数据，绝不执行后端下发的代码**。面板声明是 JSON，不是 JS。
 
 ## 2. 为什么选「区块声明」而不是「App 端插件」

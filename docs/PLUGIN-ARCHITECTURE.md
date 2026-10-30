@@ -7,7 +7,7 @@
 
 | 判断 | 结论 |
 |---|---|
-| **技术上可行吗** | **可行**，而且 DSH 自己的架构就是最好的证明（60+ 个 `dsh-client-*` 包，靠 Cordis 的 `ctx.uiRenderer` slot 组合出整个 Web GUI） |
+| **技术上可行吗** | **可行**，而且 DSH 自己的架构就是最好的证明（60+ 个 `dsh-client-*` 包，靠 Cordis 的 **`ctx.slots`** 插槽系统组合出整个 Web GUI；`ctx.uiRenderer` 只负责 `mount()`） |
 | **该不该现在做** | **不该**。它会让当前 7–9 周的交付变成 4–6 个月，且**与「fork 现有 App」路线直接冲突** |
 | **有没有低成本替代** | **有**：先做「**能力探测 + 动态面板**」（数据驱动，无需加载代码），把 80% 的价值拿到手 |
 | **额外发现** | 后端已有 **`pluginManager/*`（16 个 Remote）**：App **可以直接在手机上浏览/安装/启停后端插件**，再用 `pluginInventory/list` 确认装好了。这条链**今天就能做，不需要后端改动** |
@@ -22,7 +22,7 @@ DSH 的 Web 客户端本身就是「一切皆插件」的范本：
 | 插件包 | 每个 `dsh-client-ui-*` 是一个 npm 包，`package.json` 的 `dsh` 字段声明入口 | `packages/boot/plugin-manager/src/index.ts:101`（`INSPECT_FIELDS` 含 `dsh`） |
 | 前端代码分发 | Host 提供 `/plugins/<id>/client.js` 路由 | `packages/client/modules/src/index.ts:353,1147,1265` |
 | 资源 | `/plugins/<pkg>/assets/<path>` | `packages/client/modules/src/assets.ts:79-85` |
-| 组合 | Cordis profile + 有序 patch 文件 | `packages/boot/plugin-manager/src/index.ts:975` |
+| 组合 | Cordis profile + 有序 patch 文件；插件模块可导出函数/类/`{apply}` 三选一 | `packages/boot/plugin-manager/src/index.ts:975`；`vendor/cordis/src/registry.ts:120-233` |
 | 发现 | `pluginInventory/list` Remote 只读快照 | `dsh-host-plugin-inventory/README.zh.md` |
 
 所以「App 也做成插件化」在架构上是**有先例、有模式可抄**的。
