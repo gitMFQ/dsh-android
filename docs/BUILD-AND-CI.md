@@ -15,7 +15,21 @@
 | 找 aarch64 aapt2 | ❌ 全部失败 | 官方 SDK 无 aarch64；Termux 的 aapt2 是 **Android bionic**（`/system/bin/linker64`），glibc 下跑不了；Termux 依赖库也随之无效 |
 | Debian `aapt` | ✅ 装了，但那是 **aapt1**（`Android Asset Packaging Tool v0.2-debian`），AGP 只要 aapt2 |
 
-**结论修正**：本机**能验证 Gradle 配置/插件解析**，**不能**编译资源与打包，**也不能**跑那 1 116 个测试（它们依赖 `processDebugResources` 产出的 R 类）。**全部验证必须走 CI**。
+**结论修正**：本机**能验证 Gradle 配置/插件解析**，**不能**编译资源与打包，**也不能**跑那 1 116 个测试（它们依赖 `processDebugResources` 产出的 R 类）。**全部验证必须走 CI**
+
+### 0.0 后续进展：qemu 路线走到哪了（2026-10-30 晚）
+
+用户提示「缺什么工具链都可以尝试安装」后，又推进了两步，最终**仍未打通**：
+
+| 尝试 | 结果 |
+|---|---|
+| 装 `qemu-user` + `libc6:amd64` | ✅ `qemu-x86_64 -L / /opt/.../aapt2 version` → **`Android Asset Packaging Tool 2.20`** 能跑 |
+| 写 shell 包装脚本指向 qemu | ❌ AGP 报 `Custom AAPT2 location does not point to an AAPT2 executable` |
+| 编译 **aarch64 ELF** 包装器（C，execv 转 qemu） | ❌ 同样被拒 —— AGP 的校验不只看"是不是可执行文件" |
+| 注册 `binfmt_misc` 让内核直接识别 x86_64 | ❌ 容器无 `CAP_SYS_ADMIN`（`CapEff` 只有 chown/dac_override/fowner/…），`/proc/sys/fs/binfmt_misc` 不存在，`unshare` 也不行 |
+| Debian 自带 `/usr/bin/aapt2` | ⚠️ 能跑，但版本 **2.19/2.20** 读不了 API 36 的资源表（`RES_TABLE_TYPE_TYPE entry offsets overlap`） |
+
+**当前状态**：本地能编译 Kotlin、能跑 Gradle 配置，**不能**完整构建。**验证仍走 CI**（约 7 分钟一轮）。若以后换 x86_64 机器或拿到 aarch64 原生 aapt2（≥ 对应 AGP 版本），本地构建即可用。。
 
 ### 0.1 网络坑（重要，CI 不需要但本机会）
 
