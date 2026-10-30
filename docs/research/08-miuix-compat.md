@@ -1,6 +1,7 @@
 # 研究 08 · 把 miuix 接入我们的 fork：升级代价（实测）
 
-> 结论先行：**能用，但不是免费的**。miuix 0.9.4 把下限钉在 Compose Multiplatform 1.12 / Kotlin 2.4；我们的 fork 现在停在 Kotlin 1.9.24 / Compose BOM 2024.09.00 / AGP 8.5.2，**必须一次性大升级**。三个版本里 0.9.4 反而最省（0.9.0/0.9.2 的传递依赖更离谱）。
+> 结论先行：**能用，但不是免费的**。miuix 0.9.4 把下限钉在 Compose Multiplatform 1.12 / Kotlin 2.4；我们的 fork 现在停在 Kotlin 1.9.24 / Compose BOM 2024.09.00 / AGP 8.5.2，**必须一次性大升级**。
+> **⚠️ 决策更新（2026-10-30）**：用户已定为「全量升级到最新」，因此**走 0.9.4**（配合 AGP 9.5 / Gradle 9.8 / Kotlin 2.4.21 / compileSdk 37），最终矩阵见 [09-toolchain-latest.md](09-toolchain-latest.md)。**本文 §7 的 0.9.2 方案降级为「备选路线」**——只在全量升级三天内收敛不了时启用。
 
 ## 1. 三个版本的依赖矩阵（实测自 Maven Central `.module` 文件）
 
@@ -96,7 +97,7 @@ miuix-shader = { module = "top.yukonga.miuix.kmp:miuix-shader", version.ref = "m
 | miuix-preference / icons / squircle / blur | 未逐个下载，但 icons 有 156 个图标文件，预计 300–600 KB |
 | 合计增量（压缩后 APK） | **约 1.5–2.5 MB** |
 
-## 7. 判定：选 **miuix 0.9.2**，避开 AGP 9 大爆改
+## 7. 判定：**当前走 0.9.4（用户已选全量最新）**；0.9.2 是降级备选
 
 关键发现：**0.9.4 逼你上 AGP 9 + compileSdk 37，0.9.2 只要 AGP 8.6 + compileSdk 35** —— 而 AGP 8.6 正好兼容 fork 现有的 **Gradle 8.7 + build-tools 35.0.0**。0.9.2 路线**不换 Gradle、不换 build-tools**。
 
