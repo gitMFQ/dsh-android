@@ -257,7 +257,7 @@ jobs:
 
 | 项目 | 路线 | 连接方式 | 可复用什么 | 许可/状态 |
 |---|---|---|---|---|
-| **bqv/dsh-android** | 纯 Kotlin+Compose，**无 WebView、宿主零插件** | 直连 `POST /api/…` + `ws /api/remote.mux`；自写 `PersistentCookieJar`、TOFU、`RemoteMux.kt` | **最有价值**：`docs/research/protocol.md`（端点/信封/认证/头要求全景）、342 个 JVM 测试组织法、签名即环境变量的 CI | MPL-2.0；min26/target34；活跃 |
+| **bqv/dsh-android** | 纯 Kotlin+Compose，**无 WebView、宿主零插件** | 直连 `POST /api/…` + `ws /api/remote.mux`；自写 `PersistentCookieJar`、TOFU、`RemoteMux.kt` | **最有价值**：`docs/research/protocol.md`（端点/信封/认证/头要求全景）、1 116 个 JVM 测试组织法、签名即环境变量的 CI | MPL-2.0；min26/target34；活跃 |
 | Hakunm/dsh-android-app | 原生 Compose+Material3 | 需宿主插件 `dsh-workspace`：配对码（10 分钟一次性）+ 设备 token，Keystore 存储、WebUI 可吊销 | 配对/吊销产品流程、文件浏览与编辑器 | **AGPL-3.0** ⚠ 传染，代码不可并入 |
 | SparkWeiyang/DeepseekHarness-AndroidClient | 原生三页 | 局域网扫描 + 本地 adb | 局域网发现 UX | MIT；小 |
 | hongshuxifan321/dsh-mobile-app | WebView 壳 + 服务端插件 `dsh-plugin-mobile-remote`（`/mobile` + Basic Auth 代理） | 代理注入 Basic Auth，页面内 WebSocket 原生可用 | 壳的最小实现、PWA 兜底、Actions 分发 | MIT；103★ |

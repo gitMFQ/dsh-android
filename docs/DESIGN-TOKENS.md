@@ -179,9 +179,9 @@ fun AppTheme(mode: ColorMode, content: @Composable () -> Unit) {
 |---|---|---|
 | Kotlin | **2.4.x**（0.9.0 起就要 2.3+） | fork 的 1.9.24 **必升**；Kotlin 1.9 读不了它的 metadata |
 | Compose | 0.9.2 → CMP 1.11.1（androidx compose 1.11.x）；0.9.4 → CMP 1.12.0 | 我们的 BOM 2024.09 必须升 |
-| AGP | 0.9.2 → **8.6+**；0.9.4 → **9.1+** | **选 0.9.2**：只差一版，不用动 Gradle 9 |
-| compileSdk | 0.9.2 → **35**；0.9.4 → 37 | 34 → 35 比 34 → 37 温和得多 |
+| AGP | 0.9.2 → 8.6+；0.9.4 → **9.1+** | **选 0.9.4**（用户已定全量最新）：AGP 9.5 + Gradle 9.8 |
+| compileSdk | 0.9.2 → 35；0.9.4 → **37** | 直接到 37，配合 AGP 9 |
 | `miuix-blur` minSdk | **33** | 我们 26 → **不引 blur**，玻璃效果自写 + API<31 降级 |
 | 无 `androidx.compose.material3` 依赖 | 只依赖 `material3-window-size-class` | **可与现有 M3 同栈共存**，可渐进替换 |
 
-**结论：用 miuix 0.9.2，不追 0.9.4。** 0.9.4 会逼出 AGP 9 + Gradle 9 + compileSdk 37 + build-tools 37 的连锁升级；0.9.2 的组件面已经够用（除 `miuix-nav`，而我们不需要它）。完整代价见 `research/08-miuix-compat.md`，落地顺序见其中 §7 的 S1–S4。
+**结论：用 miuix 0.9.4 + 全量升级。** 目标组合 Gradle 9.8.2 / AGP 9.5.0 / Kotlin 2.4.21 / Compose BOM 2026.09.00 / compileSdk 37（见 `research/09-toolchain-latest.md`）。0.9.2 降为**备选路线**：若全量升级三天内收敛不了，退回 AGP 8.6 + compileSdk 35 + miuix 0.9.2（不换 Gradle/buildTools）。
