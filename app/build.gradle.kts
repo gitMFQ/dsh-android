@@ -138,6 +138,16 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // Miuix: the Apache-2.0 component library that supplies everything the
+    // KernelSU-style design needs but cannot legally take from the GPL-3.0
+    // reference repo (dialogs, sheets, switches, sliders, rails, refresh,
+    // icons, squircles). miuix-blur is deliberately absent: its module minSdk is
+    // 33 and this app supports 26, so the glass bar is drawn by hand instead.
+    implementation("top.yukonga.miuix.kmp:miuix-ui:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-preference:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-icons:0.9.4")
+    implementation("top.yukonga.miuix.kmp:miuix-squircle:0.9.4")
+
     // SVG previews. Android ships no SVG renderer, and a WebView is not an option in
     // this app, so the drawing comes from the one small library that does this and
     // nothing else. SVG is also text, which is why the panel offers both views.
