@@ -75,12 +75,15 @@ App 不必读这个字段（可以直接探测端点），但它让「哪些插�
 
 | # | 模块 | 工作量 |
 |---|---|---|
+| 0 | **宿主补端点**：`panels/list` + `panels/describe`（≈200 行，照 `dsh-schedule` 的 typert 模板） | 3 天 |
 | 1 | `PanelDescriptor` 数据模型 + 解析（容忍未知字段/未知区块） | 2 天 |
 | 2 | `BlockRenderer`：12 种区块的 Compose 实现 | 1.5 周 |
 | 3 | `PanelHost`：路由 + 白名单 + 错误隔离 | 3 天 |
 | 4 | 能力探测与面板发现 | 3 天 |
 | 5 | 测试：fixture JSON 快照测试 | 3 天 |
-| | **合计** | **约 4 周** |
+| | **合计** | **约 4.5 周** |
+
+> ⚠️ **样例面板必须用现成端点**：`schedule` 域只有 `catalog/delete/deleteInactive/history/list/update`，**没有** `setEnabled`、**没有** `create`；`update` 是带 `expected` 的整记录比较更新，表达不了启停。示例面板的「启用开关」要么由新插件补端点，要么渲染为**禁用态 + 原因**，绝不假成功（fork 的 `AutomationSheet.kt:79-86` 已得出同一结论）。
 
 ## 5. 分期（与主路线并行，不阻塞 1.0）
 
