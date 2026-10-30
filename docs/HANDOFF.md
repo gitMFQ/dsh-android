@@ -1,0 +1,862 @@
+# Handoff — layout, traps, open items
+
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| `app/src/main/java/uk/xa0/dsh/model/` | Pure folds over host records: `Transcript.kt` (the reducer), `TurnProcess.kt`, `ToolCallTree.kt`, `SessionFiles.kt`, `SessionStats.kt`, `Trajectory.kt`, `SessionSearch.kt` |
+| `app/src/main/java/uk/xa0/dsh/ui/` | Compose surfaces; `ui/components/` holds the row cards, `ui/composer/` the trigger derivation, `ui/markdown/` the parser and renderer |
+| `app/src/main/java/uk/xa0/dsh/net/` | `DshClient.kt` (RPC + auth), `RemoteMux.kt` (the `/api/remote.mux` stream mux) |
+| `app/src/main/java/uk/xa0/dsh/widget/` | The homescreen card: `WidgetPublisher.kt` is the only writer of `files/widget/snapshot.json`, `WidgetText.kt` is the copy rules, `WidgetRenderer.kt` the `RemoteViews`. Nothing is scheduled, so a reading stops being renewed when the app stops looking — see `docs/WIDGET.md` |
+| `app/src/main/java/uk/xa0/dsh/data/` | `ConfigStore.kt`, the Keystore-backed config |
+| `app/src/main/java/uk/xa0/dsh/DshViewModel.kt` | Every RPC call site, the mux wiring and the UI state |
+| `tools/` | What is actually this project's: `install.sh` (APK install), `dsh-api.mjs`, `gh-secrets.py`. The adb/emulator services and the device lease are **generic host infrastructure** and live outside this checkout — source in `~/bin/adb-wireless`, services in `~/etc/init.d` + `~/etc/conf.d` |
+| `build.sh` | The whole build; owns the build lock |
+| `docs/PARITY.md` | The ledger of what the web does vs what this app does. It is the file a future reader trusts most, so a row there must match code |
+| `docs/research/*.md` | Two kinds. A web reference (`protocol`, `design-system`, `chrome-ui`, `transcript-ui`, `panels-settings`, `mobile-remote`, `composer-menu-and-tools`, `notices-and-fold`, `journal-compaction`) whose wire contracts and reverse-engineered design are the durable value; and app notes (`trajectory`, `goal-chip`, `files-and-deliverables`, `sidebar-workspace-groups`) |
+| `README.md` | The reader-facing document; not part of `docs/` |
+
+`app/src/main/res` bundles no font; the theme uses the platform default and
+monospace.
+
+## Build and device loop
+
+```
+./build.sh :app:assembleDebug                     # lock is INSIDE build.sh now
+tools/install.sh 127.0.0.1:5555                   # lock is INSIDE the script
+tools/install.sh <phone serial>                   # install to the phone every time too
+adblease 127.0.0.1:5555 .probe/verify.sh   # lease the whole verification block
+```
+
+`adblease` holds one lease for the whole sequence. A per-command lock lets
+another agent's install land between two of your steps, and an install
+force-stops the app — a check of the lineage sheet once came back as a bare
+"Loading sessions…" screen exactly that way. The box hosts one emulator (4
+threads, load average ~14 with one emulator plus Gradle), so serialise rather
+than parallelise. Never drive or capture the user's phone; install to it, do
+not touch its screen.
+
+`XDG_DATA_HOME` is pointed into `.toolchain/` by `build.sh`: the Kotlin compile
+daemon writes its liveness marker under `$XDG_DATA_HOME`, and with the default
+`~/.local/share` (read-only in this sandbox) the handshake failed and every build
+fell back to in-process compilation — 4 minutes instead of ~30-50s.
+
+## Releases
+
+```
+git tag v0.2.0 && git push origin v0.2.0      # runs .github/workflows/release.yml
+```
+
+The workflow builds and signs `:app:assembleRelease`, then creates the GitHub
+Release. Its body is **`docs/releases/<tag>.md`**, written in the same commit as
+the `versionCode`/`versionName` bump, with a generated download/version/SHA-256
+block appended — so the prose is reviewable in the repository instead of only
+existing on a web page. Bump the version *before* building the APK you test, or
+the About sheet will name the previous one.
+
+There is no `gh` on this box and none is needed: the repository is public, so
+`curl -s https://api.github.com/repos/bqv/dsh-android/actions/runs?per_page=3`
+reports the run, and the release page is readable with any web fetch.
+
+## Device infrastructure
+
+Both the adb server and the emulator are **OpenRC user services**, so they
+outlive a shell, a background job or a restart:
+
+```
+rc-service --user adb      status|restart     # one adb server + the phone transport
+rc-service --user emulator status|restart     # one headless x86_64 emulator
+```
+
+Neither the services nor the binaries they run belong to this checkout. They are
+generic host infrastructure: source in **`~/bin/adb-wireless`**, service files in
+**`~/etc/init.d`** and **`~/etc/conf.d`** — and `~/.config/rc/init.d` /
+`~/.config/rc/conf.d` are symlinks into those, so editing a service there IS
+editing the live copy. There is no install step to forget.
+
+- Emulator serial: **`127.0.0.1:5555`** — the odd port beside console 5554, which
+  `adbtrack` attaches explicitly (from the `emulator-5554` transport) because
+  modern adb no longer scans for emulator ports. Use that serial, not
+  `emulator-5554`.
+- Phone: the LAN host is `192.168.1.100` and the port is random per Wireless
+  debugging session, so `adbdiscover` finds it over mDNS
+  (`_adb-tls-connect._tcp`); a TCP scan is available behind `ADB_SCAN=1`. Re-pair
+  with `adb pair <ip>:<pairing port> <code>` when discovery fails; pairing codes
+  expire fast.
+- `adb reverse tcp:8081 tcp:8081` (spec in `ADB_REVERSE`) is applied by
+  `adbtrack` whenever an emulator registers, so it survives restarts with no
+  manual step. **It registers but does not relay on this box's emulator**
+  (measured 2026-09-25, emulator-5554): `reverse --list` lists it and the guest
+  gets its listener, but the host side accepts the connection and reads zero
+  bytes while the guest gets no reply — reproduced with adb's own client, so it
+  is not our code, and restarting the adb server and adbd changed nothing. From
+  inside the emulator, reach the host at **`10.0.2.2:<port>`**, which does carry
+  data. Watch out when testing this by hand: `toybox nc`'s `-w` is only the
+  *connect* timeout, so without `-q 2` it exits at stdin EOF and prints nothing,
+  which looks exactly like a broken relay.
+- `adblease <serial> <command...>` is the device lease (it replaced
+  `tools/device`), installed in `~/bin`.
+
+## Traps
+
+0. **Never launch with `monkey`.** `adb shell monkey -p <pkg> -c android.intent.category.LAUNCHER 1`
+   does not only start the app: it injects a random input event, and a random
+   swipe-and-tap opens the notification shade and lands on the rotation tile. Measured
+   on the user's phone — `am start` left `accelerometer_rotation` at 0, `monkey` flipped
+   it to 1 every time — and it was blamed on this app for an evening, including a fruitless
+   hunt through permissions. Launch with `adb shell am start -n <pkg>/<activity>`, and
+   check the lock is where the user left it when you are done. The component is not
+   `<applicationId>/.MainActivity` on the debug build — the id carries a `.debug` suffix
+   and the class does not, so it is `uk.xa0.dsh.debug/uk.xa0.dsh.MainActivity`.
+1. **Probe the running host, never its shipped descriptors.** The wire parameter names
+   the gateway validates against are *not* always the ones in the `typert.host.js` files
+   installed beside it: reading those said `terminal/environment` takes `agent`, the app
+   was changed to send `agent`, and the host answered `missing "agentId"; unexpected
+   "agent"` — the whole Shell tab, every agent-scoped call, and the Files panel, broken
+   by a "fix" that a single request would have refuted. One `POST` to
+   `http://127.0.0.1:8081/api/<endpoint>` with the candidate arguments settles any of
+   these in a second (cookie recipe in `~/ref/NOTES.md`), and the error names the field.
+   Measured that way on 0.2.0-rc.2: `terminal/resize` takes `agentId`, `id`,
+   `attachmentId`, `cols` and `rows` — a body carrying `columns` is answered
+   `missing "cols"; unexpected "columns"` — so `net/TerminalClient.kt` is right where
+   the shipped descriptor's `sessionId` spelling is not. `agentId` is then resolved *as
+   a session id* (a bogus one answers `session/not-found` naming `sessionId`). And an
+   agent-scoped call made from a **subagent's own session** is refused with
+   `session/agent-busy` ("owned by subagent routing"), so these cannot be probed from a
+   child session at all — only from a top-level one. (`terminal/list` does work from a
+   child: it is the one call here that takes `sessionId`.)
+1. **The JVM harness cannot measure text.** Robolectric lays text out with stub
+   metrics — probed in `TextOverflowProbeTest`, 24,892 characters measure as a single
+   260px line, about 0.6px per glyph — so nothing wraps and `hasVisualOverflow` is false
+   however long the string is. Box layout, row positions, gesture effects and list shape
+   are all real there; typography is not. **A test whose subject is where text breaks
+   cannot be written in this repository** and has to be seen on a device. Two tests have
+   been deleted for being unable to see their own subject: one comparing composition cost
+   by wall clock (the first run pays the JIT warm-up) and one asserting a "Show more"
+   offer appears on a clipped paragraph.
+1. **And a line box's height is arbitrary, so an absolute height proves nothing either.**
+   The same stub metrics make a *single* line measure ~35dp whatever `lineHeight` says
+   (density 1.0 there, so px == dp). A threshold that looks like evidence — `height >
+   30dp`, say, for a long string — is therefore satisfied by one row of text and cannot
+   fail, which is how a wrapping test in `JobOutputScrollTest` came to pass against the
+   very implementation it existed to catch. **Assert a relationship between two measured
+   things, or a count — never an absolute height.** That works for geometry: compare one
+   box's bounds against another's, or derive a distance from something measured rather
+   than writing it down, as the job-output drag tests do with row height. It does *not*
+   rescue a text-break claim, because the first half of this trap means there is no
+   second line to compare against — for those, the honest move is to assert the part the
+   harness can still see and say in the test what it cannot. Where a claim cannot be made
+   at all, say that too, rather than leaving the test looking stronger than it is.
+1. **Compose's `clickable` has no movement test, so a drag inside a button is a click.**
+   Read from the 1.6.8 bytecode of `TapGestureDetectorKt.waitForUpOrCancellation` — the
+   function every tap waits in — which compares exactly three things: `changedToUp`
+   (the tap), `isConsumed` (cancelled) and `isOutOfBounds` (cancelled). There is no
+   touch-slop comparison anywhere in the tap path, so a finger dragged across a node and
+   released *inside* it fires `onClick`. It is not a harness artefact: the same code runs
+   on the phone. Cost: `PinchCellSizeTest`'s "a one-finger drag is left alone" failed
+   against the shipped `clickableNoRipple` overlay on the terminal grid, and the assertion
+   was right — a drag must not bring the soft keyboard up. Any surface that has to tell a
+   drag from a tap must do it itself; the terminal grid's own handler consumes a
+   one-finger gesture once it passes `viewConfiguration.touchSlop` (`ui/Modifiers.kt`,
+   `pinchCellSize`).
+1. **Locks live in the checkout, never `/tmp`.** Each DSH bash call gets a private
+   tmpfs, so a `/tmp` flock is not a mutex at all; two holders never meet. Every
+   lock is `$ROOT/.build.lock`, `.install.lock`, `.device-<serial>.lock`.
+2. **One adb client for everything.** `/usr/bin/adb`, `/opt/android-sdk` and the
+   emulator's bundled platform-tools are three versions; when they disagree each
+   client restarts the shared server on 5037 and drops live transports. The adb
+   service pins `ADB_BIN=/opt/android-sdk/platform-tools/adb` (nothing it runs
+   resolves a bare `adb`), the emulator service pins `ADB` for its own `stop`, and
+   `DSH_EMULATOR_ADB_DIR` is what the launcher puts in front of PATH.
+3. **Never point `ANDROID_USER_HOME` at a build toolchain home.** `adb.confd` used
+   to set it to `.toolchain/android-home`, which holds a debug keystore and **no
+   `adbkey` at all**: any adb server started from that environment had no key for
+   the phone, so Wireless debugging could not authenticate and every transport
+   landed as `offline` — advertised forever, never usable. The keys live in
+   `~/.android`, so that file now `unset`s the variable instead of setting it.
+4. **The keepalive must not drop the emulator.** `adbtrack` sweeps transports that
+   are not in `device` state, and an emulator mid-boot is exactly that. Emulator
+   transports are exempt (odd `55xx` ports and `emulator-*`; even ports are the
+   console). It blocks on `host:track-devices`, which sends the **entire device
+   list** on every change as a 4-hex-digit length followed by exactly that many
+   bytes — and sends nothing at all until the first change, so the devices already
+   registered have to be adopted once at startup.
+4. **Never capture blind.** Gate a screencap on the app actually being focused
+   (`dumpsys window | grep mCurrentFocus` contains `uk.xa0.dsh.debug`), and check
+   `mScreenState` first: with the display off, `screencap` silently returns a
+   stale all-black frame that looks like an app bug. Waking is not enough if the
+   display never came up — verify, or treat the frame as "no capture".
+5. **The gateway's argument names are exact.** It rejects both extra and missing
+   keys with `gateway/arguments-invalid`, so `agent` where the host declares
+   `agentId` kills the call loudly. An endpoint that does not exist is the one
+   case that fails quietly.
+6. **One `$events` registration.** The host fans a waterfall to every registered
+   event client, but the first `result` settles it for all of them; only a `next`
+   waits for the remaining clients (`api-gateway`'s `receiveRemoteEventResult`).
+   A second registration therefore makes the *hand-backs* — both attention
+   timeouts — unable to settle while another client holds the request, and it
+   makes two cards that can both answer one waterfall. The single registration is
+   owned by `AttentionCenter`, which relays `api-session/status` to the ViewModel.
+   Registering once is necessary but not sufficient for a hand-back: a web tab or a
+   second device keeps the request open. An answer, a skip or an approval is
+   decisive from this app alone, because all three are `result` outcomes.
+7. **`clientTimeZone` is only sent when it is `UTC` or an Area/Location name.** A
+   device pinned to a fixed offset made the host reject the whole prompt with
+   `session/invalid-time-zone`.
+8. **`session/page` is the only back-pagination route.** `session/follow` opens a
+   bounded window (120 messages) and answers `cursor`/`hasMore`; older history
+   comes from `session/page` with `beforeSeq` = the oldest seq held and
+   `throughSeq` = the window's opening cut. `DshViewModel.loadOlderHistory` is
+   wired to scroll-to-top.
+9. **A session attaches to a Workspace by `workspaceId`, not by `cwd`.** The host
+   takes one or the other and rejects both (`gateway/bad-request`); `cwd` alone
+   leaves the session Ungrouped. The drawer's New Session resolves a preferred
+   Workspace id first for exactly that reason.
+10. **Compaction markers are anchored on the checkpoint**, the replacement
+    `user/message` whose `source.plugin` is `compact`, and only enriched from
+    `compaction/summary`. `compaction/*` are log-only records, so the summary can
+    fall outside the follow window while the checkpoint is inside it. A surface
+    replacement is model-visible shadow, not a transcript row: clearing the
+    shadowed range erased conversation the user had already seen, so replacement
+    copies are skipped as rows instead.
+11. **The Files pane has two lists, and they answer different questions.** **Browse**
+    is the workspace tree: one directory level per call from `workspaceFiles/list`,
+    scoped by session id and confined by the host to the session's workspace root.
+    **This session** is what the transcript touched, derived by
+    `SessionFiles.derive` — every read, write, edit and `present` declaration, under
+    the tool's exact spelling. That second list is kept deliberately: it is what
+    records the session's own spelling of a file, which is the spelling the
+    preview's transcript cache is keyed by. Content is read on demand through
+    `workspaceFiles/read`, which is scoped by session id, not by directory. **A
+    `present` declaration is a touch** (`FileTouch.PRESENTED`,
+    `model/SessionFiles.kt`), and that is load-bearing: a card's tap arrives as
+    the panel's `initialPath` and the panel used to select it only on an exact path
+    match, so a declared path with no row made the card's tap open the *list*
+    instead of the file. It is not a rare shape: of the 1,551 paths declared by
+    `present` across this host's 420 journals, 1,143 had no row under the old
+    read/write/edit rule — 765 of them because `present` named the file relatively
+    where every `write`/`edit` named it absolutely, and 378 because the file was
+    produced by something that is not a mutation at all (a shell redirect, a
+    subagent, or it already existed). Paths keep their exact spelling, so one file
+    under two spellings is two rows *in that list*; on the tree the two spellings
+    resolve to one row and merge into one mark (`model/WorkspaceExplorer.kt`),
+    which is where the tree and the list are allowed to disagree — one is an
+    annotation on the filesystem, the other a record of what the session said.
+    And the panel no longer *needs* a row to open a focus: `initialPath` is kept
+    even when the derivation has none, and only a selection the list itself once
+    held (`listed`) is dropped when the list stops holding it. A focus opens the
+    panel on **This session**, the mode whose rows are addressed the way a card's
+    path is.
+12. **Content search latches off per deployment.** A host with no content index
+    ("session search is unavailable/disabled") fails every call the same way; the
+    ViewModel latches that and stops sending the RPC. It is also not reachable
+    today: the only `SessionsDrawer(...)` call site passes no search state, so the
+    drawer's query box filters title/cwd only (`ui/ChatScreen.kt`).
+13. **The To-dos dock is seeded from the `todos` projection**, because the
+    transcript's `todo/write` row can fall outside the follow snapshot window.
+14. **Some endpoints answer a bare value, not an object** — `commands/list`,
+    `fileReferences/list`, `sessionReferenceResolver/candidates` and
+    `directoryPicker/createDirectory` among them. `DshClient.rpcRaw` returns
+    `result.value` untouched; `rpc` casts to `JSONObject` and is the wrong door for
+    those.
+15. **`session/list`'s `running` is the host's *liveness* answer; `subagentTiming.active`
+    is not.** The host builds a row's `running` as
+    `ctx.agents.get(id)?.status === 'running'` for a session it has attached, and
+    `summarizeCold` hard-codes `running: false, agentAvailable: false` for every one it has
+    not (`dsh-api-session-controller/lib/index.js`, `summaryFor` / `summarizeCold`). So
+    `running` covers a child the app never saw start, and `agentAvailable` separates
+    attached-but-idle from cold. The `subagentTiming` projection that rides in the same row
+    means something else: it folds the child's *own journal*, and its `active` field is
+    present exactly while a `turn/start` has no matching `turn/end` — a fact about the log,
+    **not** about whether anything is running. A host restart mid-turn leaves `active` set
+    forever with no agent behind it, and that is not hypothetical: after the box crashed
+    under three concurrent Gradle builds and the host came back, the roster held two such
+    rows (`fd23b122-1474-4ea6-87a5-d065d522e3b5`, `dcd6240b-4eb5-4170-b6bd-bf971f3007cf`),
+    both `running: false, agentAvailable: false` with `active.through` frozen 64–65 minutes
+    earlier, while children that really were running in the same snapshot had `through`
+    under a minute old. **Reading `active` as liveness paints dead children as running** —
+    it was tried on this branch and reverted. The one thing that may hold a running claim a
+    pull denies is a live `api-session/status` frame newer than the pull's cut.
+16. **`subagentTiming.active` is worth reading for exactly one thing: diagnosing a crash.**
+    `active` present, `running: false`, `agentAvailable: false` and an old `through` is the
+    signature of a turn that was cut off by a restart. It is a durable fold, so it survives
+    the restart even though nothing is running.
+17. **Only `session.v4` records get the full projection fold.** 773 session directories hold
+    `session.v4.jsonl.zstd` and exactly those 773 roster rows carried `subagentTiming`; the
+    1,126 with a legacy `session.v3.jsonl.zstd` fold to `{title}` alone. Nothing in
+    `RunningBook` depends on it — `running` is present for every row — but a reader who
+    wants the timing projection must not expect it on an old record.
+18. **`subagentCatalog` carries no activity, and `subagents/list` does not exist.** The
+    projection is identity only (`id`, `createdAt`, `mode`, `label`), so any fold that reads
+    a running state out of it is inventing one — an `activity == ""` default once wiped the
+    row of every child on every catalog rebuild. `subagents/list` 404s on 0.2.0.
+
+19. **An mDNS answer is not all in the answer section.** Android answers a
+    `_adb-tls-connect._tcp` PTR query with the PTR under *answers* and the SRV,
+    TXT and A records under **additional**. A parser that reads only `ancount`
+    finds the instance, has no port for it, and drops it — which is why the old
+    `adb-discover.py` never once found the phone, and why the service answered
+    "not found" with a 20,001-port scan every 30 seconds, forever, from a Python
+    interpreter with 256 threads. Parse all three sections, and stop listening as
+    soon as an instance has both a port and an address: the phone replies in
+    single-digit milliseconds, so listening out the timeout is pure latency.
+20. **`host:connect` reports failure as `OKAY`.** A refused port comes back as
+    `OKAY "failed to connect to '…': Connection refused"` — the status code is
+    fine and the verdict is in the message. And `reverse:` is **not** a host
+    service: `host-serial:X:reverse:forward:…` is rejected with "unknown host
+    service". The reverse has to go out as two requests on one socket —
+    `host:transport:<serial>`, then `reverse:forward:<remote>;<local>`.
+21. **A spawned session does not reach the app without `api-session/added`.** The roster
+    is refreshed only by a whole-world `session/list` pull, and the host's membership
+    *pushes* (`api-session/added`, `api-session/removed`, both `mode: 'emit'` in
+    `dsh-api-remotes`' allowlist) were consumed by nothing, so a session that appeared
+    between two pulls had no row at all. Measured on the device: child `cd66afc5` was
+    created 59 s before a probe; the app's roster stayed at **1,891** rows while the host
+    listed **1,892**, and the parent's lineage sheet read `running=1` against the host's
+    `running=2` for that entire minute. On an idle parent — no follow events, so nothing
+    triggers a pull — the lag is unbounded. The `added` payload is the **whole**
+    `session/list` row (`summaryFor` builds both), so it is fed straight in
+    (`DshViewModel.applySessionAdded`) and a debounced pull is asked for as well, because
+    ordering, the archived filter and catalog labels remain a pull's job.
+22. **A `session/projections` read can be empty where `session/list` is not.** For
+    `session-a771fb9b-5ba8-4cb6-8339-e45de4cebbdd`, `session/projections {sessionId}`
+    answered `modelSelection.next = null, lastUsed = null, asOfSeq = null` in two
+    back-to-back reads (19:12:34 and 19:12:37) while `session/list` gave
+    `next = deepseek-official/deepseek-flash/off`, `lastUsed =
+    deepseek-official/deepseek-v4-flash-vision-exp/low` with `asOfSeq = 44`. Observed
+    behaviour; the record is `session.v4.jsonl.zstd` and carries seven `model/selection`
+    events, so the data is not missing from the log. **Inference, not established**: some
+    projections are registered runtime views rather than journal folds (the controller
+    declares several as `init: () => null` with `view: () => …`), so a cold read
+    legitimately answers null while the live summary has the value. Whatever the cause,
+    **cross-checking an app chip against `session/projections` is the wrong instrument** —
+    use the `session/list` row, or the `session/follow` snapshot, which is what the app
+    itself reads. One evening was lost to probes that used the other endpoint.
+
+23. **A subagent's `tokenUsage` is its own log's, and a *forked* one's is not.** The
+    `tokenUsage` fold (`dsh-token-meter`'s `usage-projection.ts`) handles
+    `assistant/message` and `assistant/attempt` and nothing else, and a child's
+    settlements are written to the child's own log — measured on `session-c9b44b3a`,
+    whose 5,710 usage samples were all on its own assistant messages and none in any
+    `tool/result`, and whose only `subagent/*` events were `subagent/catalog` (identity).
+    So summing a session with its spawned children is **not** a double count. A child
+    created by the `fork` provider is the exception: its log is seeded with a copy of the
+    parent's prefix (`dsh-session`'s `buildForkSeed`), and `tokenUsage` has **no reset at
+    that cut** — unlike `subagentCatalog` (which guards on `inheritedEventCount`) and
+    `subagentTiming` (which resets on the child's own descriptor, precisely because a fork
+    seed may carry an ancestor's). Measured twice over: folding fork subagent `630d0054`'s
+    own log gives 40,847,940 inherited tokens over 126 settled steps against 7,373,046 of
+    its own over 13, and the host's live `session/list` row for it reports
+    808,431 + 280,139 + 47,132,416 = **48,220,986** — the whole-log fold exactly.
+
+    **Which projections ride a `session/list` row.** Live on 0.2.0-rc.2, 2,514 rows:
+    1,411 carry the full block (`title`, `tokenUsage`, `sessionStats`, `subagent`,
+    `subagentTiming`, `subagentCatalog`, `modelSelection`, `sessionListMetadata`,
+    `contextPressure`, `contextBreakdown`, `turnOutline`, `permissions`, `plan`, `inbox`,
+    `todos`, `goal`, `userQuestions`, `agentPreset`, `imageLimits`) and 1,103 carry
+    `title` alone — the legacy `session.v3` records, so the block is all-or-nothing and
+    never partial. Among the 1,287 subagent rows, **618 carry `tokenUsage` and 669 do
+    not**; an aggregate over subagents therefore has to say what it is missing.
+
+    **No `session/list` field identifies a forked child, and two candidate detectors were
+    built, tested against all 618 live subagent rows, and rejected.** `SessionSummary`
+    carries no `isSeeded`, and the `subagent` identity projection publishes
+    `{mode, label, seq}` and drops the descriptor's `provider` (`identityValueSchema` is
+    `.strict()` on those keys). The two that looked sound and are not:
+    `subagent.seq > 0` (all three forks sit at `1047`/`3122`/`3214`, but **116 of the 615
+    unseeded children also sit above 0** — two at 5, 114 at 6 — because a `one-shot`
+    child's delegation setup, `sandbox/mode` through `turn/start`, lands before its
+    descriptor; the rule would discard 19% of subagents' usage), and
+    `sessionStats.llmMs > subagentTiming.settledMs` (whole-log model time against
+    post-descriptor turn time; it separates the three forks by 12x to 44x but also fires
+    for **4 of 615 unseeded children**, including any child still inside its first turn,
+    where `settledMs` is 0 — it would drop exactly the running children a live panel
+    shows). There is no cheap header read either — `session` exposes no `get`/`header`,
+    and `session/projections` answers empty where `session/list` does not (note 22).
+    So a family total sums what the host reported and says what the sum is rather than
+    deciding; see `model/FamilyUsage.kt`.
+
+24. **A mux stream id is whatever won a race, so `s2` names a different endpoint per run.**
+    `RemoteMux.openStream` hands out `"s" + nextId` in the order the collectors happen to be
+    scheduled, and the app opens four or five of them around start-up (`$events`,
+    `job/list`, `session/follow`, `workspace/follow`, `session/control`). Measured on the
+    handset on 2026-10-14: the cold start at 13:27 assigned `s1` = `job/list`,
+    `s2` = `session/follow`, `s3` = `$events`, while the process running beside it had
+    `s70` = `workspace/follow`, `s71` = `session/control`, `s72` = `session/follow`.
+    Read `open sN -> <endpoint>`, which is logged when the registration is first sent,
+    rather than inferring the endpoint from the id. **That trace is logcat only**
+    (`adb logcat -s DshMux:D`): it was once wired straight into `UiState` and drawn on the
+    loading screen verbatim — a reader starting the app was told `item s2 baseline (#1)` —
+    which is what `model/StartupCopy.kt` and `ui/StartupScreen.kt` replaced.
+
+## Host behaviour: model selection (probed on 0.2.0-rc.2)
+
+Measured, not inferred. These are host facts, so a change to the chip that contradicts
+them is a bug in the app. Everything here was established with `POST
+http://127.0.0.1:8081/api/<method>` (cookie recipe in `~/ref/NOTES.md`) against a
+throwaway session created for the purpose — **never against a live session**, because a
+local model selection can pull gigabytes of weights onto the user's GPU.
+
+- **Argument shapes disagree between methods on the same host.** `session/modelCatalog`
+  takes `{}`; `session/list` takes `{"_request":{}}`; `session/projections` and
+  `session/selectModel` both take `{"request":{…}}`. The error names the field, so probe.
+- **`session/projections` exists but is not in the shipped descriptors.** It is not in
+  `docs/research/protocol.md` either — but it answers `{"request":{"sessionId":…}}` with
+  the full `values` map, which is the cheapest way to read one session's folded
+  projections. The app does not call it; it relies on the projection stream instead.
+- **`modelSelection` is `{lastUsed, next}`, and the two are different facts.**
+  `next` is what the next turn will use and moves the instant `session/selectModel` is
+  accepted (`agents.selectForNextRequest`); `lastUsed` is what the last turn actually ran
+  and moves only when a turn runs. Observed disagreeing on a real session:
+  `lastUsed: deepseek-official/deepseek-v4-pro high`, `next: deepseek-official/deepseek-flash low`.
+  A blank session projects `{lastUsed: null, next: null}`.
+- **A refusal is hard, and mutates nothing.** An unlisted model, an unlisted provider, and
+  an effort the route does not advertise are all answered
+  `session/model-unavailable` ("Select an available model before sending a message." /
+  "…does not support reasoning effort \"medium\"") and leave both halves of the projection
+  untouched. There is **no** silent substitution of a different route. The only
+  "resolves differently" case found is the effort: omitting `reasoningEffort` is answered
+  with the route's `defaultEffort` filled in.
+- **`session/selectModel` moves the global default `session/modelCatalog.default` — and it
+  does so asynchronously.** Immediately after the call the catalog still reports the *old*
+  default; the new one appeared after ~0.4 s in one measurement and ~2 s in another. This
+  is the trap that matters: a chip built from `modelCatalog.default` has a lag baked into
+  it, so a re-read taken right after a selection advertises a model the session is not
+  going to run. It is also easy to "disprove" the global write by reading immediately —
+  two independent readers did exactly that and were wrong.
+- **The host pushes the change.** On the `session/control` stream it sends
+  `{"type":"projection","sessionId":…,"key":"modelSelection","value":{lastUsed,next},"seq":…}`
+  both when a selection is accepted **and again when `lastUsed` rolls forward after a
+  turn**. An app that reads `modelSelection` only from a follow snapshot therefore never
+  sees `lastUsed` move. Reached by opening `ws://127.0.0.1:8081/api/remote.mux` and sending
+  `{"type":"open","streamId":"s1","endpoint":"session/control","payload":{"args":{}}}`;
+  streams cannot be opened on the unary `POST /api/<method>` route at all
+  (`gateway/signature-invalid`: "stream Remote methods must be opened through the stream carrier").
+- **`session/selectModel` resumes the session**, and `session/prompt` on a session whose
+  selection moved but which has not run yet will run the new route and then report it as
+  `lastUsed` — which is what makes a pending switch a real, observable state rather than a
+  UI invention.
+
+## Host behaviour: the llama.cpp routers (probed on 0.2.0-rc.2, re-probed 2026-10-10)
+
+Measured, not inferred. This is what the app's fourth tab is built on. The tab is
+called **Router**, which is the user's word and the router's own: `/props` on both
+ports answers `{"role":"router", …}`. "Server" was a placeholder that mislabelled
+the surface as a single model process.
+
+### What the routers report — on the host, and only there
+
+Two OpenRC routers on the host's loopback: `llama` on `127.0.0.1:55555`
+(`--models-max 1`) and `llamb` on `127.0.0.1:55556` (`--models-max 2`). Measured
+with `curl` on 2026-10-10:
+
+| Endpoint | Answers | Carries |
+| --- | --- | --- |
+| `GET /health` | `{"status":"ok"}` | liveness |
+| `GET /v1/models` | every GGUF in the scanned dir | **`status.value` ∈ `loaded`/`loading`/`unloaded`**, and on a loaded entry the launch `args` — `--ctx-size` (`122880`) and the child's `--port` (`43723`) |
+| `GET /props` | `{"role":"router","max_instances":1,"models_autoload":true,…}` | router identity |
+| `GET /slots?model=<id>` | per-slot state | **`is_processing`, `n_prompt_tokens`, `n_prompt_tokens_processed`, `n_prompt_tokens_cache`**, `next_token[0].n_decoded` / `.n_remain` |
+| `GET /metrics?model=<id>` | Prometheus counters | `llamacpp:prompt_tokens_total`, `prompt_tokens_cached_total`, … |
+
+Without `?model=`, `/slots` and `/metrics` answer `400 model name is missing from
+the request` — these are per-model routes on a router.
+
+**Trap: never query `/slots?model=` for a model that is not `loaded`.** `/props`
+reports `models_autoload: true`. One such request did not answer within 8 s
+(`HTTP 000`) while the loaded model was mid-prefill; `ss -ltnp` and
+`pgrep -x llama-server` both showed no new process afterwards and the target still
+read `unloaded`, so nothing was loaded — but *why* it hung is inference, not
+measurement. Read `/v1/models` first and ask for slots only for the resident model.
+
+### What this client can reach directly: none of it
+
+Re-verified 2026-10-10 rather than inherited. On `127.0.0.1:8080` and
+`127.0.0.1:8081` — the two ports the phone can reach — `/health`, `/v1/models`,
+`/props`, `/slots` and `/metrics` all answer **404**; `:80` answers **302** (nginx's
+primer redirect). `nginx -T` still shows a single
+`location / { proxy_pass http://127.0.0.1:8080; }` per server block and nothing
+else. So none of it is obtainable *directly*, and none of it may be invented.
+
+### The route that works: run `curl` on the host through a terminal
+
+**Measured 2026-10-10.** `terminal/*` is a host-side one-shot executor, and it is
+already the machinery the Shell tab uses. Opening a terminal in a session, writing one
+command to it and reading the `terminal/follow` output stream returns the router's own
+JSON. No plugin, no ssh, no tunnel, no listener, no LAN exposure, **and nothing for the
+user to configure on the host** — the command travels over the Remote connection the
+app already has, which is already authenticated and already encrypted.
+
+The probe was run from a throwaway session created for it
+(`session-3fa279d4-ae08-4934-a021-4fc41feccc2f`, cwd `/home/user/tmp/routerprobe/scratch`):
+
+```
+# curl -s http://127.0.0.1:55555/props
+{"role":"router","max_instances":1,"models_autoload":true,"model_alias":"llama-server",
+ "model_path":"none","default_generation_settings":{"params":null,"n_ctx":0},
+ "ui_settings":{},"build_info":"b0-unknown","cors_proxy_enabled":false}
+
+# curl -s http://127.0.0.1:55555/v1/models | head -c 400
+{"data":[{"id":"Qwen3.5-35B-A3B-UD-IQ4_XS",...,"status":{"value":"unloaded","args":[...]}}...
+
+# the same protocol against llamb (:55556), which had one model actually resident
+props HTTP 200 role=router max_instances=2 autoload=true
+models HTTP 200 count=6 resident=[Qwen3-Embedding-0.6B-Q8_0:loaded]
+slots: is_processing=false n_prompt_tokens=36 processed=0 cache=0 n_ctx=4096 decoded=0
+```
+
+The third block is the important one: **the `/slots` leg is verified against a real
+resident model**, which is the one query the autoload trap forbids for a non-resident
+one. Nothing was loaded, started or stopped to get it — `llamb` already held the
+embedding model. It is *not* verified against a large model mid-prefill.
+
+**Latency**, measured with a websocket client against the live host:
+
+| Step | Cost |
+| --- | --- |
+| `terminal/create` (fresh, cold bash) | ~110 ms |
+| `terminal/follow` open → `snapshot` (attach) | 6–46 ms |
+| `/props` + `/v1/models`, one write | **24 ms** |
+| `+ /slots` (resident model) | **42 ms total** |
+
+So the attachment is opened once and reused, and a refresh is one write. `create` is
+the expensive step, which is why the terminal is never closed between reads.
+
+**Confinement is not an obstacle.** DSH's bwrap argv for `workspace-write` is
+`--ro-bind / /`, `--bind <workspace>`, `--dev /dev`, `--proc /proc`, `--tmpfs /tmp`,
+`--unshare-pid` — **there is no `--unshare-net`**, so a confined shell keeps the host's
+network namespace and reaches loopback: measured inside the default-preset shell,
+`props HTTP 200 in 0.000649s`. A `danger-full-access` session behaves the same.
+
+**Four things make the stream trustworthy**, and all four are in
+`model/RouterReadout.kt`:
+
+1. **Echo is turned off and the prompt is silenced** by a sync line
+   (`stty -echo; PROMPT_COMMAND=(); PS1=''`). The echo matters for framing — the
+   echoed line contains the same markers the command prints — and the prompt matters
+   for latency: this box's interactive bash runs liquidprompt, whose git/load/temp
+   segments cost **~200–700 ms per prompt**, and that cost lands between one read and
+   the next. With the prompt silenced, steady-state reads fell to 15–34 ms.
+2. **The sync sentinel is built with `printf '…%s…'` so the typed text cannot contain
+   the resolved marker.** That line runs while echo is still on, and echo is the only
+   source of literal duplicates.
+3. **Every marker must occur exactly once** (`parseReadoutChunk`). A doubled marker
+   means the terminal echoed the line or replayed a previous screen, and the honest
+   answer is then "this read could not be trusted" — never a number picked out of an
+   ambiguous stream.
+4. **`/slots` is asked for only when a parsed `/v1/models` reply names exactly one
+   resident model** (`residentModelForSlots`), bound by `-m 5` and an 8 s client wait.
+   When it is not asked, `RouterLoad.slotsUnread` carries the reason, so "not asked"
+   can never be drawn as "the router reported no slots".
+
+**How the readout stays invisible.** It owns one terminal per session under the
+reserved id `dsh-router-readout`, and `DshViewModel.startTerminal` filters that id out
+of `terminal/list` before the Shell tab adopts, reaps or lists anything — without that
+filter the Shell tab's `terminalToAdopt` (`firstOrNull { RUNNING }`) could take the
+readout's seat. The cost it does carry is one extra live bash per session, held for
+reuse and never closed. What it does not replace: it needs a **live agent**, so a
+session that is cold cannot host it, and the tab reports that as "the readout could not
+be made" rather than as an unreachable router.
+
+**Rejected on the way, and why** (recorded so they are not re-litigated):
+
+- **`adb reverse tcp:55555 tcp:55555`** was the user's first idea and it *would* work —
+  the host half is a one-line command and it exposes nothing to the LAN. It was
+  rejected because it needs a debugging-enabled device attached to the host's adb,
+  which makes it a developer affordance rather than an answer.
+- **An nginx location for the routers behind authentication.** Reachable — the phone
+  does reach the host's nginx over the LAN (measured from the handset: TCP+HTTP to
+  `192.168.1.110:80` answers, RTT 7–19 ms) — but it puts local inference on the
+  network, needs a host config edit and a reload, and needs a cookie or `auth_basic`
+  decision. Strictly worse than a route that needs no configuration at all.
+- **An SSH port-forward from the host to itself** is pointless; the terminal is
+  already on the host.
+
+### `llm/discoverModels` is the one host-performed probe — and it drops the answer
+
+`POST /api/llm/discoverModels` with
+`{"settingsNs":"llm-pi-ai","request":{"baseURL":"http://127.0.0.1:55555/v1","api":"openai-completions","apiKey":"…"}}`
+makes the host perform `GET <baseURL>/models`. Against a dead port it answers
+`{"ok":false,"error":{"code":"llm/model-discovery-rejected","message":"could not
+reach http://127.0.0.1:55599/v1/models"}}`; against the live router it answers the
+twelve model ids. **Add `"provider":"<id>"` and it stops being a probe**: the host
+checks its shipped pi-ai catalogue by provider id before it touches the network
+(`dsh-llm-pi-ai/lib/index.js:2286-2296`), so `{"provider":"groq","baseURL":
+"http://127.0.0.1:55599/v1"}` — a dead port — answers `ok:true` with Groq's cloud
+catalogue. The app leaves the provider unnamed for that reason.
+
+**The transport works and the report is lossy.** `readListing` in the same file maps
+each entry to `{id, name, contextWindow?, maxTokens?}` and drops every other field,
+`status` and its launch args included. So the host already performs exactly the GET
+that carries the load state and then declines to return it.
+
+### Why no existing method reports load or prefill
+
+Swept on 2026-10-10, all negative, plus the four namespaces re-swept on 2026-10-10
+when the terminal route was found:
+
+- **`llm/discoverModels` cannot be bent into a general GET.** `listingUrl` is a bare
+  `` `${base}/models` `` string concatenation and `readListing` accepts only a `data`
+  array or a `models` object, so no `baseURL` value reaches `/slots`, and a `/slots`
+  reply would be rejected as "not a model listing" anyway.
+- **No other client-callable method names a URL.** Of the 26 `typert.host.js`
+  descriptors installed, only `dsh-llm`'s has a URL-bearing parameter
+  (`settingsNs` + `request`). `web/fetch`, `webFetch/fetch`, `fetch/url`, `http/get`,
+  `httpProxy/get`, `web/fetchUrl` and `proxy/fetch` all answer `not found`.
+- **There is no one-shot exec, and no client-startable job.** The complete `job`
+  namespace is `job/list`, `job/follow`, `job/kill` — there is no start — and
+  `dsh-jobs-local` refuses to make one for anything but a live agent
+  (`"background job owner must be live"`), so a client cannot start one.
+  `commands/list` and `commands/execute` address a **human-command registry**
+  (`compact`, `export`, `feedback`, `goal`, `permission`, `plan` on this host), so a
+  command that curled the router would have to be registered by a plugin — the plugin
+  route wearing a different hat. `schedule/*` can schedule a prompt, not a command,
+  and reading state on a timer through it would be absurd overkill.
+- **`terminal/*` is the executor** — see the section above. Its full surface is
+  `list`, `create`, `follow`, `write`, `resize`, `rename`, `close`, `retain`,
+  `environment`, `shells`. `list`/`environment`/`shells` are read-only; `retain` is a
+  `{type:'retained'}` stream and is not needed. `terminal/create` takes
+  `{shellPath?, id, cols, rows}` and always runs the shell **interactive**
+  (`["-i"]` for bash/zsh, `terminal-controller` line 32), so the rc-file prompt cannot
+  be avoided at creation — only silenced from inside, which is what the sync line does.
+- **The Web-fetch plugins are not a door.** `dsh-web-fetch-http` is loaded but
+  registers into the `web` service, not a Remote namespace (it has no
+  `typert.host.js`), and it is built to *refuse* private addresses. `dsh-http-proxy`
+  merges loopback into every policy's `noProxy`.
+- **`localLlm/*` is the wrong router.** `dsh-local-llm-controller` 2.1.2 is
+  user-installed at `~/.dsh/profiles/web/node_modules/dsh-local-llm-controller/`.
+  Its **complete** Remote surface is `getState / start / stop / saveConfig /
+  listSlotFiles / addProviders` — probed one by one, with `listSlotStatus`,
+  `getSlots`, `getMetrics`, `getHealth`, `getProps` and `getRouterStatus` all
+  answering `not found`. `getState` reports that plugin's **own child process**; its
+  `config` still carries the Windows default `serverExe: "llama-server.exe"` and an
+  empty `llamaDir`, so on this box it reads `status:"stopped"`, `pid:null`. It cannot
+  adopt the OpenRC routers either: `startSlot` calls `probeHealth()`
+  (`curl -s -m 3 http://127.0.0.1:<port>/health`) and refuses when `"ok"` comes back
+  — `端口 … 已有服务在运行（/health 返回 ok）`.
+  **It can only spawn its own child, and it will not start beside one.**
+
+### Plugins are not a route
+
+The terminal readout above is the supported path. An earlier draft specified a
+`localRouter/status` host plugin as a cheaper alternative; the user has ruled that out
+("at most we'd proxy things through nginx, but we won't"), so the spec is gone. The
+client still tries that method first and latches its absence, because it costs one
+refused call per app run and it keeps a broken plugin distinguishable from an absent
+one.
+
+## Open items
+
+- **Why an accepted approval used to stay on screen: the host never cancels the client
+  that answered.** Read from the installed gateway, `@deepseek-ai/dsh-api-gateway`
+  0.2.0-rc.2, `lib/index.js`. `receiveRemoteEventResult` removes the answering client
+  from `pending.deliveries` and only then calls `settleRemoteEvent`; `finishRemoteEvent`
+  builds its cancel recipients from what is left of that same set. On a phone that is
+  the only event client, the set is empty and no `{type:"cancel"}` is ever pushed. The
+  cancel exists for the *other* clients a waterfall was fanned out to. The measured
+  session trace in `docs/research/protocol.md` (step 27: the POST; no cancel after it)
+  shows the same thing.
+- **What clears an accepted answer now, and why it is not a guess.** The gateway applies
+  a `result` outcome synchronously inside `dispatchRpc` before it answers `ok`, so the
+  accepted reply is the host's own word that the waterfall has settled —
+  `AnswerDelivery.Accepted` is that reply. `ApprovalGate` holds `Sent` for
+  `APPROVAL_SETTLE_GRACE_MS` (1.5 s) so an earlier `cancel` can take the card first, and
+  then ends the wait; `AttentionCenter.settleApproval` takes the card **and its
+  notification**. `ok` is not the same statement as "this answer was the one taken" — a
+  post for an already-settled event is answered `ok` too, because the no-op path returns
+  without throwing — but both readings mean the host is no longer holding the waterfall,
+  which is the fact the card needs.
+- **The card's changing line is a reserved, fixed-height strip, and its words live in
+  one place.** `Sent` lasts the settle grace and nothing else, so a status sentence
+  that wrapped to a second line arrived, moved the card's buttons and left again within
+  a second and a half, twice per approval. `ApprovalCard` now draws
+  `ApprovalStatusStrip` in *every* state, `Waiting` included, exactly one
+  `DshType.meta` line tall (`lineHeight.toPx().toDp()`, so it follows the reader's font
+  scale) with `maxLines = 1` and ellipsis. A state is carried by a fixed-size mark, a
+  tint and a short label, so the shape and the words — not the hue — are what tell the
+  four apart; the marks are a clock in flight, an outbound arrow taken, a warning
+  triangle not sent. The words are `model/ApprovalCopy.kt`, shared with the shade
+  entry, and `ApprovalCopyTest` fails if a label grows past the 24-character budget
+  (`Unsent` excepted on purpose: the strip ellipsises the host's own message and the
+  notification repeats it in full). **Unverified on a device:** the JVM harness levels
+  every string to one line, so neither the fit nor the absence of wrapping can be
+  tested here. `ApprovalCardTest` measures the strip and the whole card at one size
+  across all four states, which is the part that can be measured.
+- **The durable reconciliation is the host's re-announcement roster.** `openRemoteEvents`
+  re-delivers every waterfall still in `pendingRemoteEvents` to a newly opened `$events`
+  stream, before anything else on it, and names nothing it has settled. So a fresh
+  generation is also the host's pending list; a card it does not re-announce within
+  `RECONCILE_GRACE_MS` (3 s) has been settled. `RemoteMux.onEventsGeneration` reports
+  each generation and `model/ApprovalRoster.kt` pairs event ids with the generation that
+  named them. A route move rebuilds the mux, so `AttentionCenter.stop()` drops every card
+  and the re-announcement raises the pending ones again; a socket-only reconnect keeps
+  the cards and reconciles them; a process freeze ends in a reconnect either way. The
+  wire carries **no marker for the end of the re-announcement batch**, so this window is
+  a real assumption — a re-announcement slower than it clears a card, and the late frame
+  then raises that card again, which is why the window can be short.
+- **Nothing here authorises twice.** A re-announcement proves the host still holds the
+  waterfall, so any previous answer was not applied (an applied `result` settles the
+  event and it leaves `pendingRemoteEvents`), which is what makes the fresh card
+  legitimately tappable. `ApprovalGate` refuses every tap past `Waiting`/`Unsent`, and
+  `AttentionCenter` writes a card, settles one and reconciles one only from the gate
+  that still owns it and only under the roster's monitor — the claim, the state write,
+  the host's `cancel` and the reconciliation window are serialised, so a replaced wait
+  cannot clear or re-answer the live card and an expiring window cannot take a card the
+  host has just re-announced. A duplicate post to a settled event id is a swallowed
+  no-op at the host (`receiveRemoteEventResult` returns on `pending === undefined`), and
+  nothing in the app now posts one.
+- **Unverified.** No test here can produce the host's own `cancel`, its re-announcement
+  batch, or its accepted reply: `model/ApprovalGateTest.kt` talks to a stand-in host and
+  `model/ApprovalRosterTest.kt` has no wire at all. The gateway readings above are from
+  the installed bundle, not from a live answer — answering a waterfall is a real
+  authorisation, and none was made. The 1.5 s and 3 s windows are chosen, not measured
+  on a real link. A live check belongs on a throwaway session that approves nothing the
+  user is running.
+- **The question path is half optimistic.** `answerQuestions` still clears the card
+  and its notification on submit and never inspects the reply — the same defect this
+  change fixes for approvals, left in place because answers work and the fix needs its
+  own card states. `skipQuestions` no longer does: a skip is the one question outcome
+  the host can refuse outright, so its card stays up until the post is accepted, a
+  refusal is logged and drawn on the card (`PendingQuestionSet.notice`, with the wait
+  re-armed so Skip can be tried again), and only an accepted `result` takes the card
+  and its notification down. It still does not get the roster: a question the host
+  settled while the socket was down is not reconciled on a new generation, so its card
+  waits for a tap (which the host answers `ok` as a no-op) rather than going by itself.
+  A full `ApprovalGate`-shaped machine for answers is still the remaining work.
+- **The terminal readout is proven on the host and unproven on the phone.** The
+  protocol was measured against both live routers with a websocket client
+  (`~/tmp/routerprobe/readout.mjs`), the numbers are in the section above, and the app
+  half was written from them — but **no Android build had run at the time of writing**,
+  so nothing in `RouterReadoutTransport`, the Shell tab's reserved-id filter or the
+  tab's new `LOAD`/`PREFILL` rendering has executed. What is still unmeasured:
+  the end-to-end per-refresh cost *from the app* (the host-side numbers do not include
+  the phone's hop), and whether a second terminal per session is comfortable on a
+  session the user is also using the Shell tab in.
+- **`/slots` is proven only against a small resident model.** `llamb`'s
+  `Qwen3-Embedding-0.6B-Q8_0` was already resident and returned real slot state; no
+  large model was loaded to test the mid-prefill case, and none should be.
+- **The readout needs a live agent.** A cold session cannot host a terminal, so the
+  tab shows the readout as not made rather than as a router that said nothing. That is
+  deliberate, and it is the one state this feature cannot avoid.
+
+- **Scrolling is being rebuilt from evidence, not from an account of it.** The
+  latent recorder in `uk.xa0.dsh.diag.ScrollDiag` is attached to every scroll
+  surface (`docs/SCROLL-DIAG.md`); read it with `adb logcat -d -s DshScroll:I`.
+  The `fight` records — the app moving a list while a finger is down — are the
+  ones to look at first.
+
+- **Device verification is not re-checked by a docs pass.** Screen evidence lives
+  in `.probe/`; a surface with no capture there is unverified, and this note
+  makes no claim either way.
+- **Feature gaps live in `docs/PARITY.md`** under "Open work": markdown gaps, the
+  interrupted assistant tail tag, session drag-reorder and the bottom fade, workspace
+  rename/delete, the missing header seats, `settings/*`/skills, and the goal
+  activation label. Workspace *reordering* is no longer on that list: it is wired to
+  `workspace/insertBefore` by dragging a Workspace header, with the same pair attached
+  to the header as "Move up"/"Move down" custom accessibility actions for a screen
+  reader (which cannot drag). No visible reorder menu is drawn.
+  (Image and SVG previews and the walk up from a subagent to its parent are both
+  done — see the ledger.) The drawer's content search
+  is **not** on that list any more: it is wired (`SessionsDrawer` calls
+  `session/search` and keeps the availability flag), and this note listed it for
+  several days after that was true.
+- **The emulator service is the only supported way to run it**; a desktop restart
+  kills anything started by hand, so check `rc-service --user emulator status`
+  before assuming a device is up.
+
+## trap: Kotlin's root error is listed LAST
+
+Kotlin's frontend reports downstream cascades first and the actual cause last. A single
+`Unclosed comment` at the end of one file produced **134** "Unresolved reference" errors across
+five others (`DshViewModel` 54, `RouterTab` 56, `RouterReadout` 15, …), and reading the first
+ten lines showed only the cascades — three times in one night, with a `*/`-eating `/*` inside a
+KDoc each time (a glob like `llm/*` or `terminal/*` in prose).
+
+**Read the whole error list, and filter for what is *not* a cascade first:**
+
+    grep "^e: " BUILD.log | grep -viE "unresolved reference" | head
+
+`Unclosed comment`, `Expecting`, and `@Composable invocations can only happen…` are the shapes
+that name a real cause. Counting `/*` against `*/` in the file named by the last error settles
+it in seconds.
+
+## trap: a missing instrument reads exactly like a finding
+
+Twice in one session I concluded "the app never receives X" from a diag file that had no
+X-reporter in it. The instrumentation had been edited in and then lost — a later `git
+status` showed `DshViewModel.kt` modified, so the file *looked* instrumented, and no record
+appeared, which read as evidence of absence.
+
+Before drawing a conclusion from a file that records instrumentation, grep the **source**
+for the reporter. `grep -c 'note("catalog"' app/src/main/java/uk/xa0/dsh/DshViewModel.kt`
+costs nothing and would have caught both.
+
+Related, same file: edits to `DshViewModel.kt` have silently reverted more than once —
+always confirm the change is present (`grep`) before building, and again after.
+
+## trap: never let subagents run builds
+
+On 2026-10-08 three subagents were each given a worktree and told to build. Their worktrees each
+carry their own `.build.lock` (it lives in the checkout), so the lock serialised nothing: three
+Gradle daemons plus a ~2.7 GB Kotlin daemon each ran at once, load hit 27, and the machine
+crashed and lost the session.
+
+Two lessons, and the second is the trap:
+
+1. **Builds are top-level and serial.** A subagent edits and reasons; the orchestrating session
+   runs the build, one at a time, and feeds the compiler/test output back.
+2. **A lock inside a checkout is not a global lock.** `build.sh`'s `.build.lock` is per-worktree,
+   which reads as safe when you have one worktree and is worthless when you have three. If you
+   parallelise across worktrees, the serialisation has to live somewhere shared.
+
+Check `free -g` and `/proc/loadavg` before starting a build, and never start one while another
+is running. One Gradle build on this 4-thread box is roughly 4 GB.
+
+Extended the same night: **tests count as builds.** A subagent may write tests but must not run
+them, for the same reason — three agents running `:app:testDebugUnitTest` is three Gradle runs
+plus three Kotlin daemons. The orchestrating session builds and tests, batched, top-level, and
+feeds the output back. A subagent's job is code, reasoning and host probing.
+
+## trap: mass "unresolved reference" from stale incremental state, not from code
+
+`FilesPanel.kt` reported **27 unresolved references** to imported symbols — `DiagLazyList`,
+`DiagScrollColumn`, `diagDrag`, `diagOffset`, `previewFormatOf`, `clickableNoRipple`,
+`shortenPath` — at **import lines and use sites**, while every one of those symbols was
+declared exactly once in the tree and the package line and all 74 imports were byte-identical
+to a commit whose main sources had compiled minutes earlier. The tree was clean, `git diff`
+against the commit was empty, and there was exactly one import block.
+
+**It was not the code and not a merge.** `rm -rf app/build` and rebuild: `BUILD SUCCESSFUL`,
+0 errors. `org.gradle.caching=true` with a freshly created worktree is the mechanism —
+Kotlin incremental state crossed trees and the compiler described a state that did not exist.
+
+Two things this costs if unknown. First, it looks exactly like a broken commit, so it invites
+a fix to code that compiles. Second, the shape matches an unclosed block comment (see the trap
+above), so the first instinct is to hunt a stray `/*` that is not there.
+
+**Before believing a mass unresolved-reference failure:** confirm `git status` is empty and
+`git diff <commit>` is empty, confirm the symbols exist, then wipe `app/build` and rebuild
+before changing a line. And note this is the second trap here whose lesson is *the compiler is
+describing something that is not real*.
+
+## trap: `stopActivity` deletes schedules, and archiving is refused without it
+
+Archiving a session that has active schedule tasks is **refused** by the host:
+
+```
+cannot archive session 'x': the session is active (schedule)
+```
+
+That reads like a bug in the app's archive call, and the obvious one-word "fix" is to
+pass `stopActivity: true` on `workspace/session-stop`. **Do not, unless the confirmation
+names the schedules.** With that flag the Schedule plugin calls `stopSessionTasks`, which
+**deletes every active task for that session** — permanently, with no undo path.
+
+So the refusal is the *safe* behaviour: it is the host telling us a standing instruction
+depends on this session. A dialog offering "Archive and stop its schedules" is the right
+shape if that is ever wanted; a silent flag is not.
+
+Related, from the same read of `dsh-schedule`: `schedule/update` has **no `status`
+member** and refuses an inactive row with `schedule_ended`, so no edit path can revive an
+ended task — only a new one can. There is also **no `schedule/create` remote**: creation
+lives on the agent tool `schedule_create`, which binds the task to the agent's own
+session, which is why the web's "New" button starts a session instead of showing a form.

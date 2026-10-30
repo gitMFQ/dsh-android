@@ -1,0 +1,696 @@
+# Sidebar: why the `dsh-android` workspace group "disappears"
+
+Round 30–32, 2026-09-24. Read-only host probes + on-emulator diagnosis.
+
+## Symptom
+
+On a fresh app launch the sessions drawer shows the `dsh-android` group with its
+active session. After opening any other session the group is gone, and it stays
+gone until the app is force-stopped and relaunched. It happens in both Group
+modes and both Order modes. The drawer's other groups (root, tmp, ref, chance,
+user, Ungrouped) are unaffected.
+
+## Root cause: the drawer revealed the open row, and Compose's focus system put it back
+
+Two things scrolled the list to the open session, both of which push every
+section above that row — including the whole first workspace — off-screen:
+
+1. `SessionsDrawer` had
+   `LaunchedEffect(drawerOpen) { … listState.animateScrollToItem(target, scrollOffset = -headerPx) }`,
+   which pins the open row to the top on every open. Workspace order is
+   `dsh-android, tmp, ref, chance, user, root`, so as soon as the open session
+   lives outside `dsh-android` the first group is scrolled away.
+2. Even after removing that, the drawer still opened on the section owning the
+   open session — verified on the emulator. A bare
+   `remember { LazyListState() }` is not enough: Compose's focus system scrolls
+   the previously focused row (normally the open session, the last row the user
+   tapped) back into view when the sheet reopens.
+
+The web does neither: its sidebar keeps its scroll position, and its only reveal
+is a one-shot `scrollIntoView({block: 'nearest'})` on the current row, armed when
+a *search result* is opened and acknowledged straight after
+(`ui-workspace/src/client/rows/Rows.tsx:409-413`, `WorkspaceBrowser.tsx:851-856`).
+
+## Evidence
+
+Host (live RPC, read-only; the parent's own session was never probed):
+
+* `workspace/follow` baseline: 6 workspaces in registry order
+  `dsh-android, tmp, ref, chance, user, root`; `dsh-android.sessionIds` is
+  `[session-f04ac8d7… (archived), session-2615b629… (active)]`.
+* `session/list`: 197 items, `session-2615b629…` present (`blank=false`,
+  `cwd=/home/user/var/work/dsh-android`). Twelve concurrent calls all returned
+  the full list with 2615 — the host never drops it.
+
+App (diagnostic build, logs around the drawer's section build + screenshots):
+
+* `DshDrawer: sections n=6 ws=dsh-android,tmp,ref,chance,user,root`
+* `DshDrawer: group dsh-android ids=2 items=1 everyKnown=true emit=true`
+
+So the group **is** in the drawer's section list; the skip condition is not what
+hides it. Visual proof: opened on a session in `root`, the first visible section
+is `root`; after scrolling up, `dsh-android (1)` and "Native Android app mirroring
+DSH web UI" sit at the top (`.probe/up3.png`, `.probe/persist-scrollup.png`).
+
+## Refuted hypotheses
+
+* **The group-skip condition silently drops the group.** Not the cause: `byId`
+  resolves `dsh-android`'s active member, the group is emitted, and it renders
+  once scrolled to.
+* **`openSession` / `refreshSessionsSoon` replace `_ui.sessions` or
+  `_ui.workspaces` with a shorter list.** `openSession` touches neither field,
+  and no `workspace/follow` frame arrived during the reproduction (a 10-minute
+  watcher saw only its opening baseline). `session/list` always contained 2615.
+* **The archived set contains the active session.** The host archive set never
+  contains `session-2615b629…`.
+
+## Secondary finding: the session count 44 → 34 → 35
+
+The header count is `matched.size` — the roster minus subagents and, once the
+workspace baseline has landed, minus the archive set. On a cold start the
+baseline (and its `archivedSessionIds`) has not arrived yet, so the count briefly
+includes archived sessions, then drops as the frame lands and as sibling agents
+archive their own sessions. It is churn, not a cap: `session/list` returns all
+197 items every time.
+
+## Fix
+
+`SessionsDrawer.kt`:
+
+* Replaced the "reveal the open row" effect with an explicit anchor to item 0 on
+  open: the top is the one position that always shows every group. (The open row
+  is still tinted, so it is findable.)
+* The group-skip condition now also fires when a workspace owns a member the
+  *unfiltered* roster does not know about, so a lagging list can only degrade a
+  group to an empty header, never erase the whole Workspace. A workspace with no
+  members still shows (the "Add workspace…" case).
+
+`DshViewModel.kt`: one `Log.w` when a `session/list` response omits an id the
+workspace registry accounts for — the exact shape of the suspected (and refuted)
+failure, kept so a real occurrence is diagnosable instead of silent.
+
+## Per-session subagent disclosure (new requirement)
+
+* Global `showSubagents` state and the "Subagents" filter chip are gone;
+  top-level rows are always non-subagents (the web's `sessionVisible()`).
+* A row's activity dot goes `ongoing` when `rollup.running > 0`
+  (`indexSubagentRollups`, i.e. the web's `sessionStatuses()` precedence), and
+  the running-descendant count is drawn next to the dot — the deliberate
+  phone-only divergence, since there is no aria layer here.
+* Running has exactly one source: `RunningBook` (`model/LiveRunning.kt`). A
+  whole-world `session/list` pull supplies the durable answer per row — the host's own
+  `running` agent-status sample — and a live `api-session/status` frame may outrank the
+  pull it raced, then is retired by the next pull. `SessionItem.running` is that single
+  answer, so the drawer, the header chip and the lineage sheet cannot disagree. The
+  `subagentTiming.active` projection is deliberately *not* read: it means "this child's
+  journal has an open turn", which a crashed host leaves set forever (`docs/HANDOFF.md`
+  item 15). The composer's own `UiState.running` still keeps a 1500 ms quiet grace,
+  because it also carries a send's optimistic echo (`DshViewModel.publishRosterRunning`).
+* A caret appears only on a session with descendants and discloses that
+  session's children inline, indented, via `subagentChildrenOf`.
+* **Children obey the view settings** (user-reported defect): they are filtered
+  by `archivedSessionIds` (unless `showArchived`), and ordered by the Order
+  setting — Updated = newest-first, Manual = oldest-first (a child has no host
+  manual order; the section's own Manual order comes from the Workspace's
+  `sessionIds`).
+* The workspace header count counts top-level sessions, not disclosed children.
+* An addressed child's composer is not read-only by construction: a `one-shot`
+  record always shows the frame, a `continuable` child whose parent is
+  unavailable shows it only once the child stops running, and unknown
+  availability keeps the normal composer (`model/SubagentContinuation.kt:176-188`,
+  `ui/components/SubagentReadOnlyComposer.kt`).
+* A send from that composer goes out as `subagents/prompt` carrying the durable
+  parent address and the ordinary `queue`/`steer` mode as `delivery`; Stop uses
+  `subagents/interruptByParent`, and `subagents/list` supplies `parentAvailable`,
+  read once per open (`DshViewModel.kt:2284-2300,2636-2738,2940-2964`). A staged
+  file is refused client-side as `subagent/attachment-invalid`, before the call
+  (`DshViewModel.kt:2649-2662`).
+
+## Group/Order persistence (new requirement)
+
+* `DshConfig` gained `drawerGroupByWorkspace: Boolean = true` and
+  `drawerOrderByUpdated: Boolean = false`; `ConfigStore.load()`/`save()` persist
+  them under `drawer_group_by_workspace` / `drawer_order_by_updated`. The
+  Archived switch persists the same way (`drawerShowArchived` /
+  `drawer_show_archived`) — see below.
+* `UiState` exposes them; `setDrawerGroupByWorkspace()` / `setDrawerOrderByUpdated()`
+  follow the `updateTheme` load/copy/save pattern.
+* `SessionsDrawer` takes them as parameters plus callbacks (pure function of its
+  inputs); the `rememberSaveable` copies are gone.
+* One call-site block in `ChatScreen.kt` passes them (the drawer cannot be wired
+  without it).
+
+## Archived as a switch (new requirement)
+
+`Archived` was a text chip sitting beside the Group/Order `MiniChoice` chips, so a
+binary filter read as a third peer choice. It is now a Material3 `Switch` with its
+label in the filter row (count on the left, right-aligned label+switch). The whole
+label+switch is one `Modifier.toggleable(role = Role.Checkbox)`, and the `Switch`
+itself carries `clearAndSetSemantics {}` so a screen reader announces a single
+checkbox labelled "Archived". Group/Order chips are untouched.
+
+## Search, Refresh, Add workspace (new requirement)
+
+* The query box filters the roster locally by title and cwd
+  (`SessionsDrawer.kt:172-185`). The host content-search half exists in the
+  ViewModel — one debounced request (250 ms), generation-guarded so a superseded
+  query cannot land (`model/SessionSearch.kt`, `DshViewModel.kt:2042-2087`), and a
+  deployment without a content index latches the failure and stops sending
+  (`DshViewModel.kt:2100-2104`) — but it is not fed (see below).
+* The two sets merge the way the web's `deriveSearchResults` does: local name/path
+  matches first in roster order, then host hits the roster does not already show,
+  each carrying its workspace label; a hit the roster does not list is dropped
+  (`SessionsDrawer.kt:202-233`, `ui/search/SessionSearchRows.kt`). A query replaces
+  the grouped tree with the flat result list; a tap opens the session only, since
+  `session/search` carries no seq (`SessionsDrawer.kt:542-555,676-678`).
+* **Not fed at the call site.** `ChatScreen`'s `SessionsDrawer(...)` passes none of
+  `searchHits`/`searchLoading`/`searchError`/`searchHasMore`/`onSearch`, so
+  today only the local name/cwd filter is live (`ui/ChatScreen.kt:411-453`); the
+  host half of the merge is constructed but never reaches the drawer.
+* Refresh is "start following again", not a re-fetch: it re-dials the mux,
+  re-subscribes every stream and then pulls `session/list`, holding the icon's
+  spin for at least 700 ms so the tap has a visible consequence
+  (`DshViewModel.kt:2000-2025`, `REFRESH_MIN_SPIN_MS`).
+* "Add workspace…" is a real row under the Group/Order chips
+  (`SessionsDrawer.kt:498-524`); it closes the drawer and opens the directory
+  browser, whose pick calls `workspace/create` and then refreshes the list
+  (`ui/ChatScreen.kt:444-448`, `DshViewModel.kt:1844-1855`). That browser is the
+  `directoryPicker/list` + `directoryPicker/createDirectory` pair
+  (`DshViewModel.kt:1770-1833`).
+
+## Verification (emulator `127.0.0.1:5555`, final build)
+
+* Build: `./build.sh :app:assembleDebug` — green.
+* Group loss: drawer opened on a fresh process with `dsh-android (1)` first, in
+  WorkSpace/Manual and again in WorkSpace/Updated (`.probe/sw-open.png`,
+  `.probe/final-relaunch.png`). No auto-scroll to the open session.
+* Persistence: Group and Order changed, `am force-stop`, relaunch → the chips come
+  back on the chosen modes (`WorkSpace` + `Updated` in
+  `.probe/final-relaunch.png`; `List` persisted in an earlier run).
+* Subagent activity: the active session row shows a chase dot, `1` beside it, and
+  a caret; tapping the caret expands the children.
+* Acceptance fixture (`session-2615b629…`): 23 direct children, 22 archived, one
+  unarchived (`826e63fc-60aa-48fb-a466-3e38d8127844`, the only running one).
+  * Switch **off**, caret expanded → **exactly 1 child row**
+    (`.probe/sw-off-expand.png`, `.probe/acc-arch-off.png`).
+  * Switch **on**, Order **Updated** → 23 child rows, newest-first; Order
+    **Manual** → oldest-first (`.probe/sw-on-expand.png`,
+    `.probe/acc-arch-on.png`, `.probe/acc-manual.png`).
+* Switch: off then on moves the count 39 → 114 and reveals the archived rows
+  (`.probe/sw-open.png`, `.probe/sw-on.png`).
+
+## Empty Workspaces, and the registry's own arrival (2026-10-10)
+
+Request: "sidebar should show workspaces, even if empty". The registry row already
+existed — `workspace/follow`'s baseline is the whole registry, and this drawer has
+always emitted a section for a Workspace whose `sessionIds` is empty (the Fix above:
+"a workspace with no members still shows"). What was missing was any statement of
+*which* emptiness it was, so an empty directory and a lagging `session/list` both
+drew a header with a `0` in it and nothing else.
+
+The list is authoritative, not inferred. Read from the running host (0.2.0-rc.2,
+`/usr/lib64/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai`), not from a
+descriptor:
+
+* `dsh-api-workspace-controller/lib/index.js` — `baseline()` is
+  `items: ctx.workspaceRegistry.list().map(workspaceView)`; each `workspaceView`
+  copies `workspace.sessionIds` verbatim. Nothing filters an empty one out, and
+  there is no `workspace/list` to have to fall back on.
+* `dsh-workspace/lib/index.js` — `list()` is every registered entity in durable
+  registry order; the `sessionIds` getter (line 102) derives membership by matching
+  sessions' canonical `cwd`, and `createCanonical` (line 649) writes `sessionIds: []`.
+  So an empty Workspace is durable registry state whose membership is derived *to
+  nothing*, not a group inferred from the sessions that happen to exist.
+* Live, read-only: `adb -s <daily phone> logcat -d -s DshSidebar:*` shows
+  `workspace baseline: 12 workspaces, 889 archived`, matching
+  `~/.dsh/storages/workspace.json` (12 rows, 889 archived ids) exactly.
+
+The rule now lives in `model/WorkspaceGroups.kt` (pure, JVM-testable) rather than
+inline in the drawer's `remember`: `workspaceGroupState(memberIds, visibleIds,
+knownIds)` is `Members` | `Empty` | `Loading` | `Filtered`, with the same show/hide
+behaviour as the old boolean. The two zero-row states differ twice on screen — the
+words under the header ("No sessions" vs "Sessions not loaded") and the count, which
+is withheld entirely when membership is not yet known (the web's `WorkspaceListPhase`
+`pending`/`ready` idea, per `dsh-api-workspace-controller/lib/types/client/model.d.ts`,
+where only `replaceBaseline` sets `ready`). `UiState.workspacesPhase` mirrors that bit;
+while it is `Pending` the grouped list draws one non-tappable "Workspaces unknown"
+row and the catch-all keeps the neutral title "Sessions" instead of "Ungrouped",
+which is a membership claim the client cannot yet back.
+
+Order is untouched: the host's registry order, and an empty Workspace keeps its own
+place in it. Recency is the roster's rule only — a Workspace's `updatedAt` moves when
+a session is adopted, so sorting groups by it would move the sidebar under a reader.
+A header tap still folds the group (the web's `onToggle`); nothing new became
+tappable, and the group holding the open session now tints its folder
+(`folderActive` / `GroupNode.containsCurrent`). New: `WorkspaceGroupTest`.
+
+Unverified as of writing: nothing here was compiled or run (no build, no test, no
+device was touched for this change), and the live registry currently holds no empty
+Workspace — the `Empty` branch rests on the host sources above plus the drawer rule
+that already drew such a group.
+
+**Superseded in part (2026-10-11):** `Filtered` no longer hides its group. Every
+Workspace the registry reports is drawn, and a zero-row header says which absence it is.
+See the next section.
+
+## Every Workspace draws, always (2026-10-11)
+
+Request: "i still cant see all workspaces in the drawer (ref is empty, only has archived
+sessions, so is hidden?)". A Workspace whose only sessions are archived had no visible
+members with the Archived switch off, so the drawer emitted no section for it at all. The
+registry has always reported it — `workspace/follow`'s baseline is the whole registry — so
+`ref` was in the list the client held; the *filter*, not the registry, was erasing the
+directory. The Archived switch persists (`drawer_show_archived`), so the filter can be one
+the reader set days ago and no longer remembers, and the sidebar then showed no trace that
+the Workspace, or the filter, existed.
+
+That was a deliberate port of the web's `deriveGroups` ("the archived-only filter drops
+groups without visible members"), which is why `WorkspaceGroupState.Filtered` was defined as
+"never drawn". It is now the opposite: `showsHeader` is gone and every Workspace the
+registry reports gets a section.
+
+* `Filtered` draws, and says `Sessions hidden by filters`. `Empty` keeps `No sessions` and
+  `Loading` keeps `Sessions not loaded`, so the three zero-row groups remain three different
+  claims: the registry says the directory accounts for no session / every member is known
+  and this drawer's own view rules hide them all / the roster has not delivered the members.
+  Only `Loading` withholds its count — the count column must not make the claim the
+  placeholder beside it refuses to make.
+* The copy does not say "your filters". The Archived switch is the reader's, but the other
+  rule that can empty a group is the drawer's own — a subagent is reached through its
+  parent rather than as a top-level row. "hidden by filters" is true of both; "your" would
+  be a false claim in one of them. (Sessions a schedule delivers into used to be a third
+  such rule, when they were lifted into an "Automations" section; they are no longer lifted,
+  so the rule is gone — see `docs/PARITY.md`.)
+* A tap does what a header tap does everywhere else — fold/unfold — and no more. Revealing
+  the hidden members would mean clearing the global Archived filter, which on this client's
+  own live registry (12 workspaces, 889 archived ids) would pour hundreds of rows into the
+  list from a tap on a folder; and a glyph that sometimes folds and sometimes rewrites a
+  global filter is two controls wearing one icon. The Archived switch beside the query box is
+  the labelled control for that, and the note names the cause so it can be found. This is
+  also what `Empty` and `Loading` headers already do: their tap folds a group that has no
+  rows, and making `Filtered` the one zero-row header that was *not* tappable would make two
+  identical-looking rows behave differently for no reader-visible reason.
+* Order is untouched (the registry's own), and so is the header count: a `Filtered` group's
+  figure is 0, because that is how many rows it draws — the same figure `Empty` prints, told
+  apart by the sentence underneath.
+
+The divergence is recorded in `docs/PARITY.md`, both in the sidebar feature list and under
+"Deliberate divergences". `WorkspaceGroupTest` pins the three sentences apart from one
+another and pins that a `Filtered` group now draws with a 0 that is a fact.
+
+Read from the live registry rather than taken from the report: `~/.dsh/storages/workspace.json`
+— the durable store the running host projects — had `ref` with **20 members: 10 of them in
+`archivedSessionIds`, and the other 10 all beginning `dsh-automation-session-`**, which
+`partitionAutomations` lifted into the Automations section
+(`model/Automations.kt: AUTOMATION_SESSION_PREFIX`). So `ref` was `Filtered` on *both*
+non-reader causes at once: the archived half was hidden by the switch, the run half was
+listed somewhere else in the same list. The note therefore could not say "your filters"
+without being false about half of `ref` — and the reader's own account ("only has archived
+sessions") was itself half the story.
+
+**That has since changed twice.** The `@michengai/dsh-automation` plugin that minted those
+ids was dropped (incompatible with dsh 0.2.0-rc.2) in favour of the host's Schedule
+subsystem, which reuses ordinary sessions instead of starting one per run, so there is no
+longer an id shape to lift on; and the app's lift-out was removed with it, leaving the
+Archived switch as the only rule that can empty a group besides the subagent rule. The
+durable registry still names one `dsh-automation-session-` member in `ref` that the live
+`session/list` no longer serves (those transcripts were staged out of the store on
+2026-10-16), so `ref` now reads `Loading` on that single undelivered member — a host-side
+staging artefact, not a drawer rule.
+
+Unverified as of writing: nothing here was compiled or run — no build, no test and no device
+was touched for this change (the orchestrating session runs them). The rules stay in
+`model/WorkspaceGroups.kt` because the unit-test source set is not a friend of `main` and the
+drawer's `remember` block cannot be reached from the JVM harness.
+
+## A folded Workspace holding live work reads blue (2026-10-11)
+
+Request: "lets have collapsed workspaces with a running agent inside show as blue, so they cant
+be missed". A folded header said nothing at all about the work inside it, so a reader who had
+collapsed a directory could miss a running agent entirely.
+
+**What is tinted, and on what field.** `SessionItem.running` — `RunningBook`'s answer, and the
+one liveness source in the app (`model/LiveRunning.kt`). Deliberately not `containsCurrent`: that
+is the web's `folderActive`, "the session you have open lives here", a fact about the reader's
+own position rather than about work, and the folder glyph already carries it. The journal fold
+`subagentTiming.active` is not read anywhere in this: a killed turn leaves it set forever
+(`docs/HANDOFF.md` item 15), and a header stuck blue over a dead child would be worse than no
+signal.
+
+**Two facts, two elements, one blue.** The new rule is `WorkspaceRunState` in
+`model/WorkspaceGroups.kt` — `Running` | `Idle` | `Unknown` — decided by `workspaceRunState`
+over the group's accounted members ("no live work" below is both `Idle` and the `Unknown` state
+the next paragraph describes):
+
+| holds the open session | holds live work | folder glyph | title |
+| --- | --- | --- | --- |
+| no | no | tertiary | secondary |
+| yes | no | accent | secondary |
+| no | yes | tertiary | **accent (blue)** |
+| yes | yes | accent | **accent (blue)** |
+
+The blue token is shared but never carries two meanings on one element: the glyph means "you are
+here" and the title means "something here is running", so all four combinations draw differently
+and the ambiguity the request could have introduced did not happen by accident.
+
+**Unknown is neither blue nor silent.** *(Superseded 2026-10-16: the `Unknown` title tint and the
+`Running: unknown` line below were removed — see "A colour must be readable off the screen" at the
+end of this note. The rest of this section still describes the blue.)* If the registry names a member the roster has not
+delivered and nothing known is running, "nothing is running in here" is not a fact: the title
+keeps its normal colour (never the blue) *and* the header says `Running: unknown`
+(`stateDescription`), the app's standing convention for a reading it cannot confirm (the
+widget's `(known, value, asOf)` and its `Running: unknown`; the Router tab's "not asked"). The
+count column, which `WorkspaceGroupState.Loading` already refuses to fill, now prints `unknown`
+rather than nothing — a folded group has no "Sessions not loaded" note under it (that row only
+draws when the group is open), so the blank figure was the last silent case. A member that *is*
+running outranks an undelivered one: "something is running" stays true however much of the
+membership is still in flight, and only the negative needs the whole list.
+
+**Folded only, or always?** Always. An open group is capped at six rows until "Show N more"
+(`PAGE_SIZE`), and the drawer holds the roster's order still while it is open (`holdOrder`), so
+the running row can be below the fold of an expanded group too — and the header is sticky, so
+the tint is the one part of the group still on screen while its rows are scrolled through.
+
+**A running subagent counts.** Subagents are never top-level rows and, measured on the running
+host, never Workspace members either — a Workspace's nine members held no subagent while
+sixty-seven subagents had a parent inside it. So the derivation is `liveWorkIds`: a member whose
+own turn is running, or a member the rollup credits with a running descendant
+(`indexSubagentRollups(...).filterValues { it.running > 0 }.keys`). That is the same accent the
+row already draws as its descendant count and the header chip draws as `+N running`, so the
+header is that fact lifted one level — and still `SessionItem.running` underneath. Every group
+header is decided this way, not only Workspace ones: Ungrouped and the flat list fold the same
+way and hide rows the same way. (This paragraph used to add that an "Automations" section did
+too and that its runs were subtracted from a Workspace's member list; that section is gone —
+a session a schedule delivers into is a Workspace member like any other, marked rather than
+lifted.)
+
+**Tests.** `WorkspaceGroupTest` pins the decider and the three-way distinction (a running member
+beating an undelivered one, an empty Workspace being idle rather than unknown, a running
+descendant reaching its ancestor's group, and the two spoken strings apart).
+`SessionsDrawerRunningTest` (Robolectric) pins the wiring end to end through the header's
+`stateDescription`, the blue's accessible twin: folded running, running via a delegated
+subagent, expanded running, idle drawing no claim at all, and a Workspace whose member never
+arrived reading `Running: unknown` with `unknown` where its count would be.
+
+Unverified as of writing: nothing here was compiled or run — no build, no test and no device was
+touched for this change (the orchestrating session runs them). The blue itself is not measured
+anywhere: the JVM harness has no text metrics and no pixels, so the colour is asserted only
+through the state that decides it, and a wrong token in `ui/SessionsDrawer.kt` would pass every
+test here.
+
+## A colour must be readable off the screen (2026-10-16)
+
+Report: "why are some workspaces grey", and then the rule that settled it — *unless you can give me
+a clear flowchart for why grey and why not, it is not correct behaviour.* A user-facing colour has
+to be derivable from something the reader can see and reason about; if it cannot be drawn as a short
+flowchart a reader would accept, the rule changes rather than the documentation.
+
+**The rule as it stood, and why it fails.** For a Workspace header:
+
+```
+is any accounted member id in the live set?          yes -> title accent (blue)
+else is every accounted id in the roster?             no -> title labelCaption (dim grey)
+else                                                     -> title labelSecondary (ordinary)
+```
+
+The third box is a fact about a *fetch* — whether this client's `session/list` served every id the
+host's Workspace registry names — not about the Workspace or its work. The registry's own row can
+name members the roster will never return (measured here: stale `dsh-automation-session-*` ids left
+by a retired plugin, still members in the host's `workspace.json`, their transcripts gone, ~70 of
+them; `session/list` omits them and `DshViewModel` logged that omission every pull). Seven of the
+user's eight Workspaces had at least one such member, so seven titles were dimmed. What did the
+screen say about it? For a group with **rows drawn** — the actual case — nothing: the "Sessions not
+loaded" note only draws for a group with zero rows, and the `unknown` count only in the same case.
+The dimming *was* the only signal, and it was the thing being asked about. A colour whose legend is
+not anywhere on screen is not a signal; it is a riddle. It also read as "this Workspace is somehow
+lesser/empty", which is what the user took from it.
+
+**The flowchart now.** Two channels, each carrying one fact the reader can check:
+
+```
+title colour:  is a member I can see (or a running descendant of one) working?  yes -> accent (blue)
+                                                                                no  -> ordinary colour
+count column:  has the roster served every id the registry accounts?
+                   no  -> "2 of 13"   (rows drawn, of ids the registry names)
+                   yes -> "2"         (the plain figure, as before)
+```
+
+"Blue means something here is running" is the whole legend, and a reader can confirm it by looking
+at the rows. Incomplete membership is a count, in the column where a count is read, visible folded
+or open, and it is honest in both directions: the first number is the rows drawn (which is what the
+column has always meant), the second is what the registry accounts, so the gap is stated without
+claiming *why* — a filter and a missing transcript both show as a gap in the drawn rows.
+
+**Why an undelivered member is absent, not unknown.** The client cannot observe a session the
+roster never delivered, so it cannot report on its work. The old rule turned that into a third
+title colour, which made the reader's glance into a question. The alternative — treating it as
+absolutely not running — is not a claim about the missing session either; "nothing here is running"
+is true of the work that is *here*, and the sentence is scoped to the screen. So `WorkspaceRunState`
+has two members, `workspaceRunState` no longer takes `knownIds`, and there is no `Unknown` state
+left to reach: a state that exists only in code, with no on-screen referent, is the defect, not the
+mechanism.
+
+**The count form's guard.** "[shown] of [accounted]" is drawn only when some accounted member was
+not delivered *and* something is undrawn (`missing > 0 && shown < accounted`). Two corners need
+that: a Workspace whose every member is delivered but hidden by the reader's Archived switch must
+keep the plain figure (the group's `Filtered` placeholder already names the filter), and a Workspace
+whose members arrived only as live membership frames — drawn, but not yet confirmed by a pull —
+must not print "2 of 2". The two conditioning facts are derivations, and `WorkspaceGroupTest` pins
+all four combinations.
+
+**The log, which was the same defect.** `DshViewModel.warnOnMissingMembers` printed the full
+missing list — on the user's phone ~70 ids, ~4 KB — on every roster pull: 295 of those lines sat in
+one ring buffer. The signal deserves a line, not a flood, so it now goes through
+`MissingMembersLatch` (`model/MissingMembers.kt`), the same shape as `ScheduleSignalLatch`: the
+first omission of an episode is written, the same set on the next pull is quiet, a changed set
+reports, and a whole pull clears the latch. The line itself is `omittedMembersWarning`: the count,
+then three ids and ", ... and N more". No timer, one field. The underlying host state — a registry
+naming members whose transcripts are gone — is not this client's to edit; the client just stops
+shouting about it and renders the gap honestly in both channels.
+
+**Tests.** `WorkspaceGroupTest` pins the two-member run rule (an undelivered member makes a group
+idle, not unknown; a running member still wins) and the four count combinations.
+`MissingMembersTest` pins the exact warning string and the latch's episode rule.
+`SessionsDrawerRunningTest` pins the wiring: a Workspace with
+an undelivered member draws "0 of 1" and speaks no unknown state, and one with a running delivered
+member *and* an undelivered one both speaks "Running" and draws "1 of 2".
+
+Unverified as of writing: nothing here was compiled or run — no build, no test and no device was
+touched for this change (the orchestrating session runs them). The colours themselves are still not
+measurable in the JVM harness, so the tests assert the states and the strings the colours are read
+from; a wrong token in `ui/SessionsDrawer.kt` would pass every test here. The phone evidence is the
+log ring buffer read over `adb`, not a screenshot.
+
+## Workspace Tree: what the web actually has (2026-10-22)
+
+Request: "drawer should also support the webui's tree-mode". The first job was to
+find out what that mode *is*, because the app's premise is mirroring the web and a
+plausible tree that differs from it is worse than no tree.
+
+**It is a hierarchy of Workspaces, not of sessions.** It is not a `parentSessionId`
+lineage, not a tree of the `cwd` path, and not a subagent grouping. Read from the
+running host's bundles in
+`/usr/lib64/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/`:
+
+* `dsh-client-ui-workspace/lib/client.js` — the View options menu's Group by block
+  has three items in this order: `workspace` ("WorkSpace"), `workspace-tree`
+  ("Workspace Tree") and `flat` ("In one list"), each with its own icon. The
+  browser passes `nestWorkspaces: groupBy === "workspace-tree"` to its session
+  tree, so the two non-tree modes share one flat-group derivation.
+* `dsh-client-ui-workspace/lib/types/client/tree.d.ts` — `deriveGroups` returns
+  `GroupNode`s (one per Workspace, plus `UNGROUPED_KEY = ""`); the only hierarchy
+  helper is `owningParentFolder(path, parents)`, documented as "Find the nearest
+  registered ancestor, excluding the Workspace directory itself".
+* `dsh-client-ui-workspace/lib/client.js` — `owningParentFolder` normalises
+  separators for drive-qualified and UNC paths only, drops trailing slashes,
+  matches case-sensitively, and takes the longest strict prefix ending on `/`.
+  `SessionTree` builds `parents` from it, then `childrenByParent`, then renders
+  `renderGroup` recursively with `childRows` between the header and the group's
+  own session rows. The indent is a CSS variable:
+  `--dsh-workspace-indent: ${depth * 12}px`, consumed by `ProjectRow`'s
+  `padding-inline-start` *inside* the row's fill, and cascaded to session rows.
+* `dsh-client-ui-workspace/README.md`, "Workspace hierarchy" — the prose contract:
+  each Workspace keeps its own sessions and row actions; child Workspaces appear
+  before the parent's own sessions; ancestors start expanded unless a saved
+  collapsed state exists; a saved collapse also hides the current session;
+  ancestor folder icons stay highlighted when a descendant holds it; row fills and
+  hit targets span the same width at every level and only the contents indent;
+  search-result navigation expands every ancestor; grouping and expansion are
+  saved and switching modes preserves each Workspace's expansion preference;
+  hierarchy uses registered canonical paths only (no project scanning, no symlink
+  resolution), and nesting changes no working directory, log, or membership.
+  Deleting a parent leaves children registered and re-parented to the next
+  registered ancestor.
+* Archived filter: the web's three-way filter (`default`/`show`/`only`) can drop a
+  group with no visible members; the renderer re-parents a dropped group's
+  children to the nearest *shown* ancestor. This app has a two-way Archived switch
+  and deliberately draws every registered Workspace (see "Every Workspace draws,
+  always" above), so there is no dropped parent to re-parent.
+
+What each web node shows: the Workspace row is folder glyph (open/closed),
+chevron, title, and hover-only rename/delete plus new-session actions. There is
+**no member count** on a Workspace header in the web (`GroupNode.sessionCount`
+exists but the renderer never draws it). Session rows are the ordinary rows,
+indented by their Workspace's depth.
+
+### What the app built
+
+* `model/WorkspaceTree.kt` ports `owningParentFolder`, the parent map and the
+  forest, with the same path rules and the same registry order for roots and
+  siblings. `DrawerGrouping` is the web's three modes, persisted under the web's
+  own ids (`workspace`, `workspace-tree`, `flat`). The old boolean preference is
+  still read when the new key is absent, so an upgrade keeps the reader's choice.
+* The drawer's one `Section` derivation is reused; tree mode only adds parent
+  links. Children are drawn between the header and the group's own sessions,
+  with the same paging, collapse, count, placeholder, folder tint, run tint and
+  clock mark as before. The persisted `collapsedSections` set is shared by the
+  sibling and tree modes, which is the web's "switching modes preserves each
+  Workspace's expansion preference".
+* Indent: 12dp per registered level for both the header and its session rows,
+  applied inside the row's fill and tap target. The existing subagent indent
+  (14dp) is added on top of it.
+* The Group control is still one `MiniChoice` row. The web's three labels do not
+  all fit a 300dp drawer at 11sp, so the visible chips are `WorkSpace`, `Tree`,
+  `List`; "Tree" is the app's abbreviation of "Workspace Tree" (as "List" already
+  abbreviates "In one list") and its accessibility label is the full web name.
+  Order is the web's: WorkSpace, Tree, List.
+* Decisions copied from the web: what nests (registered directories, by path);
+  which ancestor wins (nearest); children before own sessions; 12-step indent;
+  ancestors expanded by default (this app's existing default is every section
+  expanded, which already satisfies it); ancestor folders tinted for a descendant;
+  folding hides children; Ungrouped is a root after the registered Workspaces.
+* Decisions that are the app's own, and why:
+  * the header count stays a Workspace's own drawable sessions (the app has always
+    drawn one; a subtree total would count one session under two headers);
+  * the blue title extends to an ancestor whose descendant is running, because a
+    folded ancestor would otherwise hide the only live-work signal — the same
+    argument that already puts a running subagent's work on its parent's folder;
+  * every Workspace draws even when the archive filter hides all its members, so
+    a nested directory is never erased by a persisted filter;
+  * a zero-own-row group's note ("No sessions" and the two other absences) is
+    drawn *before* its children, so it qualifies this header's own membership
+    rather than reading as a claim about the whole subtree.
+* Search is unchanged: a non-blank query replaces the browsing mode with one flat
+  merged result list in every mode, exactly as the web does.
+* Sessions in no Workspace stay in the Ungrouped bucket, drawn after the
+  registered roots, so the tree never silently drops them.
+
+Tests: `WorkspaceTreeTest` pins the path rules, the parent map, the forest shape
+and depth, and the stored mode ids. `SessionsDrawerTreeTest` pins the three chips,
+the nesting through layout bounds, the children-before-own-sessions order,
+folding, the Ungrouped bucket, an empty parent with a nested child, the archived
+filter leaving the tree standing, and the ancestor's blue reaching through a
+folded parent. The JVM harness cannot measure text or colour, so the 12dp step is
+asserted only as "the nested header is right of its parent" (a broken depth
+argument would fail; a wrong 10dp step would not), and the blue is asserted
+through the spoken `stateDescription`, not pixels.
+
+Unverified as of writing: nothing here was compiled or run — the orchestrating
+session runs the build and tests. No device was touched. The path rules were
+ported from the bundle's own function rather than exercised against a live
+registry (the live one may not contain a nested pair), and the a11y label of the
+middle chip was not read by TalkBack.
+
+## Observed but out of scope
+
+The blank-"New Session" landing on `--es uk.xa0.dsh.session <id>` is fixed:
+`MainActivity` hands the intent session to `openSessionExplicit`, which records
+it in `explicitSession` (`MainActivity.kt:82-89`,
+`DshViewModel.kt:2355-2358`), and `attemptConnect`'s auto-open reads and clears
+that field in the same uninterrupted main-thread block as its own `openSession`,
+so the explicit pick outranks "most recent session with content" whichever order
+the two arrive in (`DshViewModel.kt:539-546,1181-1191`). The record is
+per-process, so it closes the launch race only; a session the host itself
+reports as blank is a separate matter.
+
+The cold-start "Loading sessions…" wait is host latency: the live probe showed
+`session/list` answering anywhere from ~300 ms to ~20 s for the same 197 rows
+(12 concurrent calls all returned the full list, 5.7–9.6 s each). The client's
+`fetchSessions` is two linear passes plus one subagent-catalog index, so it is not
+the quadratic cost.
+
+## Workspace reordering (2026-10-24)
+
+The request was "i want to be able to reorder workspaces" — the Workspaces' own
+order, not `Order: Manual / Updated` (which governs sessions inside one Workspace).
+The host does have a method, so this is a port with a deliberate interaction change,
+not a client-side rearrangement.
+
+**Host.** `workspace/insertBefore` (`WorkspaceInsertBeforeRequest {workspaceId,
+beforeWorkspaceId?}` → `WorkspaceOrderValue {workspaceIds}`) is declared in
+`dsh-api-workspace-controller/lib/types/types.d.ts:95-103`, implemented in
+`.../lib/types/commands.js:74-86`, and its implementation is
+`dsh-workspace/lib/index.js:477-497` (abridged — the elided lines build the new
+array and no-op a move that changes nothing):
+
+```js
+insertBefore(id, beforeId) {
+    return this.enqueueOperation(async () => {
+        const state = this.requireState();
+        if (!state.workspaceIds.includes(id)) throw new WorkspaceOrderInvalidError(id);
+        if (beforeId !== void 0 && !state.workspaceIds.includes(beforeId)) throw new WorkspaceOrderInvalidError(beforeId);
+        ...
+        await this.setState({ ...state, workspaceIds });
+        return workspaceIds;
+    });
+}
+```
+
+The array is durable domain state (`workspaceIds` is "the authoritative display
+order", `dsh-workspace/lib/types/spec.d.ts:24-31`), so the order is the host's and
+two devices agree. Every commit publishes an `order` increment on `workspace/follow`
+(`dsh-api-workspace-controller/lib/index.js:99-113`), which the drawer already
+consumes.
+
+**Web.** `dsh-client-ui-workspace` does reorder Workspaces, but only by HTML5 drag:
+rows are `draggable` (`lib/client.js:1291-1297`), the group is a drop target
+(`:2484-2507`), and the commit is
+
+```js
+const commitWorkspaceDrag = (activeDrag, over) => {
+    ...
+    insertWorkspaceBefore(activeDrag.workspaceId, anchor).catch((reason) => {
+        console.warn("workspace reorder rejected:", reason);
+    });
+};
+```
+
+(`lib/client.js:2407-2423`). The web's client model installs the local order
+optimistically and reinstalls `committedOrder` on failure
+(`.../lib/types/client/model.js:89-103`), but its UI only logs the refusal: nothing
+on screen says why the row moved back. `docs/research/chrome-ui.md:1307` already
+records that HTML5 drag is a dead end on touch ("Touch generates no HTML5 drag
+events"), and `docs/PARITY.md` lists it as such.
+
+**What the app does.** Reordering is a drag on the Workspace **header** (the fold row),
+not a menu. A long press arms it; movement past touch slop lifts the header and
+reorders its siblings live, so the order on screen is the order a release sends. The
+`+` is excluded by its measured bounds, a tap still folds, and the drag consumes its
+own release so it never folds. Only header midpoints are crossing candidates, so a
+session row is never a drop target. The lift is a scale, an elevation shadow and a
+raised fill on the row itself; a 2dp accent line is drawn at the slot boundary over
+the list, so the indicator never shifts the layout. Dragging into an edge band
+auto-scrolls the list from the frame clock (no timer), and leaving the list or
+pressing Back drops the preview with no request. On release the drawer names the
+sibling after the drop slot as `beforeWorkspaceId` (null appends) and calls the
+existing `moveWorkspace`: applied optimistically, reconciled with the reply's
+complete `workspaceIds`, and — on refusal — reverted to the last host-confirmed
+order with a visible reason (`workspaceMoveRefusal`).
+
+Tree mode is sibling-scoped because nesting comes from paths: a drag reorders only
+the children of one registered parent, its parent link never changes, and an only
+child gets no gesture. The anchor is the sibling that follows the slot, so a drop
+never names a Workspace outside that sibling list.
+
+**Accessibility.** There is no visible menu, but a screen reader cannot drag. Each
+header's semantics carry `CustomAccessibilityAction`s labelled "Move up" and "Move
+down" (only the sides that exist, exactly as the removed menu disabled the ends).
+They call the same `moveWorkspace` path with the anchors `workspaceMoves` derives.
+The visual `⋮` menu and its `Workspace actions for {name}` label are gone.
+
+Verified only by source reading and JVM tests: no live `workspace/insertBefore` was
+issued (a call mutates the live registry), no host was asked to refuse one, and no
+device was touched. In particular **no real drag gesture was exercised** — the
+long-press timing, midpoint crossing, lift, insertion line, auto-scroll and cancel
+paths are reasoned about and partly covered by pure arithmetic tests, not measured on
+a handset.

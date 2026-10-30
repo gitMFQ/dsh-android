@@ -1,0 +1,597 @@
+# Parity roadmap — native client vs vanilla DSH web UI
+
+Target: **effectively identical** to the vanilla web UI, on a phone, with no WebView.
+
+Legend: `[x]` done · `[~]` partial · `[ ]` not started
+
+Code references are relative to `app/src/main/java/uk/xa0/dsh/` unless a fuller path
+is given. The web's own rules live in `docs/research/*.md`; this file is the ledger
+of where the app stands against them.
+
+## Foundation
+
+- [x] Cookie auth via `/auth/login`, silent re-auth, manual-cookie escape hatch (`net/DshClient.kt`)
+- [x] Encrypted credential storage (Android Keystore) (`data/ConfigStore.kt`)
+- [x] RPC envelope + typed-gateway arg names (`_request` vs `request`) (`net/DshClient.kt`)
+- [x] WebSocket mux (`/api/remote.mux`) with reconnect replay (`net/RemoteMux.kt`)
+- [x] Waterfall answering (`$events/result`): approvals with allow/reject and
+      `ask_user_question` with `{answers:[{id,selected,custom?}]}`. One `$events`
+      registration process-wide, owned by `AttentionCenter.kt`; it relays
+      `api-session/status` to the ViewModel.
+      An approval answer is **not** optimistic: a tap moves the card into an
+      answering state (`model/ApprovalAnswer.kt`, `ApprovalGate`), the post is
+      inspected, and a refusal or an unreachable host leaves the item tappable with
+      the reason on the card. The clear is the host's **accepted reply**, held for a
+      bounded settle grace so an earlier `cancel` can take it first
+      (`APPROVAL_SETTLE_GRACE_MS`, 1.5 s). The gateway applies a `result` before it
+      answers `ok` (`dsh-api-gateway/lib/index.js`: `dispatchRpc` and
+      `receiveRemoteEventResult`), and it does **not** send its `cancel` to the client
+      that answered (`finishRemoteEvent` builds its recipients from
+      `pending.deliveries` after the answerer has been removed from it), so a card
+      that waited for that cancel waited for ever. A second, durable reconciliation
+      uses the host's own re-announcement roster: a fresh `$events` generation is told
+      every waterfall the host still holds (`openRemoteEvents`), so a card it does not
+      name within a bounded window is settled (`model/ApprovalRoster.kt`,
+      `AttentionCenter.handleGeneration`). Card and notification always go together.
+      `RemoteMux.onWaterfall` hands the handler a send sink instead of taking one
+      returned outcome, because an answer can be posted more than once. The
+      **question** path is unchanged and still clears on submit without inspecting the
+      reply — the same defect, left in place deliberately (`docs/HANDOFF.md`)
+- [x] Dark + light themes from DSH tokens (`ui/theme/DshTheme.kt`)
+- [x] `workspace/follow` registry stream (`DshViewModel.ensureMuxWiring`)
+- [x] `commands/*`, `goal/*`, `permissionPresets/*`, `subagents/*`, `session/page`,
+      `session/search`, `directoryPicker/*`, `workspace/*`, `workspaceFiles/read`,
+      `workspaceFiles/readBytes`, `workspaceFiles/list`
+- [ ] `settings/*` and `skills/*`. A remote browser lands in the host's `memory`
+      settings scope, where every `settings/mutate` is a no-op, so the settings sheet
+      holds no host settings write; the one host write it carries is
+      `workspace/unarchiveSession`. There is no skills surface
+
+## Session sidebar
+
+- [x] Brand lockup (mark + "DSH")
+- [x] New Session (38dp, hairline border, r12)
+- [x] Workspace grouping from the host registry
+- [x] **Every registered Workspace always draws**, even when the current view hides all of
+      its sessions. **Divergence:** the web's `deriveGroups`
+      (`dsh-client-ui-workspace/lib/types/client/tree.d.ts`) drops a group with no visible
+      members, so an archived-only Workspace leaves the sidebar entirely — and the Archived
+      switch persists here, so a filter set days earlier could erase a directory with
+      nothing on screen to say the directory (or the filter) existed. A drawn group with no
+      rows says which absence it is: "No sessions" (the registry accounts none), "Sessions
+      hidden by filters" (every member is known and the drawer's own view rules hide them),
+      or "Sessions not loaded" (the roster has not delivered them), the last of which also
+      states the gap in its header figure as "[shown] of [accounted]"
+      (`model/WorkspaceGroups.kt`, `WorkspaceGroupTest`). The header tap
+      keeps its one meaning — fold/unfold — and never clears a filter
+      (`ui/SessionsDrawer.kt`); see the rationale in `docs/research/sidebar-workspace-groups.md`
+- [x] **A group header holding live work reads blue**, and says `Running` to a screen reader. The
+      blue is `WorkspaceRunState.Running` over the group's accounted members — `SessionItem.running`,
+      plus a member with a running descendant, because a subagent is never a Workspace member — and
+      never `containsCurrent`, which keeps the folder glyph's own "you are here" meaning on its own
+      element, so the four combinations of the two facts draw differently. **That is the only
+      meaning the title colour carries**: an accounted member the roster never delivered is treated
+      as absent for the running question rather than as an `Unknown` that dims the title, because a
+      colour whose legend is not on screen is not a signal. The incompleteness of the membership is
+      said in words instead — the header's count prints "[shown] of [accounted]" — while the
+      whole-registry pending row keeps its `unknown` figure (`model/WorkspaceGroups.kt`,
+      `ui/SessionsDrawer.kt`, `SessionsDrawerRunningTest`); see
+      `docs/research/sidebar-workspace-groups.md`
+- [x] **Ungrouped** bucket for sessions outside every workspace
+- [x] **Workspace Tree**, the web's third Group mode (its `groupBy.workspaceTree`,
+      labelled "Workspace Tree"). Each registered Workspace nests under its nearest
+      **registered ancestor directory** — the web's `owningParentFolder` over canonical
+      paths, case-sensitive, with no project scanning or symlink resolution — and keeps
+      its own sessions. Child Workspaces draw before the parent's own sessions; only the
+      contents indent (12dp per level, the web's `--dsh-workspace-indent`), so every
+      level's row keeps the same fill and tap width. A folded ancestor hides its nested
+      Workspaces, ancestors' folders stay tinted when a descendant holds the open
+      session (the web's `containsCurrentDescendant`), and an ancestor's title reads
+      blue when live work is anywhere in its subtree — the same argument that already
+      lets a running subagent light its parent, applied one level further up. A
+      Workspace's count stays its **own** drawable sessions, never a subtree total, so
+      one session cannot be counted under two headers. `Group` and the persisted
+      collapse set are shared with the sibling mode, so switching modes keeps each
+      Workspace's expansion. (`model/WorkspaceTree.kt`, `model/WorkspaceGroups.kt`,
+      `WorkspaceTreeTest`, `SessionsDrawerTreeTest`; source reading in
+      `docs/research/sidebar-workspace-groups.md`)
+- [x] Group by: `WorkSpace` / `Tree` / `List`; Order by: `Manual` / `Updated` (persisted
+      in `ConfigStore`, migrated from the old boolean key). The chips are the web's
+      three choices; the middle one is shortened from "Workspace Tree" to fit three
+      chips in the 300dp drawer, and carries the full name as its accessibility label —
+      the same abbreviation the app already makes for the web's "In one list". Search
+      replaces the browsing mode with one flat result list in every mode, as the web's
+      browser does.
+- [x] Per-section collapse + "Show N more sessions" / "Show less"
+- [x] Archived filter, and Restore on an archived row
+- [x] Subagents: never top-level rows (the web's `sessionVisible()` excludes them).
+      A parent with descendants carries a caret that discloses them indented under it,
+      respecting Archived/Order (`ui/SessionsDrawer.kt`)
+- [x] Local title/path search
+- [~] Content search via `session/search`. The whole path exists — `SessionSearch`
+      request/parse, a 250 ms debounced and generation-guarded
+      `DshViewModel.searchSessionContent`, the deployment latch for a host with no index,
+      the merged result list (local name/path matches first in roster order, then host hits,
+      one row per session, a duplicate donating its snippet) and the web's pending /
+      "temporarily unavailable" / cap copy (`ui/SessionsDrawer.kt`,
+      `ui/search/SessionSearchRows.kt`) — but the drawer is **not fed at the call site**:
+      `ChatScreen`'s only `SessionsDrawer(...)` call passes none of
+      `searchHits`/`searchLoading`/`searchError`/`searchHasMore`/`onSearch`
+      (`ui/ChatScreen.kt`), so the query box filters title/cwd only and the
+      "Searching session history…" line never appears. The ViewModel half has no caller
+- [x] Live session status dot. The `ongoing` chase plus the green done / amber warning
+      solids (`ui/components/StateDot.kt`). One authority answers "is this session
+      running": `RunningBook` (`model/LiveRunning.kt`), fed by each `session/list` pull —
+      the host's own `running` agent-status sample — and by live `api-session/status`
+      frames, which are stamped with the pull they raced and are retired by the next one.
+      `SessionItem.running` is that answer and nothing else; no surface ORs a frame into it
+      any more, and no projection is read as activity. `subagentTiming.active` is an open
+      turn in the child's journal, *not* liveness — see `docs/HANDOFF.md` item 15 for the
+      crash orphans that prove it
+- [x] Row actions — Rename / Fork session / Copy session id / Archive, and Restore on
+      the archived filter (`DshViewModel.renameSession`, `forkSession`, `archiveSession`,
+      `unarchiveSession`)
+- [x] Add workspace through the directory picker: breadcrumbs from Home, path editor,
+      hidden-file toggle, new-folder flow, truncation notice. Opening registers it via
+      `workspace/create` and adopts the created `workspaceId`
+      (`DshViewModel.addWorkspace`, `ui/components/WorkspaceBrowser.kt`)
+- [x] Workspace reordering — `workspace/insertBefore` by dragging a Workspace
+      header (long press, sibling-scoped in Tree mode), with the same pair attached
+      to the header as "Move up"/"Move down" custom accessibility actions for a
+      screen reader. No menu is drawn: the web's HTML5 drag does not exist on touch,
+      but a header drag fits the row that already folds on tap. A refused move snaps
+      back with a visible reason (`DshViewModel.moveWorkspace`,
+      `model/WorkspaceOrder.kt`, `model/WorkspaceDrag.kt`, `ui/WorkspaceDragGesture.kt`)
+- [ ] Bottom fade + drag-to-reorder (sessions; the Workspaces' header drag is above)
+- [ ] Row hover card — desktop-only in the web; on touch the row menu is the equivalent
+
+## Conversation header
+
+- [x] Session title + shortened cwd crumb
+- [x] Hidden entirely for a blank/hero session
+- [x] View tabs strip — order `Chat` (0), `Trajectory` (10) then `Shell`, plus a
+      conditional fourth, `Router`; default `chat`; active = 2dp business-blue
+      underline (not a pill); the strip renders only when the session has a
+      transcript (`ui/ChatScreen.kt: ChatView`, `ViewTabs`).
+      `Chat` and `Trajectory` are the host's registered `conversation.view` entries;
+      `Shell` is this client's own view over the host's `terminal` Remote namespace,
+      not a host-registered view. `Router` is this client's own view over the
+      `llama.cpp` router behind a local route and appears only while that route is
+      selected — see `docs/HANDOFF.md`, *Host behaviour: the llama.cpp routers*.
+      Reachability is real; load and prefill are **not obtainable** until the host
+      gains the `localRouter/status` method specified there, and the tab says so
+      rather than inventing a number
+- [~] Header seats: agent-preset label, terminal recovery (error-only), schedule catalog,
+      background jobs, open-in-app, right-panel expand, subagent lineage.
+      Present: background jobs, right panel (Files), subagent lineage (while descendants
+      run, absent otherwise by design), agent-preset chip (hero only, because the host
+      refuses to recompose an agent after a turn). Missing: terminal recovery, schedule
+      catalog, open-in-app.
+- [x] **Background jobs.** The roster is the `job/list` Remote stream, one per session,
+      opened for whichever session is on screen — `job/follow` per expanded row for its
+      live output, `job/kill` for the two-press stop. This replaced a `jobs` block in the
+      `session/control` baseline that 0.2.0-rc.2 no longer sends, which is why every
+      session showed an empty jobs seat with nothing erroring. The seat is the web's
+      trigger: visible while the session can see **any** job, dotted only while one runs
+      or one settled unseen. The sheet carries the web's sections (Running / collapsible
+      Finished N with Clear), its durations, its terminal panel with the gap and
+      interruption notices, and its two-press kill; the chat log opens the same panel,
+      from the background shell call that started the job and from its `tool-jobs`
+      completion notice. Probes and frame shapes: `docs/JOBS.md`.
+      The output panel scrolls vertically and **follows its tail**: new lines are
+      followed only while the reader is at the bottom, a deliberate drag releases the
+      follow, and returning to the bottom hands it back. That is `TailFollow`
+      (`ui/scroll/TailFollow.kt`) — the transcript's own rule, reused rather than
+      reimplemented — and it is the same component in the sheet and in the chat log, so
+      it behaves the same in both. Lines **wrap** instead of panning sideways: the web's
+      `--dsl-terminal-line-whitespace: pre-wrap`, and this app's own decision for the
+      transcript's shell block (`14732a4`), which rejected a horizontal scroller nested
+      inside a vertical one. Both surfaces are wired into the latent scroll diagnostics
+      (`sheet:jobs` and `job-output`) so a device can say which of them a drag reached.
+      Divergences, deliberate: the seat's count is terser than `count.live.*` because the
+      phone's header is one row shared with the lineage chip and Files; a running row's
+      duration is read at composition rather than ticked once a second — the sheet already
+      recomposes on every output and roster frame, and a 1 Hz state write would hold a
+      frame callback open for the sheet's whole life, which is the idle drain
+      `LocalAnimatedDots` exists to prevent — so a *silent* running job's figure stands
+      still between frames; and the web has no
+      live job output in the chat log at all, so that half is this client's addition —
+      attached to the two entries that already name a job id.
+- [x] There is **no per-session overflow menu** — rename/fork/archive live on the sidebar row
+- [x] **A way up from a subagent.** The header's title is the tap: a leading arrow appears
+      only when the roster can name the parent (`SubagentParent` is null otherwise, so a
+      top-level session's title is not secretly clickable), and because the parent is itself
+      a session, the same affordance walks the stack. The data was already there —
+      `session/list`'s `parentSessionId`, the field `ui/SubagentRollup.kt` walks upward — so
+      this was an affordance, not a read. A parent *missing* from the roster draws nothing:
+      the roster is where its title comes from, so the tap would open a session the client
+      cannot name, and the drawer lists archived sessions anyway.
+
+- [x] No running-turn dot in the header, deliberately: the web's header utilities have no
+      such contributor, and `JobsSeat` already draws the same `StateDot` a turn dot would
+
+## Transcript
+
+- [x] User message: right-aligned r22 bubble, 82% cap, timestamp
+- [x] Assistant message: plain full-width markdown, no bubble/avatar
+- [x] Reasoning row: collapsible "Think", live "Thinking…", summary line
+      — the expanded body is **markdown**, not plain text, which is what makes a link in
+      thinking clickable. Reasoning is where DeepSeek puts most of its URLs, and a plain
+      `Text` there made every one of them dead.
+- [x] Tool rows: 24dp disclosure + IN/OUT mono card
+- [x] Tool card variants, dispatched by call name in `ui/components/ChatRows.kt`:
+      bash/pwsh terminal card with `$ cwd cmd`, state dot, exit-code pill and **panned**
+      output (`ui/components/BashRow.kt`), diff from `meta.diffs` (`DiffRow.kt`), read
+      with its line window (`ReadRow.kt`), search (`SearchRow.kt`), web (`WebRow.kt`),
+      read-image (`ReadImageRow.kt`), ask-question transcript row (`AskQuestionRow.kt`),
+      plan summary (`PlanRow.kt`)
+- [x] PTC tool-call tree: `tool/ptc-dispatch-start` / `tool/ptc-dispatch` carry the parent
+      link, folded by `model/ToolCallTree.kt` and rendered recursively by
+      `ToolCallTreeRow` (folded behind a caret that carries the child count)
+- [x] Plan/todo card
+- [x] Plugin notices, error notices, retry rows (`model/Transcript.kt: llm/retry`)
+- [x] Turn process grouping — a turn folds only once the host ended it (`turn/end`) and it
+      produced a finalised answer; while a turn runs there is no group and no summary.
+      Counts-only summary ("N tool calls · N messages · N subagents", else "Thought for a
+      while") spliced after the opening user message (`model/TurnProcess.kt`,
+      `ui/components/ChatRows.kt: TurnProcessRow`). The fold honours the host's
+      `ui-chat.transcriptView`: `normal` folds nothing, as the web's `compactTranscript`
+      does, and anything else — including a host that never sends the field — folds
+      (`ui/ChatScreen.kt`, `buildDisplayRows(fold = …)`). **Divergence:** the web also
+      requires fully-loaded history before it will fold; the app does not gate on a
+      pending history page.
+- [x] Live token streaming with throttling + streaming dot; the live signal is the
+      turn-scoped "Deep diving..." shimmer, not a caret — the web has no streaming caret
+- [x] Message footers: `[clock] [copy] [branch]` with a 1s copy icon swap and no toast
+      (`ui/components/ChatRows.kt: MessageActions`). No retry/edit/quote exists in the web
+      UI either
+- [+] **Branch from an earlier conclusion.** The web hangs its branch button on the
+      `turn-tail` node and cuts from there (`ui-chat/lib/client.js: forkAt(data.seq)`), so
+      the app puts the same button on the same row — the reducer's closing answer
+      (`model/Transcript.kt: closingBranchSeqs`) — and passes that turn's `turn/end` seq,
+      which is what `session/fork`'s `atSeq` wants. The host answers with a **new session
+      id** and never writes to the source, so the tap is confirmed first
+      (`ui/ChatScreen.kt: BranchFromMessageDialog`), which the web has no equivalent of.
+      **Divergence:** the web's `branchUnavailable` also hides the button when the closing
+      answer is no longer the turn's last transcript row (a tool call after the answer);
+      the app offers it there too, because its cut is always the turn boundary, so the
+      child is a clean completed-turn prefix either way
+- [x] Per-message timestamp on assistant rows
+- [x] Back-to-bottom (34dp floating circle)
+- [x] Turn navigator rail at the transcript's right edge — one tick per human message that
+      opened a turn; press-to-grow scrubber with a prompt/answer preview, commit on release
+      (`ui/ChatScreen.kt: TurnRail`, `TurnPreviewCard`)
+- [+] **A URL inside emphasis is a link.** Emphasis was consumed as one opaque styled run,
+      so the autolinker never saw what was in it: the session that prompted this ends with
+      `**https://github.com/…/pull/1451**` — bold, and dead. Emphasis now parses its content
+      recursively, so a code span inside `**…**` stays code, a link inside it stays a link,
+      and `BOLD` over `ITALIC` becomes `BOLD_ITALIC` rather than one of them being dropped.
+- [x] Markdown: headings, paragraphs, bullet/numbered/nested lists, task lists, tables,
+      quotes, rules, fenced code + banner + copy, inline code, bold/italic/strike, links
+- [x] Links open in the browser for `[text](url)` **and** for a bare `https://`/`http://`/
+      `www.` URL (`model/Markdown.parseInline`'s autolink, GFM's rule: word boundary,
+      sentence punctuation left out, a bracket belonging to the path kept)
+      — and for a **code span that is nothing but a URL** (`` `https://x.dev/docs` ``). That
+      last one is the form this model actually uses: measured across a sample of real
+      sessions, zero CommonMark angle autolinks and 198 backticked URLs in one session
+      alone, every one of them rendered as unclickable code. A span with anything else in
+      it (`curl https://…`) stays code, and a trailing stop inside the backticks is kept,
+      since inside backticks the characters are deliberate.
+- [x] Syntax highlighting (heuristic tokenizer, DSH Shiki colours)
+- [ ] Markdown gaps: inline images, `@file` mentions as chips, citations, tags, mermaid/math
+- [ ] Interrupted assistant tail tag. A `turn/end` reason already draws the
+      `turn-max-tokens` / `turn-error` notices, and a stopped tool row keeps its amber dot,
+      but a frozen partial assistant block carries no "interrupted" tag
+
+## Composer
+
+- [x] 22dp capsule, draft surface, placeholder, send → stop
+- [x] Model chip + picker sheet (grouped by provider), with the reasoning-effort chips on
+      the selected route (`ui/Sheets.kt`)
+- [x] The chip states the truth rather than a guess: it names the session's
+      `modelSelection.next` (what the next turn will run), marks a switch no turn has run
+      yet (`next` differing from `lastUsed`) and a pick still out with the host, names a
+      route the catalog has dropped from the host's own `provider/model` and marks it
+      unavailable, and applies a pick made on the new-session screen to the session that
+      screen creates (`model/ModelSelection.kt`, `ui/ModelTriggerState.kt`)
+- [x] `/` command picker and the `+` add menu, both from one `commands/list` roster:
+      client-owned File/Model/Permission rows, an input-taking command claimed into the
+      draft, a bare one run through `commands/execute` (`ui/components/CommandMenu.kt`,
+      `ui/components/Composer.kt`)
+- [x] `@` reference picker: Files & folders and Sessions, a directory row drills in, and a
+      pick inserts the mention as a chip. Both RPCs run concurrently and publish per source,
+      guarded by a query generation; the session resolver uses a patient client.
+      `fileReferences/list {agentId, query}` → `[{path, kind:"file"|"directory"}]`;
+      `sessionReferenceResolver/candidates {agentId, query}` →
+      `[{sessionId, label, cwd?, sameWorkspace, createdAt, mention}]`. The session
+      candidate's `mention` field is the whole literal `@[label](dsh-session:<b64>)` and is
+      inserted verbatim; a file mention is `@path`, quoted only when the path contains a space
+- [x] Caret-accurate `/` and `@` triggers — the token under the caret decides, so a tap back
+      into an earlier line opens or retargets the menu instead of reading the draft's end
+      (`ui/composer/ComposerTriggers.kt: detectTriggerToken`)
+- [x] Approval card above the card, in four presentations: waiting (both buttons live),
+      answering, sent (the host has taken it, and the card has the settle grace left),
+      and not sent with the reason and both buttons live again
+      (`ui/components/ChatRows.kt: ApprovalCard`). The buttons are inert in the middle
+      two, a tap never clears the card, and the card leaves with its notification when
+      the answer settles
+- [x] Todo card above the card
+- [x] Queue dock (`session/updateQueue`: edit / remove / steer, long-press send mode,
+      "Send behavior while busy") at dock order 20
+- [x] Goal bar (`goal/*`) at dock order 10. `activation` is not modelled, so a disarmed
+      goal still reads `Ongoing Goal` instead of `Inactive Goal`, and `blockedReason` is not
+      parsed; both gaps are recorded in `docs/research/goal-chip.md`
+- [x] Mode chips (Plan / Read-only): the access chip opens the permission sheet, the Plan
+      chip runs `/plan off` and exists only while plan mode is on
+- [x] Context ring + popover (`contextPressure`, `contextBreakdown`)
+- [x] Statistic pills folded from the `sessionStats` and `tokenUsage` projections: a
+      turns/steps chip with `tok/s` (panel: LLM time, tool time, average TTFT, tokens per
+      second) and a total-tokens chip with cache hit (panel: uncached/cached input, cache
+      write, output). One row rather than the web's wrapping line, with each chip anchored
+      to its own end of the composer card and staying there when only one of the two has a
+      reading (`model/SessionStats.kt`, `ui/components/SessionStatsPills.kt`)
+- [x] **A family total in that panel, which the web has no equivalent of.** The panel adds
+      the whole subagent family — the session, its subagents and theirs, however deep — as a
+      token figure and, when every member is priced, a cost. Membership is the roster's own
+      `parentSessionId` chain (`model/SubagentTree.kt`), and each member's figure is its own
+      `tokenUsage` off its `session/list` row. The row is labelled `Family, as reported`
+      rather than as the family's own work: 669 of the 1,287 live subagent rows carry no
+      `tokenUsage` at all, and a *forked* subagent's figure includes the history it
+      inherited. The omission is disclosed by the `N of M` subagents row plus a note, and
+      the double count by a method note shown with every reading, because no `session/list`
+      field identifies a forked child. An unpriced member withholds the family cost
+      entirely rather than showing a money-shaped subtotal (`model/FamilyUsage.kt`)
+- [x] Attachments: files and pictures through `fileUploads/upload`; a picture the host
+      recognises is sent inline as `{type:'image', mediaType, data, name}` with no upload
+- [x] Slash commands (`commands/list` → `commands/execute`)
+- [x] **Undo and redo in the draft, which the web has no equivalent of.** The composer
+      runs on Compose's stateful text field (`TextFieldState`), so the history is the
+      platform's. Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y drive it from a physical keyboard, and
+      the software keyboard's own undo and redo are answered when it sends
+      `android.R.id.undo`/`redo` context-menu actions (`ui/components/ComposerImeUndo.kt`).
+      There is no in-app undo control: undo now depends on the keyboard supporting that
+      action, so a keyboard that undoes only its composing text, or has none, leaves the
+      app with no undo — a deliberate trade, not an oversight. A send, a failed send's
+      restore and a `/` or `@` pick are programmatic edits, so they are not on the undo
+      stack; a failed send is put back only into the box that send cleared, so an empty
+      box left by undo is not mistaken for it. Every send is covered, not only the first
+      one off the pending seat: a prompt into an open session that is refused, or whose
+      answer is the web server's page rather than the host's (a 504), hands its text back
+      through the same path, and the banner says so
+      (`ui/components/Composer.kt`, `ui/composer/ComposerDraft.kt`, `DshViewModel.dispatchSend`)
+- [x] Subagent messaging: an addressed continuable child sends `subagents/prompt`, Stop
+      sends `subagents/interruptByParent`, and the composer seat becomes a read-only status
+      frame unless `subagents/list` reports the parent available
+      (`model/SubagentContinuation.kt`, `ui/components/SubagentReadOnlyComposer.kt`)
+
+## Right-hand panel (dockkit)
+
+- [ ] 38dp tab strip, r12 chips. A phone has no room for a column beside the transcript, so
+      each surface takes the whole body with its own back bar instead of a strip
+- [x] Files panel. Two lists over one session. **Browse** is the workspace tree: one
+      directory level at a time from `workspaceFiles/list`, rooted at the session cwd and
+      confined to the workspace by the host, with the session's own touches drawn on as
+      marks and the host's `truncated` flag reported. **This session** is the
+      transcript-derived list it has always been — every read, write, edit and `present`
+      declaration, under the tool's exact spelling — kept because it is the only list that
+      can select a file under the spelling a delivered card carries
+      (`model/SessionFiles.kt`, `model/WorkspaceExplorer.kt`, `ui/components/FilesPanel.kt`).
+      A row the session never touched carries no mark, and the panel says in words that this
+      is a fact about the session rather than missing data. Content is read on demand through
+      `workspaceFiles/read` (`model/WorkspaceFileLoader.kt`); `present` is a touch too
+      (`FileTouch.PRESENTED`), or the card's tap has nothing to select
+- [x] Terminal panel — the **Shell** tab, a real PTY over the host's `terminal`
+      Remote namespace (`environment`, `shells`, `list`, `create`, `follow`, `write`,
+      `resize`, `rename`, `close` in `net/TerminalClient.kt`), `follow` on the same
+      `/api/remote.mux`. Not xterm.js: the grid is one `Canvas` with a block cursor
+      over a hand-written Android-free VT core (`ui/TerminalScreen.kt`, `term/`), and
+      the panel offers two seats — the unconfined host shell and this session's own
+      confined terminal (`term/HostShell.kt: TerminalSeat`, `DshViewModel`). Re-attach
+      after a network drop is **unverified**: the emulator's `svc wifi/data` do not
+      touch the app's path
+- [+] **The terminal's cell size is choosable** (app addition, not in the web client,
+      which draws xterm.js at a hard-coded `fontSize: 13` and offers no control; its
+      `Font size` setting is the conversation's and says so — "Only affects conversation
+      content"). A smaller cell is also the *default*: 10sp rather than the 12sp the
+      panel drew before, so a 320dp phone shows 64 columns instead of 53 and a 411dp
+      one 82 instead of 68. Two fingers on the grid step it, the bar's `A−`/`A+` do the
+      same thing visibly, and the choice is persisted in the config store
+      (`data/ConfigStore.kt: terminalFontSp`, applied in `ui/TerminalScreen.kt`). The
+      grid's gesture handler also refuses a *drag* to the tap target — a one-finger move
+      past touch slop no longer brings the soft keyboard up, which `clickable` alone did
+      not distinguish (see `docs/HANDOFF.md`, "Compose's `clickable` has no movement
+      test")
+- [x] Preview panel: the `text` preview that a deliverable or a file row opens into
+- [+] **Share to DSH** (app addition, not in the web client). The app registers for
+      `ACTION_SEND` and `ACTION_SEND_MULTIPLE` with `*/*`, so an image from the gallery
+      or a document from a viewer lands in the open session's composer as an attachment
+      — the same path the `+` button takes, with no detour through Downloads. A share
+      can *start* the app, where there is no session and often no connection yet, so
+      the URIs are held by the activity and staged once `AppPhase.READY` and a session
+      or pending target exist; `addAttachment` materialises a pending session by design,
+      so a share onto the hero becomes the session's first use.
+      Only `content://` URIs: a `file://` extra is not this app's to open, and pretending
+      otherwise would leave an unexplained empty attachment. A shared *text* is not
+      handled — it is a message, not an attachment, and the composer is where it belongs
+      if it is ever wanted.
+
+- [x] **A session a schedule delivers into wears a clock mark, in place** (the web's
+      `SessionScheduleMark`). The third-party `@michengai/dsh-automation` plugin that used
+      to mint one throwaway `dsh-automation-session-…` session per run is incompatible with
+      the host this app talks to and is no longer in the profile (`~/.dsh/logs/dsh.err`:
+      "skipping profile bundle \"@michengai/dsh-automation\" … incompatible with dsh
+      0.2.0-rc.2"); the host's own Schedule subsystem replaced it
+      (`@deepseek-ai/dsh-experimental-schedule-bundle`, pulling `dsh-schedule`,
+      `dsh-client-ui-schedule` and `dsh-time-context`, all 0.2.0-rc.2). A task is now
+      stored against the **original session** it was created in and each due occurrence is
+      delivered into that same session, so a run is not a session at all: the session is
+      reused, its id is an ordinary `session-…`, and the old prefix predicate matched
+      nothing (measured on the host: 485 sessions in `session/list`, not one beginning
+      `dsh-automation`). The signal is the host's `schedule/catalog` remote — an
+      argument-less read returning every task with its `sessionId` and `status`, and the
+      only session-level signal the web uses too (`selectSessionScheduleFacts` filters it
+      by `record.sessionId === sessionId && record.status === "active"`). The app reads it
+      once per roster pull (`DshViewModel.refreshScheduleCounts`, through `rpcRaw` because
+      the answer is a bare array) and folds it into `SessionItem.scheduledTaskCount`; the
+      drawer draws a clock in the row's leading 16dp cell, offered to it only while the
+      row's own status dot is absent, exactly as the web's mark is. `model/Automations.kt`
+      owns the parse, the per-session count and the mark's spoken label.
+      **The row keeps its Workspace and its place.** The app used to lift these sessions
+      into a synthetic "Automations" section, which was right when each was a throwaway run
+      and wrong now that each is the reader's own session; the lift-out, the section and
+      the synthetic `__automations__` key are gone. A host without the bundle answers the
+      call with an error, no row is marked, and the drawer renders exactly as it did before
+      the feature existed (pinned by `AutomationsTest`). A lost signal is no longer silent:
+      `refreshScheduleCounts` warns once under the `DshSchedule` tag when the call fails,
+      when the answer is not the task array, or when rows carry no task id, no `sessionId`
+      or no `status` this build knows, and stays quiet until a whole read clears it (one
+      boolean, no timer). A catalog that is legitimately empty is not a fault and is not
+      logged. The **landing** rule
+      (`model/LandingSession.kt`) is the same preference re-keyed from the dead id prefix
+      to the catalog: a session with an active task is passed over while a conversation
+      exists, and is still what opens when nothing else has content.
+
+- [+] **Balance & top up** (app addition, not in the web client). The token panel's
+      cost row leads to the account balance, read with the user's own DeepSeek key
+      (`GET /user/balance` — the only account call DeepSeek publishes, and the only
+      request this app makes that does not go to the host). The key is stored in the
+      app's encrypted preferences, entered on that screen rather than in Settings, and
+      the only place it is sent is `api.deepseek.com`. Top up opens
+      `platform.deepseek.com/top_up` in the browser: there is no top-up API, and a
+      payment form in an app would be inventing one. There is deliberately **no usage
+      chart** — DeepSeek exposes no spend or history at all, so a graph could only be
+      this client's own ledger, which was considered and deferred.
+- [x] **Preview renders pictures, and an SVG both ways.** The format is decided from the
+      path (`model/previewFormatOf`), which is what makes the read choice possible at all: a
+      raster image is fetched as bytes (`workspaceFiles/readBytes`, one window of at most
+      8 MiB — the host's own `readAll` allows 32 MiB, which is not a preview on a phone) and
+      everything else as text (`workspaceFiles/read`, which refuses non-UTF-8 outright). An
+      SVG is both, so it opens as the drawing and the header's toggle shows the markup.
+      The drawing comes from `com.caverock:androidsvg-aar` — Android ships no SVG renderer
+      and a WebView is not an option in this app — rendered onto the panel's own background,
+      because an SVG's transparent areas are the page's. The row icon uses the same one
+      table, which it did not before: `heic` and `avif` wore an image icon while being read
+      as text
+- **NOT a right-panel tab:** Deliverables registers nothing under `sidebar.right.*`. It is a
+  conversation turn-tail row plus a `present` tool view, whose items open the text preview tab.
+  The row is transcript-derived (successful `write` / `edit` / mutating `str_replace_editor`
+  calls only) and cached per turn key so streaming does not re-scan
+
+## Mobile musts (hover-only in the web UI, so unreachable on touch)
+
+- [x] Session row ⮕ row menu (Rename / Fork session / Copy session id / Archive; Restore when
+      archived). No delete, no duplicate, no pin — the host offers none
+- [x] Workspace `+` (add workspace) through the directory picker
+- [ ] Workspace rename/delete — the app only creates and adopts
+
+## Settings
+
+- [x] Read-only port of the modal's five sections in nav order — General / Models / Plugins /
+      Agent presets / Archived sessions — plus two client-owned blocks (Connection, Session)
+      for host/account/socket status, theme, agent preset and sign out
+      (`ui/SettingsContent.kt`, `ui/settings/SettingsLocalFacts.kt`)
+- [x] Archived-session management: unarchive, the one write that does not ride the settings
+      scope (`DshViewModel.unarchiveSession`)
+- [x] Permission presets: the General row reads `permissionPresets/catalog`, and the composer
+      sheet switches with `/permission <preset>`
+- [ ] Account & security (password, captcha mode, whitelist) — no `auth/*` RPC beyond
+      login/required; browser auth is the signed cookie
+
+### Deferred: settings writes
+
+The modal is read-only by design. Per `docs/research/panels-settings.md` §3.2–3.6, the web
+shell picks `persistence = ctx.remote.$host.isLoopback ? 'host' : 'memory'`, and a `memory`
+scope's `enqueue` returns without calling the host, so `settings/mutate`, `settings/update`,
+`credentials/set` and the like are silently dropped for a remote phone. Anything that needs a
+host settings write stays a value with a disabled control.
+
+## Deliberate divergences (kept on purpose)
+
+- **Notices never fold.** The web hides notice rows inside the collapsed process summary; the
+  app keeps them visible because it has no `hidden="until-found"` reveal to get them back.
+- **A question answers pick and typed text together** for single-select questions too. The
+  wire accepts the pair; a typed note next to a pick is more useful than forcing a choice.
+- **Files panel keeps the session's own list beside the workspace tree.** The web's Files tab
+  is the directory tree alone; the app keeps `SessionFiles.derive`'s list as a second mode,
+  because it is the only list that can select a file under the exact spelling a delivered
+  card carries (see above).
+- **Conversation view strip gap** is tightened below the web's 36px, or the second label falls
+  off a narrow phone.
+- **Search snippets wrap to two lines** instead of the web's single nowrap line, so the match
+  the host centred is not ellipsized away.
+- **The rail is press-to-grow**; the web's preview mark and tooltip are hover-only.
+- **The goal chip carries `roundsStarted/maxGoalRounds`**; the web GoalBar has no counter
+  (`docs/research/goal-chip.md`).
+- **Every registry Workspace is drawn**, even one whose sessions the reader's filters all
+  hide; the web's `deriveGroups` drops a group with no visible members, which let a
+  persisted Archived filter erase a directory from the sidebar. The group states which
+  absence it is instead, and its header tap still only folds
+  (`model/WorkspaceGroups.kt`, `ui/SessionsDrawer.kt`). In the Workspace Tree this also
+  means the web's re-parenting of a dropped group's children to the nearest *shown*
+  ancestor never fires here: every registered parent is shown.
+- **The Workspace Tree's aggregate signals are the app's own.** The web renders no
+  count on a Workspace header at all, and its folder tint comes only from
+  `containsCurrent`/`containsCurrentDescendant`; the app keeps its per-Workspace count
+  (own sessions, with "[shown] of [accounted]" when the roster is short) and extends
+  the blue title to a running descendant. Both are the existing Android rules applied
+  to the existing sections, not a second presentation invented for the tree.
+
+## Host traps that shape the client
+
+- **The host exposes no DSH version through any read-only surface.** There is no
+  `hello`/`version` Remote method in the descriptor set and no version header on the mux
+  handshake. The only identity frame is the `$events` stream's opening `ready` item, and
+  0.2.0-rc.2 builds it as `host: { home }` and nothing else (`dsh-api-gateway/lib/index.js`,
+  `openRemoteEvents`; `dsh-api-remotes/lib/index.js`, `registerRemoteEvents`). A plugin's
+  `runtimeVersion` appears only inside `incompatible` diagnostics, and the web UI's "Current
+  version" row is a string embedded in the client bundle at build time, not something it asks
+  the host for. About's "DSH version" row therefore reads `Not reported` for every
+  shipped host and `Unknown` before the first frame; it folds a `version` out of that same
+  `host` object and nowhere else, so a host that starts sending one is named without an app
+  update. It never prints this app's own version (`model/HostVersion.kt`, `ui/AboutScreen.kt`)
+- **Argument names are exact.** The gateway rejects both extra and missing keys with
+  `gateway/arguments-invalid`, so `agent` where the host declares `agentId` kills the call
+  loudly rather than silently.
+- **A waterfall is fanned to every registered `$events` client, but only a `next` waits for
+  each of them.** The first `result` settles it for all clients (`api-gateway`'s
+  `receiveRemoteEventResult`), so an answer, a skip or an approval is decisive from this app
+  alone; a web tab or a second device keeps a *hand-back* open, which is what the attention
+  timeouts send.
+- **`clientTimeZone` is only sent when it is `UTC` or an Area/Location name.** A device pinned
+  to a fixed offset made the host reject the whole prompt with `session/invalid-time-zone`.
+- **`session/page` is the only back-pagination route**: `session/follow` opens with a bounded
+  window and answers `cursor`/`hasMore`; older history comes from `session/page` with
+  `beforeSeq` = the oldest seq held and `throughSeq` = the follow frame's cut.
+
+## Verification loop
+
+Every iteration: `./build.sh :app:assembleDebug` → `tools/install.sh <serial>` → screenshot and
+compare against the web UI. Device policy, screen-capture hygiene and the emulator services are
+in `docs/HANDOFF.md`; they are not repeated here.
+
+**Order of verification, cheapest first:** (1) compile, (2) probe the live host with a
+throwaway session (never mutate the session the running client itself is in), (3) only then the
+screen.
+
+## Open work
+
+Ordered by value, not by size:
+
+1. **Wire the drawer's content search.** The ViewModel, the merge and the status copy are
+   built; the `SessionsDrawer(...)` call site passes no search state, so
+   `session/search` is never sent from the UI today.
+2. **Terminal panel** (`terminal/follow`) — ported as the **Shell** tab, so it is no
+   longer an unported dockkit surface. What remains in it is narrower: scrollback
+   *rendering* (the tail is retained but not drawn), mouse reporting, terminal
+   search, more than one terminal on screen at a time, sixel/kitty graphics, OSC 8
+   hyperlinks, bracketed paste, and IME composition regions.
+3. **Markdown gaps** — inline images, `@file` mention chips, citations, tags, mermaid/math.
+4. **Interrupted assistant tail tag** — a frozen partial block with `interrupted: true` has no
+   tag; only the `turn/end` notices mark a cut-off turn.
+5. **Session drag-to-reorder + the sidebar's bottom fade.** Workspace reordering is
+   not in this list any more: it is the header drag (with semantic move actions) above.
+6. **Workspace rename/delete**, and the header seats the web has and the app does not:
+   terminal recovery, schedule catalog, open-in-app.
+7. **`settings/*` / skills** — blocked on the host's `memory` scope, not on the UI.
+8. **Goal `activation` / `blockedReason`** — the chip always says `Ongoing Goal` for a
+   disarmed goal (`docs/research/goal-chip.md`).
