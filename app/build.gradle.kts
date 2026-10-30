@@ -1,9 +1,8 @@
 plugins {
+    // No `org.jetbrains.kotlin.android`: AGP 9 compiles Kotlin itself and
+    // rejects the old plugin outright. The Compose compiler is still a separate
+    // plugin and still versioned with Kotlin.
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    // Kotlin 2.0 moved the Compose compiler out of AGP and into this plugin.
-    // Its version always equals the Kotlin version, so it is declared in the
-    // root build file and applied here without a version.
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -103,15 +102,17 @@ android {
     }
 }
 
-// Kotlin 2.x moved the compiler options off `android { kotlinOptions { } }` and
-// onto the Kotlin extension itself. Same opt-ins, same JVM target, new home.
-kotlin {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-        freeCompilerArgs.addAll(
-            "-opt-in=kotlin.RequiresOptIn",
-            "-opt-in=kotlinx.coroutines.FlowPreview",
-        )
+// AGP 9 compiles Kotlin itself, so the options live in AGP's own DSL instead of
+// a Kotlin plugin extension. Same JVM target, same two opt-ins.
+androidComponents {
+    onVariants { variant ->
+        variant.kotlinOptions.apply {
+            jvmTarget.set("17")
+            freeCompilerArgs.addAll(
+                "-opt-in=kotlin.RequiresOptIn",
+                "-opt-in=kotlinx.coroutines.FlowPreview",
+            )
+        }
     }
 }
 
