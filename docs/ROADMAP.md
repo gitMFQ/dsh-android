@@ -24,7 +24,7 @@
 | **L1** ✅ 完成 2026-10-30 | **只升 Kotlin**：1.9.24 → **2.4.21** + `org.jetbrains.kotlin.plugin.compose`；删 `composeOptions`；`kotlinOptions`→`compilerOptions`；Robolectric 4.13→4.17。**AGP / compileSdk 全不动** | 已合入 `master` | **CI 实测 `tests=1116 failures=0 errors=0 skipped=0`** + 19.8 MB APK | — |
 | **L2** ✅ 完成 2026-10-30 | AGP 8.5.2 → **8.13.2**；Gradle 8.7 → **8.13**；compileSdk/buildTools/targetSdk **36**。**Kotlin 与 Compose BOM 不动**（单一变量） | 已合入 `master`（PR #1） | **CI `tests=1116 failures=0`** + 20 MB APK | L1 |
 | **L3** ✅ 完成 2026-10-30 | AGP 9.3.1 + Gradle 9.5.0 + compileSdk/buildTools/targetSdk **37** + Compose BOM **2026.09.00**。AGP 9 内置 Kotlin：**移除 `org.jetbrains.kotlin.android`** | 已合入 `master`（PR #2） | **CI `tests=1116 failures=0`** + APK | L2 |
-| 0.5.4（L4） | 引入 miuix **0.9.4** 最小集（ui / preference / icons / squircle） | 依赖 | 同上 + `dependencyInsight` 无旧 foundation 残留 | 0.5.3 |
+| **L4** ✅ 完成 2026-10-30 | 引入 miuix **0.9.4** 最小集（ui / preference / icons / squircle），**不含 blur**（模块 minSdk 33 vs 我们 26） | 已合入 `master`（PR #3） | **CI 全绿** + APK 构建成功 | L3 |
 
 > **L1 实测记录（2026-10-30）**：仓库 <https://github.com/gitMFQ/dsh-android>；Verify 工作流 `tests=1116 failures=0 errors=0 skipped=0`；Build 工作流产出可安装 APK。
 > 本机（aarch64 Debian）只能验证到 Gradle 配置阶段（`gradle help` 成功）；资源编译与测试必须在 CI —— 原因见 [BUILD-AND-CI.md](BUILD-AND-CI.md) §0。
