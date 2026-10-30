@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
@@ -150,8 +151,8 @@ class PasswordFieldTest {
      * bullets would fail to find it.
      */
     private fun maskingText() = SemanticsMatcher("editable text is obfuscated") { node ->
-        val shown = node.config.getOrNull(SemanticsProperties.EditableText)?.text
-        shown != null && shown.all { it == '\u2022' }
+        val shown: String? = node.config.getOrNull(SemanticsProperties.EditableText)?.text
+        shown != null && shown.all { character: Char -> character == '\u2022' }
     }
 
     @Test
