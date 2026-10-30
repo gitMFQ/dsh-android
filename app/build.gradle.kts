@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "uk.xa0.dsh"
-    compileSdk = 36
+    compileSdk = 37
 
     // A release key can be supplied entirely through the environment, which is how
     // CI signs without a keystore in the repository:
@@ -33,12 +33,12 @@ android {
 
     // This box ships build-tools 35.0.0/36.0.0 but not AGP's default 34.0.0,
     // and there is no writable SDK root to auto-download into.
-    buildToolsVersion = "36.0.0"
+    buildToolsVersion = "37.0.0"
 
     defaultConfig {
         applicationId = "uk.xa0.dsh"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 15
         versionName = "0.6.6"
     }
@@ -116,7 +116,7 @@ kotlin {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.13.1")

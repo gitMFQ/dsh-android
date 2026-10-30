@@ -41,7 +41,7 @@ if ! flock -n 9; then
     flock 9
 fi
 
-exec "$ROOT/.toolchain/gradle-8.13/bin/gradle" \
+exec "$ROOT/.toolchain/gradle-9.5.0/bin/gradle" \
     -g "$GRADLE_USER_HOME" \
     --no-daemon \
     "$@"
