@@ -34,12 +34,19 @@
 
 ## 阶段 1 · 结构（1 周）
 
+> **顺序已修正**（见 [research/13-module-extraction.md](research/13-module-extraction.md)）：原文先抽 `net/`，但 `net → data` 成环（`net/DshClient.kt:25` 用 `data.DshConfig`，而 `data/ConfigStore.kt:8-9` 又用 `net.*`），**执行不了**。正确顺序是由内向外：**model → term → protocol**。
+
 | # | 任务 | 产出 | 验收 | 依赖 |
 |---|---|---|---|---|
-| 1.1 | 抽 `:core:protocol`（`net/`） | 模块 | 独立编译 + net 单测绿 | 0.4 |
-| 1.2 | 抽 `:core:model`（`model/`） | 模块 | 47 个模型单测绿 | 0.4 |
-| 1.3 | 新建 `:design`：`KsuTokens` + `KsuTheme`（7 档外观） | 模块 | 设置页可切并持久化 | 1.1 |
-| 1.4 | Roborazzi 截图测试接入（外壳 + 设置页先覆盖） | 测试 | CI 跑出基线图 | 1.3 |
+| **1.0** ✅ 完成 2026-10-31 | 5 个宿主行类移出根包（`SessionItem`/`WorkspaceItem`/`JobItem`/`QueueAttachment`/`QueuedMessage` → `model/`），`model → root` 边 **14 → 0** | 已合入 `master`（PR #4） | **CI `tests=1116 failures=0`** | 0.5 |
+| 1.1 | 抽 `:core:model`（`model/` 50 文件 + 45 个纯 JVM 测试；3 个 Robolectric 测试留在 `:app`；3 个 `internal` 提权） | 模块 | `:core:model:test` 独立绿 + 全仓仍 1116 | 1.0 |
+| 1.2 | 抽 `:core:term`（`term/`，只依赖 `:core:model`） | 模块 | 全仓仍 1116 | 1.1 |
+| 1.2b | `AcceptedCert` + `DshConfig` 进 `:core:model`（解 `net ⇄ data` 环） | 模块 | 全仓仍 1116 | 1.2 |
+| 1.3 | 抽 `:core:protocol`（`net/`，依赖 `:core:model` + `:core:term` + okhttp） | 模块 | 全仓仍 1116 | 1.2b |
+| 1.4 | 新建 `:design`：`KsuTokens` + `KsuTheme`（7 档外观） | 模块 | 设置页可切并持久化 | 1.1 |
+| 1.5 | Roborazzi 截图测试接入（外壳 + 设置页先覆盖） | 测试 | CI 跑出基线图 | 1.4 |
+
+> **验收里「仍 1116」不是形式**：`verify.yml` 现在只扫 `app/build/test-results/**`，测试一搬进新模块就会**从统计里消失而 CI 照样绿**。抽模块的 PR 必须把 glob 同步改成 `**/test-results/**`，并贴出前后数字。
 
 ## 阶段 2 · 外壳换装（1.5 周）
 
