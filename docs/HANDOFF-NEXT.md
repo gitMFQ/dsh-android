@@ -49,15 +49,15 @@
 
 ```
 /root/dsh-android
-  app/                     # 单模块，140 个 .kt / 5.8 万行（fork 自 bqv/dsh-android v0.6.6）
+  app/                     # 单模块，143 个 .kt / 5.8 万行（fork 自 bqv/dsh-android v0.6.6）
     src/main/java/uk/xa0/dsh/
       net/                 # 协议层（~4000 行，纯 Kotlin，可单测）
-      model/               # 领域模型（47 个单测）
+      model/               # 领域模型 50 文件（47 个单测）
       ui/                  # 界面 54 文件 / 27k 行
       data/ widget/ diag/ term/
-    src/test/              # 127 文件 / 1116 个 @Test
+    src/test/              # 128 文件 / 1116 个功能 @Test + 4 张截图基线
   docs/                    # 规划文档（见 §6）
-  .github/workflows/       # build.yml（出 APK）/ verify.yml（跑测试）/ release.yml
+  .github/workflows/       # build.yml（出 APK）/ verify.yml（测试+截图门禁）/ release.yml / screenshots.yml（手动录基线）
   build.sh                 # 唯一构建入口，找 .toolchain/gradle-9.5.0
 ```
 
@@ -65,11 +65,14 @@
 
 | 工作流 | 触发 | 作用 |
 |---|---|---|
-| `verify.yml` | push main/master + PR | `tests=1116 failures=0 errors=0 skipped=0` |
+| `verify.yml` | push main/master + PR | `tests=1116 failures=0` + `screenshots=4` 像素比对 |
 | `build.yml` | 同上 | 出 debug APK（约 20 MB） |
 | `release.yml` | tag `v*` | 出 release APK 挂 Release |
+| `screenshots.yml` | **手动** `workflow_dispatch` | 在 CI 录基线并上传 artifact（本机录不了） |
 
-**提交 PR 即可验证**，`gh pr checks <n>` 看结果，约 7 分钟。
+**提交 PR 即可验证**，`gh pr checks <n>` 看结果，约 7–10 分钟。
+
+> `screenshots.yml` 是 `workflow_dispatch`，**只在默认分支上存在时才可手动触发**。新加的工作流要先把文件推到 master（或临时加 push 触发）才能跑第一次 —— PR #5 踩过，见 §8。
 
 ## 6. 文档地图（按需查，别全读）
 
@@ -116,6 +119,7 @@
 - **别重新调研**：`docs/research/` 有 13 份带 `path:line` 证据的文档，结论都在里面（新增 13 是模块拆分蓝图）。
 - **别信旧结论**：文档里凡是标注「已被 X 修正」的，以修正后的为准。
 - **单变量原则**：一次只改一个版本/一件事，CI 绿了再进下一步。
+- **新增的 `workflow_dispatch` 工作流在合并到默认分支前无法手动触发**：GitHub 只在默认分支上发现该工作流。要第一次跑起来，得先把文件合进 master，或临时加一个 `push:` 触发（PR #5 用了后者，随后删掉）。
 - **别用 `--tests` 去「打开」被 `excludeTestsMatching` 排除的测试类**：Gradle 的 filter 不能再包含已被另一个 filter 排除的东西，会报 `No tests found for given includes`。用 `-Pscreenshots` 这类 property 切换（PR #5 踩过）。
 - **本机现在能跑 Gradle 配置阶段**（`.toolchain/gradle-9.5.0` 已就位，`gradle :app:tasks` 约 1–2 分钟），改 build 脚本后可先本地验语法再花 CI 一轮。`local.properties` 指向 `/opt/android-sdk`。但 `compileDebugUnitTestKotlin` 仍因 `android-37.0` 的 SDK 元数据问题失败，**编译与测试仍只能走 CI**。
 - **本机只做静态分析**：任何「能不能跑」的判断都必须由 CI 回答（配置阶段例外，见上一条）。
