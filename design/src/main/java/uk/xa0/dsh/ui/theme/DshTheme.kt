@@ -1,5 +1,6 @@
 package uk.xa0.dsh.ui.theme
 
+import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -12,6 +13,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -104,7 +106,7 @@ data class DshColors(
     val synPunctuation: Color,
 )
 
-private val DarkColors = DshColors(
+internal val DarkColors = DshColors(
     isDark = true,
     bgBase = Color(0xFF151517),
     bgLayer1 = Color(0xFF232324),
@@ -158,7 +160,7 @@ private val DarkColors = DshColors(
     synPunctuation = Color(0xFFCED4DA),
 )
 
-private val LightColors = DshColors(
+internal val LightColors = DshColors(
     isDark = false,
     bgBase = Color(0xFFFFFFFF),
     bgLayer1 = Color(0xFFFFFFFF),
@@ -335,7 +337,7 @@ val LocalDshColors: ProvidableCompositionLocal<DshColors> = staticCompositionLoc
  * separating a card from the void, and scaling them with the surface would erase the
  * edges the layout depends on.
  */
-private fun DshColors.toAmoled(): DshColors = copy(
+internal fun DshColors.toAmoled(): DshColors = copy(
     isDark = true,
     bgBase = Color.Black,
     bgLayer1 = AMOLED_SURFACE,
@@ -383,17 +385,14 @@ private val AMOLED_OUTLINE = Color(0xFF1A1A1A)
  * semantic — success, warning, error, the syntax palette, the bubble — keeps the
  * app's own values, because those carry meaning a wallpaper cannot know.
  *
- * Below API 31 there is no wallpaper palette to read; the caller has already chosen
- * the light or dark base by the mode, and this returns it untouched.
+ * Below API 31 there is no wallpaper palette to read; [dshPalette] then passes
+ * `null` and the already-chosen light or dark base comes through untouched.
+ *
+ * Not `@Composable`: the scheme is handed in rather than looked up, which is what
+ * lets the window (which has no composition) resolve the same palette Compose does.
  */
-@Composable
-private fun DshColors.toMonet(dark: Boolean): DshColors {
-    val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val context = LocalContext.current
-        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else {
-        return this
-    }
+private fun DshColors.toMonet(dark: Boolean, monet: MonetPalette): DshColors {
+    val scheme = monet.scheme
     return copy(
         accent = scheme.primary,
         link = scheme.primary,
@@ -446,27 +445,85 @@ object DshTheme {
         @Composable get() = LocalDshColors.current
 }
 
+/**
+ * The palette an appearance resolves to, outside composition.
+ *
+ * This is the same decision [DshTheme] makes, written down where something that is
+ * *not* a composable can reach it — the Android window, which is painted before the
+ * first frame and has no composition to read a token from. The window and Compose are
+ * then looking at one function instead of two copies of the same `when`.
+ *
+ * [monet] is supplied by the caller because wallpaper colours only exist on a
+ * `Context` and only from API 31; `null` means "this appearance, without the
+ * wallpaper part", which is exactly what a phone below API 31 would render anyway.
+ * Passing it in also keeps this function a pure function of its arguments, which is
+ * what makes it testable on the JVM.
+ */
+fun dshPalette(
+    themeMode: String,
+    systemDark: Boolean,
+    monet: MonetPalette? = null,
+): DshColors {
+    // `parse`, not the raw string: a stored id from another build must resolve to an
+    // appearance rather than fall through every branch below.
+    val mode = ThemeMode.parse(themeMode)
+    val dark = ThemeMode.isDark(mode, systemDark)
+    val base = if (dark) DarkColors else LightColors
+    return when {
+        mode == ThemeMode.AMOLED -> base.toAmoled()
+        monet != null && ThemeMode.isMonet(mode) -> base.toMonet(dark, monet)
+        else -> base
+    }
+}
+
+/**
+ * The wallpaper colours [dshPalette] needs, read once on a [android.content.Context].
+ *
+ * A plain holder rather than the `ColorScheme` itself so that the two things Monet
+ * actually takes — which side of the light/dark divide, and the Material scheme built
+ * for it — travel together into the pure resolver.
+ */
+class MonetPalette(val scheme: ColorScheme)
+
+/**
+ * The wallpaper colours for [themeMode], or `null` when there is nothing to read.
+ *
+ * Two cases return `null`, and they are the same case from the caller's side: an
+ * appearance that is not wallpaper-derived, and a phone below API 31 where Material
+ * You does not exist. [dshPalette] then draws the plain light or dark palette on the
+ * side the reader asked for, which is a valid appearance rather than a missing one.
+ *
+ * Not `@Composable` on purpose: the Android window has to be painted from the same
+ * answer before Compose exists, and the wallpaper lookup never needed a composition —
+ * only a `Context`.
+ */
+fun monetPalette(context: Context, themeMode: String, systemDark: Boolean): MonetPalette? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+    val mode = ThemeMode.parse(themeMode)
+    if (!ThemeMode.isMonet(mode)) return null
+    return MonetPalette(
+        if (ThemeMode.isDark(mode, systemDark)) {
+            dynamicDarkColorScheme(context)
+        } else {
+            dynamicLightColorScheme(context)
+        },
+    )
+}
+
 @Composable
 fun DshTheme(
     themeMode: String = ThemeMode.SYSTEM,
     content: @Composable () -> Unit,
 ) {
-    // `parse`, not the raw string: a stored id from another build must resolve to an
-    // appearance rather than fall through every `when` below.
-    val mode = ThemeMode.parse(themeMode)
     val systemDark = isSystemInDarkTheme()
-    val dark = ThemeMode.isDark(mode, systemDark)
-
-    val base = if (dark) DarkColors else LightColors
-    val palette = when (mode) {
-        ThemeMode.AMOLED -> base.toAmoled()
-        // Wallpaper colours are API 31+, and the fallback is the plain light/dark
-        // palette on the same side of the divide the reader asked for — a phone
-        // without Material You still gets a valid appearance, not a missing one.
-        ThemeMode.MONET_SYSTEM, ThemeMode.MONET_LIGHT, ThemeMode.MONET_DARK ->
-            base.toMonet(dark)
-        else -> base
+    val context = LocalContext.current
+    // Remembered, not recomputed: building a Material scheme from the wallpaper is not
+    // free, and the answer only changes when the appearance or the system's light/dark
+    // setting does.
+    val monet = remember(themeMode, systemDark, context) {
+        monetPalette(context, themeMode, systemDark)
     }
+    val palette = dshPalette(themeMode, systemDark, monet)
     CompositionLocalProvider(LocalDshColors provides palette) {
         MaterialTheme(
             colorScheme = palette.toMaterialScheme(),

@@ -1,7 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- The launcher icon's plate, which the platform draws on its own surface and
+         is therefore not the app's window. Left as it was. -->
     <color name="ic_launcher_background">#0B0F14</color>
-    <color name="dsh_window_bg">#0B0F14</color>
+
+    <!--
+      The fallback fill for the window, for the instant between the platform creating
+      it and `WindowBackground.apply` painting it in the appearance the reader chose.
+
+      It is the *dark* palette's `bgBase` (`#151517`), not the `#0B0F14` this used to
+      be: those were two different colours describing the same surface, and the darker
+      one was only ever right for nobody — a light or Monet reader got a flash of near
+      black before a white app, and an AMOLED reader got it before a black one. A value
+      here cannot follow the appearance (a resource is static), so it matches the case
+      that is on screen longest and is corrected immediately by the runtime paint.
+      See `docs/PHASE-2-PLAN.md` §1.5 and `ui/theme/WindowBackground.kt`.
+    -->
+    <color name="dsh_window_bg">#151517</color>
 
     <!--
       The widget's palette, which is the app's own dark theme (see
