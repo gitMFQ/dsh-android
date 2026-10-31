@@ -48,8 +48,12 @@ jobs:
       # L1 gate: the whole 1116-test suite on Kotlin 2.4.21. This is the step that
       # proves the compiler migration did not break anything, before any of the
       # AGP / Compose / miuix upgrades land on top of it.
+      # Two test tasks, both named: `:app:testDebugUnitTest` alone would run only
+      # the tests still in :app, and the 413 that moved to :core:model would simply
+      # not execute — a green check over a smaller suite. The two together are the
+      # 1116 this gate quotes.
       - name: Unit tests
-        run: bash build.sh :app:testDebugUnitTest
+        run: bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest
 
       # The visual gate. Phase 2 rewrites the shell, and ChatScreen.kt alone is
       # 3200 lines; this is what turns "the re-skin moved something" from
@@ -83,14 +87,18 @@ jobs:
       # Always uploaded (not only on failure): the XML under test-results carries
       # the executed test count, which is the evidence that the Kotlin 2.4.21
       # migration actually ran 1116 tests rather than skipping them.
+      #
+      # `**/build/...`, not `app/build/...`: since :core:model was extracted its
+      # 413 tests live under core/model/build/test-results/, and a glob pinned to
+      # app/ would drop them from this count while every check stayed green.
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
           path: |
-            app/build/reports/tests/**
-            app/build/test-results/**
+            **/build/reports/tests/**
+            **/build/test-results/**
           if-no-files-found: ignore
 
       # Two numbers, reported separately on purpose.
@@ -101,29 +109,25 @@ jobs:
       # kind of test (they assert pixels, not behaviour) and live in their own
       # XML files under uk/xa0/dsh/screenshot/, so they are counted apart rather
       # than folded in and silently raising the functional total to 1120.
+      #
+      # The scan covers every module's test-results (see the note on the artifact
+      # step above) and prints a per-module breakdown, because with two modules
+      # feeding one number the total alone can no longer show that both halves
+      # actually ran.
       - name: Summarize executed tests
         if: always()
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import glob, os, xml.etree.ElementTree as ET
-
-          def tally(pattern):
-              total = failures = errors = skipped = 0
-              for f in glob.glob(pattern, recursive=True):
-                  r = ET.parse(f).getroot()
-                  total += int(r.get('tests', 0))
-                  failures += int(r.get('failures', 0))
-                  errors += int(r.get('errors', 0))
-                  skipped += int(r.get('skipped', 0))
-              return total, failures, errors, skipped
+          import glob, os, collections, xml.etree.ElementTree as ET
 
           # Robolectric writes one XML per test class, named after the class, so
           # the screenshot class is excluded by its own name rather than by
           # where the run happened to put it.
           screenshot = 0
           functional = [0, 0, 0, 0]
-          for f in glob.glob('app/build/test-results/**/*.xml', recursive=True):
+          per_module = collections.Counter()
+          for f in sorted(glob.glob('**/build/test-results/**/*.xml', recursive=True)):
               r = ET.parse(f).getroot()
               n = int(r.get('tests', 0))
               if 'screenshot' in os.path.basename(f).lower():
@@ -133,11 +137,19 @@ jobs:
                   functional[1] += int(r.get('failures', 0))
                   functional[2] += int(r.get('errors', 0))
                   functional[3] += int(r.get('skipped', 0))
+                  # The module is the path segment before `build/`.
+                  parts = f.split(os.sep)
+                  per_module[parts[parts.index('build') - 1]] += n
 
           t, fa, er, sk = functional
           print(f"tests={t} failures={fa} errors={er} skipped={sk}")
           print(f"screenshots={screenshot} (baseline captures, compared separately)")
+          for module, n in sorted(per_module.items()):
+              print(f"  {module}: {n}")
           with open('$GITHUB_STEP_SUMMARY', 'a') as s:
               s.write(f"\n### JVM tests\n\ntests={t} failures={fa} errors={er} skipped={sk}\n")
               s.write(f"\nscreenshots={screenshot} baseline captures compared\n")
+              s.write("\n| module | tests |\n|---|---|\n")
+              for module, n in sorted(per_module.items()):
+                  s.write(f"| `{module}` | {n} |\n")
           PY

@@ -320,8 +320,13 @@ private fun secretPaths(view: JSONObject): List<List<String>> {
  * (`ui-permission-presets/src/client/presentation.ts`: `PRESET_LABEL_KEYS`).
  * "danger-full-access" is spelled out rather than imported from the view model
  * so this wire-facing table stays independent of UI state.
+ *
+ * `public` because `ui/SettingsContent.kt` reads it to label a preset row, and the
+ * UI is in a different Gradle module now — `internal` there would mean the UI could
+ * not name the table it draws. Nothing else in the module's internals is widened
+ * with it.
  */
-internal val PERMISSION_PRESET_LABELS: Map<String, String> = mapOf(
+val PERMISSION_PRESET_LABELS: Map<String, String> = mapOf(
     "read-only" to "Read Only",
     "workspace-write" to "Workspace Write",
     "danger-full-access" to "Full access",
@@ -368,8 +373,14 @@ internal fun choiceLabel(key: String, value: String, description: String): Strin
     }
 }
 
-/** Kebab-case keys become Title Case; any other label is left alone. */
-internal fun displayPresetName(name: String): String {
+/**
+ * Kebab-case keys become Title Case; any other label is left alone.
+ *
+ * `public` for the same reason as [PERMISSION_PRESET_LABELS]: `ui/SettingsContent.kt`
+ * calls it directly when a host-supplied preset name is neither the machine value
+ * nor the product label. [choiceLabel] stays internal — the UI does not call it.
+ */
+fun displayPresetName(name: String): String {
     if (!KEBAB.matches(name)) return name
     return name.split('-').joinToString(" ") { word ->
         word.replaceFirstChar { it.uppercase() }
