@@ -6,7 +6,6 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.net.AcceptedCert
-import uk.xa0.dsh.net.CertTrust
 import uk.xa0.dsh.net.decodeAcceptedCerts
 import uk.xa0.dsh.net.encodeAcceptedCerts
 import uk.xa0.dsh.term.TerminalCellSize
