@@ -39,7 +39,13 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          # JDK 21, not 17: miuix 0.9.4 ships Java 21 bytecode (class file 65).
+          # D8 desugars that into the APK happily, but the JVM that runs the
+          # Robolectric tests must be able to *load* the classes it is handed —
+          # on 17 that is UnsupportedClassVersionError the moment a miuix
+          # component is composed. Raised as one variable so the gate can be
+          # answered: with 21, does the probe render?
+          java-version: '21'
 
       # Same .toolchain layout build.sh expects; kept identical to verify.yml so
       # there is one description of how this project is built.
