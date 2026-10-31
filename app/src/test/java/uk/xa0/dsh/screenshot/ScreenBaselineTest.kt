@@ -20,6 +20,8 @@ import org.robolectric.annotation.GraphicsMode
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.PendingAttachment
 import uk.xa0.dsh.PermissionOption
+import uk.xa0.dsh.TerminalPhase
+import uk.xa0.dsh.TerminalUiState
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.FileTouch
@@ -29,11 +31,18 @@ import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.model.WorkspaceListPhase
 import uk.xa0.dsh.scroll.HarnessApplication
+import uk.xa0.dsh.term.SeatOption
+import uk.xa0.dsh.term.TerminalCellSize
+import uk.xa0.dsh.term.TerminalEmulator
+import uk.xa0.dsh.term.TerminalInfo
+import uk.xa0.dsh.term.TerminalSeat
+import uk.xa0.dsh.term.TerminalState
 import uk.xa0.dsh.ui.AboutContent
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.PermissionSheet
 import uk.xa0.dsh.ui.SessionsDrawer
 import uk.xa0.dsh.ui.StartupScreen
+import uk.xa0.dsh.ui.TerminalPanel
 import uk.xa0.dsh.ui.components.Composer
 import uk.xa0.dsh.ui.components.FilesPanel
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -337,6 +346,79 @@ class ScreenBaselineTest {
                 current = "default",
                 onSelect = {},
                 onDismiss = {},
+            )
+        }
+    }
+
+    /**
+     * The Shell panel, running, with a screen of real output in the grid.
+     *
+     * Captured against `TerminalPanel` rather than `TerminalScreen` because the screen
+     * collects a `StateFlow` and opens/leaves the terminal over RPC — a baseline of
+     * that would move with the connection instead of with the code. The panel is that
+     * same tree with the view model taken out, so what these pixels pin is the
+     * drawing: the bar's seat chips, the phase word, the cell-size caps, and every
+     * glyph the emulator lays out.
+     *
+     * 24 rows, not a short grid: `visibleRows` is `minOf(rows, what fits)`, so an
+     * emulator with fewer rows than the viewport leaves the rest blank and the
+     * capture would mostly be a picture of the background.
+     *
+     * What this cannot say: Robolectric measures text with stub metrics, so grid
+     * column alignment here is not proof that a cell is the right width on a device.
+     * It can say the same cells land in the same places as last time.
+     */
+    @Test
+    fun terminal() {
+        capture("terminal") {
+            val emulator = remember {
+                TerminalEmulator(columns = 80, rows = 24).apply {
+                    append(
+                        "\$ ls -la\r\n" +
+                            "total 128\r\n" +
+                            "drwxr-xr-x  12 user user 4096 Oct 31 22:04 .\r\n" +
+                            "drwxr-xr-x   3 user user 4096 Oct 30 09:12 ..\r\n" +
+                            "-rw-r--r--   1 user user  512 Oct 31 21:58 README.md\r\n" +
+                            "drwxr-xr-x   5 user user 4096 Oct 31 20:31 app\r\n" +
+                            "drwxr-xr-x   5 user user 4096 Oct 31 20:31 core\r\n" +
+                            "drwxr-xr-x   3 user user 4096 Oct 31 20:31 design\r\n" +
+                            "drwxr-xr-x   2 user user 4096 Oct 31 20:31 docs\r\n" +
+                            "\r\n\$ ",
+                    )
+                }
+            }
+            TerminalPanel(
+                state = TerminalUiState(
+                    sessionId = "s1",
+                    seat = TerminalSeat.HOST_SHELL,
+                    seats = listOf(
+                        SeatOption(TerminalSeat.HOST_SHELL, "Host shell", "s1"),
+                        SeatOption(TerminalSeat.THIS_SESSION, "This session", "s2"),
+                    ),
+                    phase = TerminalPhase.CONNECTED,
+                    active = TerminalInfo(
+                        id = "t1",
+                        title = "bash",
+                        shell = "/bin/bash",
+                        cwd = "/home/user/var/work/dsh-android",
+                        cols = 80,
+                        rows = 24,
+                        state = TerminalState.RUNNING,
+                    ),
+                    writable = true,
+                ),
+                emulator = emulator,
+                screenTitle = "",
+                cellSize = TerminalCellSize.of(TerminalCellSize.DEFAULT_FONT_SP),
+                modifier = Modifier.fillMaxSize(),
+                onCellSize = {},
+                onNew = {},
+                onClose = {},
+                onRetry = {},
+                onSelect = {},
+                onSeat = {},
+                onWrite = {},
+                onResize = { _, _ -> },
             )
         }
     }
