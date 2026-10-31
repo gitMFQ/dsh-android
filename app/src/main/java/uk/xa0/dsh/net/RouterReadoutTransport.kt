@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import uk.xa0.dsh.model.ROUTER_READOUT_NO_HTTP
-import uk.xa0.dsh.model.ROUTER_READOUT_TERMINAL_ID
 import uk.xa0.dsh.model.ROUTER_READOUT_TIMEOUT_MS
 import uk.xa0.dsh.model.RouterModelStatus
 import uk.xa0.dsh.model.RouterProbeResult
@@ -29,6 +28,7 @@ import uk.xa0.dsh.model.routerReadoutSyncMarker
 import uk.xa0.dsh.model.routerRootOf
 import uk.xa0.dsh.model.slotsContextSizeOf
 import uk.xa0.dsh.model.slotsOf
+import uk.xa0.dsh.term.ROUTER_READOUT_TERMINAL_ID
 import uk.xa0.dsh.term.TerminalInfo
 import uk.xa0.dsh.term.readoutTerminalToAdopt
 import uk.xa0.dsh.term.readoutTerminalsToRetire
@@ -65,7 +65,7 @@ sealed interface RouterReadoutAttempt {
  * terminal per session, under the reserved id [ROUTER_READOUT_TERMINAL_ID], and
  * `DshViewModel.startTerminal` filters that id out of everything the Shell tab lists
  * or adopts — so neither can take the other's seat. That filter is the entire cost of
- * the readout being invisible; see [uk.xa0.dsh.model.isRouterReadoutTerminal].
+ * the readout being invisible; see [uk.xa0.dsh.term.isRouterReadoutTerminal].
  *
  * ## One attachment, many reads
  *

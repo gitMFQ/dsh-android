@@ -9,14 +9,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import uk.xa0.dsh.model.ROUTER_READOUT_FRAME_FAILURE
 import uk.xa0.dsh.model.ROUTER_READOUT_MODELS_UNREADABLE
-import uk.xa0.dsh.model.ROUTER_READOUT_TERMINAL_ID
 import uk.xa0.dsh.model.RouterModelStatus
 import uk.xa0.dsh.model.RouterProbeResult
 import uk.xa0.dsh.model.RouterReadoutChunk
 import uk.xa0.dsh.model.RouterReadoutMarkers
 import uk.xa0.dsh.model.RouterSlotsReadout
 import uk.xa0.dsh.model.classifyReadout
-import uk.xa0.dsh.model.isRouterReadoutTerminal
 import uk.xa0.dsh.model.modelStatusesOf
 import uk.xa0.dsh.model.parseReadoutChunk
 import uk.xa0.dsh.model.parseSlotsChunk
@@ -29,8 +27,10 @@ import uk.xa0.dsh.model.routerRootOf
 import uk.xa0.dsh.model.slotsContextSizeOf
 import uk.xa0.dsh.model.slotsForReadout
 import uk.xa0.dsh.model.slotsOf
+import uk.xa0.dsh.term.ROUTER_READOUT_TERMINAL_ID
 import uk.xa0.dsh.term.TerminalInfo
 import uk.xa0.dsh.term.TerminalState
+import uk.xa0.dsh.term.isRouterReadoutTerminal
 import uk.xa0.dsh.term.readoutTerminalToAdopt
 import uk.xa0.dsh.term.readoutTerminalsToRetire
 

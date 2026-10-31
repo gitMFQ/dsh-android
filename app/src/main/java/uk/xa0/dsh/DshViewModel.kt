@@ -106,7 +106,6 @@ import uk.xa0.dsh.model.classifyRouterStatus
 import uk.xa0.dsh.model.routerStatusArgs
 import uk.xa0.dsh.model.routerTargetOf
 import uk.xa0.dsh.model.ROUTER_READOUT_NO_SESSION
-import uk.xa0.dsh.model.isRouterReadoutTerminal
 import uk.xa0.dsh.net.RouterReadoutAttempt
 import uk.xa0.dsh.net.RouterReadoutTransport
 import uk.xa0.dsh.model.parseLocalProviders
@@ -194,6 +193,7 @@ import uk.xa0.dsh.term.TerminalState
 import uk.xa0.dsh.term.hostShellCreateRequest
 import uk.xa0.dsh.term.hostShellIssueFact
 import uk.xa0.dsh.term.hostShellRoot
+import uk.xa0.dsh.term.isRouterReadoutTerminal
 import uk.xa0.dsh.ui.hostShellOwnerOf
 import uk.xa0.dsh.term.hostShellSessionName
 import uk.xa0.dsh.term.terminalIssueFact
