@@ -51,6 +51,7 @@
 | **本机可以跑 `:core:term` 的 186 个测试了**（1.2 起） | 纯 JVM 模块不碰 aapt2，**不需要任何本机 hack**：`bash build.sh :core:term:test` 直接出 `tests=186 failures=0`（约 4 分半）。`:core:model` 的 413 个仍跑不了（它是 Android library，`processDebugUnitTestResources` 挂在 aapt2）。这是往纯 JVM 拆的真收益，不只是模块漂亮。 |
 | **纯 JVM 模块不能依赖 Android library**（1.2 踩到） | 变体匹配直接失败，补 attribute 也救不回来。要么把依赖边拆掉（1.2 的做法），要么该模块就用 `com.android.library`。**判据是依赖闭包，不是源码里有没有 `import android`**。详见 research/13 §2.6。 |
 | **`kotlin("jvm")` 的版本只能写在根 build** | AGP 9 已把 Kotlin 放上 build classpath，模块里写版本会报 `already on the classpath with an unknown version`。根 `build.gradle.kts` 加 `apply false`，模块只写 `kotlin("jvm")`。 |
+| **`:core:term` 必须保持零依赖**（不变量） | 它是唯一能在本机跑完整测试的模块，前提是**纯 JVM + 依赖闭包里没有 Android 库**。任何让 `:core:model` / `:core:config` **反向**依赖 `:core:term` 的方案都会立刻破坏这条（1.2b 的「`DshConfig` 进 model」就是这种方案）。**方向只能是 term ← 别人，永远不是 term → 别人。** |
 
 ## 4. 仓库结构
 
@@ -111,8 +112,8 @@
 |---|---|---|---|
 | 1.0 ✅ | 宿主行类移入 `model/` | `model → root` 边 14 → 0 | 1116 绿（PR #4） |
 | 1.1 ✅ | 抽 `:core:model`（`com.android.library`） | 50 文件 + 43 个纯 JVM 测试（413 个 `@Test`）；4 个测试留 `:app`；2 个 `internal` 提权；4 处跨模块 smart cast | 独立绿 + 全仓仍 1116（PR #6，`app: 703` / `model: 413`） |
-| 1.2 ✅ | 抽 `:core:term`（**纯 JVM**，`kotlin("jvm")`） | 7 文件 + 10 个测试文件 / 186 个 `@Test`；0 个 `internal`；readout 的 id + 谓词从 `:core:model` 移入以切断依赖边 | 仍 1116（PR #7，`app: 517` / `model: 413` / `term: 186`） |
-| 1.2b | `AcceptedCert` + `DshConfig` 进 `:core:model` | 解 `net ⇄ data` 环 | 仍 1116 |
+| 1.2 ✅ | 抽 `:core:term`（**纯 JVM**，`kotlin("jvm")`，PR #7） | 7 文件 + 10 个测试文件 / 186 个 `@Test`；0 个 `internal`；readout 的 id + 谓词从 `:core:model` 移入以切断依赖边 | 仍 1116（PR #7，`app: 517` / `model: 413` / `term: 186`） |
+| 1.2b | 新建 **`:core:config`**（`com.android.library`） | ⚠️ **原计划「进 `:core:model`」已证伪**（`DshConfig` 闭包横跨 model+term+net，且会逼 `:core:model` 反向依赖纯 JVM 的 `:core:term`）。正解是独立模块：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`(除 `pinner()`) + `encode`/`decode`。详见 research/13 **§2.7 / §2.8** | 仍 1116 |
 | 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件 | 仍 1116 |
 | 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
 
@@ -122,7 +123,13 @@
 >
 > 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。第 2 条每加一个模块都要再写一遍（1.2 起还要加 `:core:term:test`）。
 
-> **1.2b 之前先读** [research/13-module-extraction.md](research/13-module-extraction.md) **§2.6**：那里有 1.2 踩到的新坑 —— 「源码是纯 JVM」**不等于**「能做成纯 JVM 模块」，判据是**依赖闭包里有没有 Android 模块**。`net/` 的闭包里有 `data.DshConfig`，所以 `:core:protocol` 这一步同样要先拆边。
+> **1.2b 之前必读** [research/13-module-extraction.md](research/13-module-extraction.md) **§2.7 + §2.8**：
+> 原文推荐的「`AcceptedCert` + `DshConfig` 进 `:core:model`」**已实测证伪**。三条阻塞：
+> `AcceptedCert` 的属性依赖 `CertPins` → okhttp；`DshConfig` 依赖 `:core:term`（会逼 model 反向依赖纯 JVM 模块）；
+> `encode`/`decode` 卡在 `CertTrust.companion object` 里。**正解是独立 `:core:config`。**
+>
+> 反复出现的判据（§2.6 / §2.8 共用）：**看依赖闭包，不看源码里有没有 `import android`。**
+> 「源码纯」是必要条件，不是充分条件。
 
 
 ### 7.2 阶段 2：外壳换装（1.5 周，对应 DESIGN-TOKENS 的 D2–D5）

@@ -14,6 +14,9 @@
 | 所以**顺序必须是 `:core:model` → `:core:term` → `:core:protocol`**，而不是 ROADMAP 里写的 1.1 先抽 `net/` | §3 |
 | 真正的成本不在文件搬运，在 **`internal` 可见性**（§2.2）和 **3 个 Robolectric 测试**（§2.4） | 共 4 处 `internal` 需要提权，3 个测试必须留在 `:app` |
 | 建议把 ROADMAP 的 1.1 / 1.2 顺序对调 | §3.0 |
+| **`:core:term` 可以是纯 JVM 模块**（源码无 Android），但**前提是拆掉它到 `:core:model` 的那一条边** | §2.6：`:core:model` 是 Android 库，纯 JVM 消费者变体匹配失败；M2 把 readout 的 id+谓词移入 term 后成立 |
+| **`:core:model` 接不住 `DshConfig` + `AcceptedCert`**，M2.5 应改为**独立 `:core:config`** | §2.7 / §2.8：`AcceptedCert → CertPins → okhttp`；`DshConfig → TerminalCellSize`（会逼 model 反向依赖纯 JVM 的 term） |
+| **判据统一为「依赖闭包」**：源码里有没有 `import android` 既不充分也不必要 | §2.6 / §2.8：两次都是源码纯、闭包不纯 |
 
 ## 1. 依赖实测
 
@@ -80,13 +83,17 @@ term/  HostShell TerminalCellSize TerminalEmulator TerminalInput TerminalKeys
        TerminalModel TerminalProtocol
 ```
 
-## 2. 五个真正的坑
+## 2. 八个真正的坑
 
 > **M1 已落地（PR #6，2026-10-31）**，实测数字：`tests=1116 failures=0`、
 > `screenshots=4`、`:app` 703 + `:core:model` 413。下文 §2.1–§2.4 的判断全部成立，
-> 但有 3 处与实测不符，已在正文就地更正；§2.5 是本次**新发现**的第五个坑。
+> 但有 3 处与实测不符，已在正文就地更正；§2.5 是 M1 发现的第五个坑。
+>
+> **M2 已落地（PR #7，2026-10-31）**，实测 `app: 517` / `model: 413` / `term: 186` = `tests=1116`。
+> §2.6 是 M2 发现的第六个坑（纯 JVM 不能消费 Android 库）；§2.7 是对 M2.5 原计划的证伪，
+> §2.8 是替代方案。**§2.7/§2.8 在 M2.5 开工前必须先读。**
 
-### 2.1 两个模块都得是 `com.android.library`
+### 2.1 `:core:model` 必须是 `com.android.library`（`:core:term` 后来证明可以纯 JVM，见 §2.6）
 
 `model/` 里有两处 Android / Compose 依赖，纯 JVM 模块编不过：
 
@@ -177,7 +184,6 @@ Kotlin 的 `internal` 是**模块级**可见性。文件一搬进新模块，原
 
 > **例外**：如果只是觉得 `namespace`（`uk.xa0.dsh.core.model`）与 `package`（`uk.xa0.dsh.model`）看着不一致，改 `namespace` 是**零成本**的（一行、不生成任何类）。但现状其实更有用 —— 它明确表达「本模块不产出 R/BuildConfig」，改了反而丢掉这层信息。
 
-
 ### 2.4 测试迁移：47 + 8 个测试文件，4 个必须留下
 
 `app/src/test/java/uk/xa0/dsh/model/`（47 文件）与 `.../net/`（8 文件）里，有 3 个跑 Robolectric，**不能**跟着源码进 Android library 的 `test` 源集（那会要求 library 也配 Robolectric + Compose 测试依赖，把简单模块拖重）：
@@ -266,6 +272,108 @@ plugins { kotlin("jvm") version "2.4.21" }
 > 判据记下来：**「源码是纯 JVM」不等于「能做成纯 JVM 模块」**。真正的判据是
 > 「它的依赖闭包里有没有 Android 模块」。抽 `:core:protocol` 时还会再遇到。
 
+### 2.7 `DshConfig` 装不进 `:core:model`：M2.5 的证伪（**新**）
+
+原文认为 `DshConfig` 依赖面很小（`model.DrawerGrouping` + `net.AcceptedCert` + `term.TerminalCellSize`），所以把它和 `AcceptedCert` 一起搬进 `:core:model` 就解环了。实际逐字段查下来，**它有三条独立的外部边，而且其中两条会把 `:core:model` 拽向它不该去的方向**。
+
+**`DshConfig` 的真实依赖（`data/ConfigStore.kt:21-139`）**
+
+| 字段 | 类型 | 来自 | 含义 |
+|---|---|---|---|
+| `:58` | `DrawerGrouping` | `model` ✅ | 已经是 `:core:model` 的 |
+| `:38` | `ThemeMode` | **`data` 自己**（`ConfigStore.kt:141`） | 与 `DshConfig` 同文件，一起搬即可 |
+| `:51` | `BusyEnter` | **`data` 自己**（`ConfigStore.kt:149`） | 同上 |
+| `:123` | `TerminalCellSize` | **`term`** ⚠️ | 现在是 `:core:term` |
+| `:133` | `List<AcceptedCert>` | **`net`** ⚠️ | 下一步才是 `:core:protocol` |
+
+**`AcceptedCert` 的真实依赖（`net/CertTrust.kt:24-35`）**
+
+它自己不难，难在它的属性：
+
+```kotlin
+data class AcceptedCert(
+    val host: String,
+    val acceptedAt: Long,
+    val certificate: X509Certificate,
+) {
+    val pin: String get() = CertPins.pinOf(certificate)   // CertTrust.kt:30
+    ...
+}
+```
+
+`pin` 调用 `CertPins.pinOf`（`net/CertPins.kt:53`）。所以 `AcceptedCert` 搬进 `:core:model` 就**必须**把 `CertPins` 一起搬。而 `CertPins` 里有一个函数碰 okhttp：
+
+| `CertPins` 成员 | 依赖 | 能否留在 `:core:model` |
+|---|---|---|
+| `pinOf(...)` ×3、`sha256`、`display`、`isWellFormed`、`decodeOrNull` | 纯 JDK（`java.security`/`Base64`） | ✅ 可以 |
+| `pinner(...)` — `CertPins.kt:106` | **`okhttp3.CertificatePinner`** | ⚠️ 要 okhttp |
+| `isPinFailure(...)` — `CertPins.kt:123` | 纯 JDK（只读 `Throwable.message`/`cause`） | ✅ 可以 |
+
+也就是说 **`CertPins` 里 okhttp 的接触面只有一个函数 `pinner()`（106–113 行）**，`isPinFailure` 虽然注释里讲 OkHttp，实现上只遍历 cause 链，不 import。
+
+**三条阻塞链**
+
+1. **`DshConfig → AcceptedCert → CertPins → okhttp`**：要么 `:core:model` 加 okhttp 依赖，要么把 `pinner()` 劈出去。
+2. **`DshConfig → TerminalCellSize → :core:term`**：`:core:model` 若接 `DshConfig`，就要反过来依赖 `:core:term` —— **而 `:core:term` 是为了保持纯 JVM 才刚把依赖清零的**（§2.6）。方向完全反了，且会让 M2 的收益全部作废。
+3. **`DshConfig → data`（`ThemeMode` / `BusyEnter`）**：这两条同文件、可直接搬，不构成阻塞，但说明 `DshConfig` 是「配置横切概念」，本来就不属于任何叶子模块。
+
+第三条之外，前两条都指向同一个结论：**`DshConfig` 是横切点，`AcceptedCert`/`CertPins` 是证书概念，`TerminalCellSize` 是终端概念。把它们塞进 `:core:model` 会让 model 从「最内层」变成「什么都依赖」。**
+
+### 2.8 正解：独立 `:core:config`（M2.5 改写）
+
+依赖方向应当是：
+
+```
+        :core:model        (最内层，无出边)
+            ↑
+        :core:term         (纯 JVM，无出边 —— 必须保住，见 §2.6)
+            ↑
+        :core:config       ← DshConfig / ThemeMode / BusyEnter / AcceptedCert / CertPins(JDK 部分)
+            ↑
+        :core:protocol     ← net/，okhttp / CertTrust / CertPins.pinner
+            ↑
+           :app
+```
+
+`:core:config` 依赖 `:core:model` + `:core:term`，**不**依赖 `:core:protocol`。
+
+> **必须是 `com.android.library`，不能纯 JVM。** `DshConfig` 与 `AcceptedCert` 两个类本体都没有
+> `import android`，很容易误判成纯 JVM —— 但它的闭包里有 `:core:model`（Android 库），
+> 纯 JVM 消费者会立刻撞上 §2.6 的变体匹配失败。**这是 §2.6 判据的第二次应用**：
+> 看闭包，不看源码。`:core:term` 之所以能纯 JVM，是因为它把唯一那条边拆掉了；
+> `:core:config` 拆不掉（`DshConfig` 真的需要 `DrawerGrouping`，而它在 model 里）。
+
+它要装：
+
+| 内容 | 出处 | 备注 |
+|---|---|---|
+| `DshConfig` | `data/ConfigStore.kt:21-139` | 连同 `isConfigured` / `usesManualCookie` 两个派生属性 |
+| `ThemeMode` / `BusyEnter` | `data/ConfigStore.kt:141,149` | 与 `DshConfig` 同文件，天然一起走 |
+| `AcceptedCert` | `net/CertTrust.kt:24-35` | 只依赖 `X509Certificate`（JDK） |
+| `CertPins`（除 `pinner()`） | `net/CertPins.kt:53-...` | 纯 JDK 部分 |
+| `CertTrust.encode` / `decode` | `net/CertTrust.kt:228,233` | **在 `CertTrust.companion object` 里**（`:219`），见下方警告 |
+
+**`encode` / `decode` 不是免费的**：它们虽然只用 JDK（`Base64` + `CertificateFactory`），但声明在
+`CertTrust.companion object` 内，而 `CertTrust` 本体要留在 `:core:protocol`（它用 `KeyStore`/`TrustManager`/OkHttp 的信任管理）。
+两个选择：
+
+1. **（推荐）把 `encode`/`decode` 搬到 `:core:config` 的顶层**（例如 `AcceptedCerts.kt`），`CertTrust` 的 companion 改为转调。
+   `ConfigStore.kt:212,240` 的两个调用点改成新名字。这是纯搬运，行为不变。
+2. 让 `:core:config` 依赖 `:core:protocol` 只为拿这两个函数 —— 把上面的箭头方向整个反过来，**不可接受**。
+
+**`pinner()` 留下的两种处理**（M3 时决定，二选一）：
+
+1. **留在 `:core:protocol`** 作为一个扩展/工具函数（`fun CertPins.pinner(...)` 或搬成 `CertPinning.pinner(...)`）。调用点只有 `DshClient.kt:211` 一处，成本极低。**推荐**。
+2. 让 `:core:config` 也带 okhttp —— 不推荐，okhttp 是协议层的依赖，配置层不该有。
+
+**`ConfigStore` 本体留在 `:app`**：它直接 import `android.content.Context` / `SharedPreferences` / `androidx.security.crypto.*`（`ConfigStore.kt:3-5`），是真正的 Android 存储层，与它的数据类分开是对的。
+
+> **判据复用（§2.6 的推广）**：判断一个类能不能进某模块，看的是**依赖闭包**，不是「它看起来属于这个概念」。
+> `DshConfig` 听名字像 model，实际闭包横跨 model + term + net。
+
+> **`:core:term` 零依赖是被保护的不变量**：任何一步如果让 `:core:model` / `:core:config` 反过来依赖 `:core:term`，就立刻违反这一条 —— 因为 `:core:term` 是纯 JVM 模块，只能被 `:app` 依赖，不能反过来依赖 Android 库。**
+
+> **建议的序列（已按实测修正）**：M1 ✅ → M2 ✅ → **M2.5 新建 `:core:config`**（不动 M3 的 `net/`）→ M3 抽 `:core:protocol`（`pinner()` 留在此层）→ M4 `data/` 改为依赖 `:core:config`。**每一步都不再有临时妥协。**
 
 ## 3. 建议的 PR 序列（单变量，每步一个 CI 门）
 
@@ -283,9 +391,10 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 |---|---|---|---|
 | **M0** ✅ | #4 `split-model-rows` | 5 个宿主行类移入 `model/`，`model → root` 边清零 | `tests=1116 failures=0` |
 | **M1** ✅ | #6 `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），`model/` 50 文件 + **43** 个纯 JVM 测试（413 个 `@Test`）搬进去；`:app` 加 `implementation(project(":core:model"))`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权（§2.2）；**4 处跨模块 smart cast 修复**（§2.5）；`verify.yml` + `build.yml` 显式加 `:core:model:testDebugUnitTest` 并把 glob 改成 `**/build/test-results/**` | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413` |
-| **M2** | `core-term-module` | 新建 `:core:term`（**纯 JVM**，`kotlin("jvm")`，版本声明在根 build），搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入（§2.6），`term → model` 边清零；`:app` 3 处 import 改指向 | `tests=1116 failures=0`（预期 `app: 517` / `model: 413` / `term: 186`）+ `screenshots=4` |
-| **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + okhttp；**此时 `DshConfig` 的引用仍在 `:app` 侧**（见下）。`hostOf` 在这里提权 | `tests=1116 failures=0` |
-| **M4** | `break-net-data-cycle` | 把 `DshConfig` 从 `data/ConfigStore.kt:21` 移到 `:core:protocol`（或新建 `:core:config`），消除 `net → data` 的环 | `tests=1116 failures=0` |
+| **M2** ✅ | #7 `core-term-module` | 新建 `:core:term`（**纯 JVM**，`kotlin("jvm")`，版本声明在根 build），搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入（§2.6），`term → model` 边清零；`:app` 3 处 import 改指向 | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186` |
+| **M2.5** | `core-config-module` | 新建 **`:core:config`**（**`com.android.library`**，理由见 §2.8：闭包含 `:core:model`，做不了纯 JVM），搬 `DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ `encode`/`decode`（提到顶层）。**不动 `net/`、不动 `data/` 的存储层**。解 `net ⇄ data` 环 | `tests=1116 failures=0` |
+| **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + **`:core:config`** + okhttp。`CertPins.pinner()` 留在此层（调用点仅 `DshClient.kt:211`）。`hostOf` 在这里提权 | `tests=1116 failures=0` |
+| **M4** | `data-depends-on-config` | `data/` 的 `ConfigStore` 改为 import `:core:config` 的类型；`net → data` 环彻底消失 | `tests=1116 failures=0` |
 
 > **M2 起每步必做的三件事**（M1 实证）：
 > 1. 新模块的测试任务要在 `verify.yml` **和** `build.yml` 里**显式写名字**（依赖模块 ≠ 跑它的测试）；
@@ -319,15 +428,9 @@ M1 之后重新查过 `term/`，比文档原先假设的干净得多：
 >
 > M2 实际做法见 §3.1.2。
 
+**M3 的临时妥协（已作废，见下）**：`net/DshClient.kt:25` 需要 `DshConfig`。M3 时 `DshConfig` 还在 `:app`，而 `:app` 依赖 `:core:protocol` —— 会成环。原文给了三个选项，其中第 2 条（`AcceptedCert` + `DshConfig` 进 `:core:model`）被标为「**这个顺序是干净的**」并推荐为 M2.5。
 
-
-**M3 的临时妥协**：`net/DshClient.kt:25` 需要 `DshConfig`。M3 时 `DshConfig` 还在 `:app`，而 `:app` 依赖 `:core:protocol` —— 会成环。三个选项：
-
-1. **（推荐）** 把 M4 提前，在 M3 之前先把 `DshConfig` 移进 `:core:model`（它只依赖 `model.DrawerGrouping` + `net.AcceptedCert` + `term.TerminalCellSize`，拆分后 `AcceptedCert` 在 `:core:protocol`……仍然成环）。
-2. 先把 `AcceptedCert`（`net/CertTrust.kt:24`）单独提到 `:core:model`，`DshConfig` 随之进 `:core:model`，M3 再搬 `net/`。**这个顺序是干净的**。
-3. 在 `:core:protocol` 里定义一个最小接口 `DshConfigSource`，`DshClient` 只依赖接口，实现留在 `:app`。**不推荐**：这是为拆分而拆分的行为改动。
-
-> **建议把序列改成 M1 → M2 → **M2.5**（`AcceptedCert` + `DshConfig` 进 `:core:model`）→ M3 → M4（`data/` 改为依赖新模块，环自然消失）**。这样每一步都没有临时妥协。
+> **实测证伪（2026-10-31，M2 之后）**：**这个顺序不干净**，`:core:model` 接不住 `AcceptedCert` + `DshConfig`。逐条证据见 §2.7。正确的做法是**独立出 `:core:config`**，而不是塞进 `:core:model`。
 
 #### 3.1.2 M2 实际怎么做的（2026-10-31）
 
@@ -389,6 +492,7 @@ bash build.sh :core:term:test
 |---|---|---|
 | 1.1 先抽 `:core:protocol`（`net/`） | 先抽 `:core:model` | `net → data` 成环，`model` 已自包含（§1.1、§1.2） |
 | 1.2 再抽 `:core:model` | 第二 | 同上 |
-| 未提 `:core:term` | 增加 M2 | `net/` 依赖 `term/` 的 5 个类型 + 2 个函数（§1.2） |
-| 「1 周」 | 5 个 PR × 1 轮 CI，**但每步都要重跑全量 1116 测试** | 纯搬运，风险低；真正的变量是 `internal` 提权（3 处） |
+| 未提 `:core:term` | 增加 M2 ✅ | `net/` 依赖 `term/` 的 5 个类型 + 2 个函数（§1.2） |
+| 未提 `:core:config` | 增加 M2.5 | `DshConfig` 闭包横跨 model+term+net，塞进 `:core:model` 会把最内层变成「什么都依赖」（§2.7、§2.8） |
+| 「1 周」 | 6 个 PR × 1 轮 CI，**但每步都要重跑全量 1116 测试** | 纯搬运，风险低；真正的变量是 `internal` 提权（2 处）与依赖边方向 |
 | 验收「独立编译 + 单测绿」 | 追加「CI 汇总的测试数仍为 1116」 | 防止静默跳过（§3.2） |
