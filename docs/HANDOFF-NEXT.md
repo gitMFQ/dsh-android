@@ -1,11 +1,13 @@
 # 交接文档（给新会话）
 
-> 写于 2026-10-31。上一个会话完成了「接管 + 工具链全量升级」，上下文用掉 62%，在此交接。
+> 写于 2026-10-31（当日第二版）。第一版交接了「接管 + 工具链全量升级」；本版追加了结构拆分的第一步与截图基线。
 > **新会话请先读本文件，再按需查其它文档。**
 
 ## 1. 一句话现状
 
-仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1116 个测试全绿**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。下一步是结构拆分与换皮。
+仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1116 个功能测试全绿 + 4 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
+
+**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4）。下一步是阶段 1 的模块抽取。
 
 ## 2. 已完成（L1–L4，全部合入 master）
 
@@ -15,8 +17,22 @@
 | **L2** | AGP 8.5.2 → **8.13.2**；Gradle 8.7 → **8.13**；compileSdk/buildTools/targetSdk → **36** | 1116 绿 |
 | **L3** | AGP → **9.3.1**；Gradle → **9.5.0**；compileSdk → **37**；Compose BOM → **2026.09.00**；**移除 `org.jetbrains.kotlin.android`**（AGP 9 内置 Kotlin） | 1116 绿 |
 | **L4** | 接入 miuix **0.9.4**（ui / preference / icons / squircle，**不含 blur**） | 1116 绿 + APK |
+| **1.0** | 5 个宿主行类（`SessionItem`/`WorkspaceItem`/`JobItem`/`QueueAttachment`/`QueuedMessage`）从 `DshViewModel.kt` 移入 `model/`；`model → 根包` 的 import **14 → 0** | 1116 绿（PR #4） |
+| **1.5** | Roborazzi **1.77.0** + 4 张基线（About / Startup / 抽屉 / 抽屉空态），411×891 | `tests=1116` + `screenshots=4`（PR #5） |
 
 每个 PR 都是**单一变量**，失败时能立刻定位。这个方法论请延续。
+
+### 2.1 截图基线怎么用（新增，重要）
+
+| 想知道 | 做法 |
+|---|---|
+| 换皮后有没有动到别的界面 | `verify.yml` 的 `Screenshot gate` 步骤会红；下载 `roborazzi-comparison` artifact 看 `*_compare.png` |
+| 基线该更新了 | 手动跑 `Screenshots` workflow（`workflow_dispatch`），下载 `roborazzi-baselines`，覆盖 `app/src/test/screenshots/` 后提交 |
+| 为什么不能在本机录 | aarch64 + 无可用 aapt2，`recordRoborazziDebug` 跑不了（§3 第一条） |
+
+**基线只手动录**。若改成 push 自动录，基线会跟着代码走，比对就变成「自己和自己比」，门禁等于没有。
+
+**两个数字别合并**：`tests=1116`（功能测试，每个 PR 的证据）与 `screenshots=4`（像素基线）。CI 分开打印，合并成 1120 会让「少跑一个测试」和「多一张基线」长得一模一样。
 
 ## 3. 关键约束（踩过的坑，别再踩）
 
@@ -65,23 +81,31 @@
 | 设计规范 | [DESIGN-TOKENS.md](DESIGN-TOKENS.md) |
 | 协议细节 | [research/01-protocol.md](research/01-protocol.md) |
 | API 清单 | [research/02-api-surface.md](research/02-api-surface.md) |
+| 模块拆分的可执行步骤 | [research/13-module-extraction.md](research/13-module-extraction.md) |
 | 多语言 | [I18N.md](I18N.md) |
 | 插件化（1.0 后） | [PLUGIN-PLAN.md](PLUGIN-PLAN.md) / [BLOCK-SCHEMA.md](BLOCK-SCHEMA.md) |
 | 全部索引 | [README.md](README.md) |
 
 ## 7. 下一步（建议顺序）
 
-### 7.0 先做：Roborazzi 截图测试（强烈建议）
+### 7.0 ✅ 已做：Roborazzi 截图测试
 
-阶段 2 要改 `ChatScreen.kt`（**3267 行**），没有截图基线等于盲改。先花 2–3 天接入 Roborazzi，对现有主要界面出基线图。**这是换皮的安全网。**
+见 §2.1。4 张基线已在 master，`verify.yml` 已把它做成门禁。**不需要再做。**
 
-### 7.1 阶段 1：结构拆分（1 周）
+### 7.1 阶段 1：结构拆分（**顺序已修正**）
 
-| 任务 | 内容 | 验收 |
-|---|---|---|
-| 1.1 | 抽 `:core:protocol`（`net/`，~4000 行纯 Kotlin） | 独立编译 + net 单测绿 |
-| 1.2 | 抽 `:core:model`（`model/`，47 个单测） | 47 个单测绿 |
-| 1.3 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
+⚠️ **原文写的「1.1 先抽 `net/`」执行不了**：`net → data` 成环。完整证据与可执行步骤见 [research/13-module-extraction.md](research/13-module-extraction.md)。正确顺序：
+
+| # | 任务 | 内容 | 验收 |
+|---|---|---|---|
+| 1.0 ✅ | 宿主行类移入 `model/` | `model → root` 边 14 → 0 | 1116 绿（PR #4） |
+| 1.1 | 抽 `:core:model`（**必须 `com.android.library`**） | 50 文件 + 45 个纯 JVM 测试；3 个 Robolectric 测试留 `:app`；3 个 `internal` 提权 | 独立绿 + 全仓仍 1116 |
+| 1.2 | 抽 `:core:term`（`term/` 只依赖 `:core:model`） | 7 文件 | 仍 1116 |
+| 1.2b | `AcceptedCert` + `DshConfig` 进 `:core:model` | 解 `net ⇄ data` 环 | 仍 1116 |
+| 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件 | 仍 1116 |
+| 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
+
+> **抽模块时必改一处**：`verify.yml` 的汇总只扫 `app/build/test-results/**`，测试搬进新模块就会**从统计里消失而 CI 照样绿**。同一 PR 里把 glob 改成 `**/test-results/**`，并贴出前后数字。
 
 ### 7.2 阶段 2：外壳换装（1.5 周，对应 DESIGN-TOKENS 的 D2–D5）
 
@@ -89,8 +113,10 @@
 
 ## 8. 给新会话的提醒
 
-- **别重新调研**：`docs/research/` 有 12 份带 `path:line` 证据的文档，结论都在里面。
+- **别重新调研**：`docs/research/` 有 13 份带 `path:line` 证据的文档，结论都在里面（新增 13 是模块拆分蓝图）。
 - **别信旧结论**：文档里凡是标注「已被 X 修正」的，以修正后的为准。
 - **单变量原则**：一次只改一个版本/一件事，CI 绿了再进下一步。
-- **本机只做静态分析**：任何「能不能跑」的判断都必须由 CI 回答。
+- **别用 `--tests` 去「打开」被 `excludeTestsMatching` 排除的测试类**：Gradle 的 filter 不能再包含已被另一个 filter 排除的东西，会报 `No tests found for given includes`。用 `-Pscreenshots` 这类 property 切换（PR #5 踩过）。
+- **本机现在能跑 Gradle 配置阶段**（`.toolchain/gradle-9.5.0` 已就位，`gradle :app:tasks` 约 1–2 分钟），改 build 脚本后可先本地验语法再花 CI 一轮。`local.properties` 指向 `/opt/android-sdk`。但 `compileDebugUnitTestKotlin` 仍因 `android-37.0` 的 SDK 元数据问题失败，**编译与测试仍只能走 CI**。
+- **本机只做静态分析**：任何「能不能跑」的判断都必须由 CI 回答（配置阶段例外，见上一条）。
 - **权限**：仓库是私有的，`gh` 已登录 `gitMFQ`。要公开需先处理 MPL-2.0 源码公开义务（转公开正好满足）。
