@@ -6,7 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uk.xa0.dsh.SessionItem
+import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.ui.indexSubagentRollups
 
 /**

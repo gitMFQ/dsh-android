@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.SessionItem
 
 /**
  * Orders a session list so that anything already in [held] keeps the place it had,

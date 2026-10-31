@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.WorkspaceItem
 
 /**
  * The arithmetic behind dragging a Workspace header into a new seat.

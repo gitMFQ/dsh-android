@@ -2,7 +2,6 @@ package uk.xa0.dsh.model
 
 import org.json.JSONArray
 import org.json.JSONObject
-import uk.xa0.dsh.JobItem
 
 /**
  * The wire and presentation rules behind background jobs, ported from the web's

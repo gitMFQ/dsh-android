@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.SessionItem
 
 /**
  * Every subagent at or below [parentId], including [parentId] itself.

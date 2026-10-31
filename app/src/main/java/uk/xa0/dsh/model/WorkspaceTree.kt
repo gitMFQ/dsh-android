@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.WorkspaceItem
 
 /**
  * The drawer's three browsing modes, in the web's own order and vocabulary.

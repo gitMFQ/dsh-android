@@ -1942,7 +1942,7 @@ private fun LineageChip(rollup: SubagentRollup, onClick: () -> Unit) {
 }
 
 /** One row of the lineage tree: the subagent, indented by its depth. */
-private data class LineageRow(val session: uk.xa0.dsh.SessionItem, val depth: Int)
+private data class LineageRow(val session: uk.xa0.dsh.model.SessionItem, val depth: Int)
 
 /**
  * Flattens [parentId]'s subagent descendants depth-first, so the sheet can render
@@ -1952,7 +1952,7 @@ private data class LineageRow(val session: uk.xa0.dsh.SessionItem, val depth: In
  * otherwise be unbounded.
  */
 private fun flattenLineage(
-    sessions: List<uk.xa0.dsh.SessionItem>,
+    sessions: List<uk.xa0.dsh.model.SessionItem>,
     parentId: String,
     maxDepth: Int = 6,
 ): List<LineageRow> {
@@ -1980,7 +1980,7 @@ private fun flattenLineage(
 @Composable
 private fun LineageSheet(
     rootId: String,
-    sessions: List<uk.xa0.dsh.SessionItem>,
+    sessions: List<uk.xa0.dsh.model.SessionItem>,
     rollups: Map<String, SubagentRollup>,
     onOpen: (String) -> Unit,
 ) {
@@ -2025,7 +2025,7 @@ private fun LineageSheet(
 
 @Composable
 private fun LineageSheetRow(
-    session: uk.xa0.dsh.SessionItem,
+    session: uk.xa0.dsh.model.SessionItem,
     depth: Int,
     rollup: SubagentRollup?,
     onClick: () -> Unit,
@@ -2090,7 +2090,7 @@ private fun ChatHeader(
     title: String,
     cwd: String?,
     onMenu: () -> Unit,
-    jobs: List<uk.xa0.dsh.JobItem> = emptyList(),
+    jobs: List<uk.xa0.dsh.model.JobItem> = emptyList(),
     jobsFinishedUnseen: Boolean = false,
     onJobs: () -> Unit = {},
     view: ChatView = ChatView.CHAT,

@@ -1,6 +1,6 @@
 package uk.xa0.dsh.ui
 
-import uk.xa0.dsh.SessionItem
+import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.SubagentCatalog
 
 /**

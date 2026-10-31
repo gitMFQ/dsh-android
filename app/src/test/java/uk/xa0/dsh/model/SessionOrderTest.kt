@@ -2,7 +2,7 @@ package uk.xa0.dsh.model
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import uk.xa0.dsh.SessionItem
+import uk.xa0.dsh.model.SessionItem
 
 /**
  * Holding a list's order still while somebody is reading it — the rule behind the

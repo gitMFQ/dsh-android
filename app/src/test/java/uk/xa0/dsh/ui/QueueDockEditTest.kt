@@ -18,7 +18,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import uk.xa0.dsh.QueuedMessage
+import uk.xa0.dsh.model.QueuedMessage
 import uk.xa0.dsh.model.QUEUE_PREVIEW_CHARS
 import uk.xa0.dsh.model.inboxQueueItems
 import uk.xa0.dsh.model.parseQueueItems

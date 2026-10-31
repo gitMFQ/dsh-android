@@ -14,7 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import uk.xa0.dsh.JobItem
+import uk.xa0.dsh.model.JobItem
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.JobObservation
 import uk.xa0.dsh.model.JobOutput

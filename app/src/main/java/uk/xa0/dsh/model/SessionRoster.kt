@@ -2,7 +2,6 @@ package uk.xa0.dsh.model
 
 import org.json.JSONArray
 import org.json.JSONObject
-import uk.xa0.dsh.SessionItem
 
 /**
  * The roster's two membership operations, as pure list folds.

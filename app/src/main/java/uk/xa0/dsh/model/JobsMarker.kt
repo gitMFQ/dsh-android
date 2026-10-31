@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.JobItem
 
 /**
  * Pure rules behind the background-jobs seat's green finished marker.

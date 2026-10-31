@@ -9,7 +9,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import uk.xa0.dsh.SessionItem
+import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.WorkspaceListPhase
 import uk.xa0.dsh.model.sessionListErrorNote

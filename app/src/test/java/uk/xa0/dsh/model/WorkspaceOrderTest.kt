@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uk.xa0.dsh.WorkspaceItem
+import uk.xa0.dsh.model.WorkspaceItem
 
 /**
  * The rules behind the Workspace row's explicit move actions.

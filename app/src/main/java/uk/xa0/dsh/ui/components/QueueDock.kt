@@ -76,8 +76,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import uk.xa0.dsh.QueueAttachment
-import uk.xa0.dsh.QueuedMessage
+import uk.xa0.dsh.model.QueueAttachment
+import uk.xa0.dsh.model.QueuedMessage
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing

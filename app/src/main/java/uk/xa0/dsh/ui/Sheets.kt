@@ -51,8 +51,8 @@ import uk.xa0.dsh.ContextBreakdown
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.ModelOption
 import uk.xa0.dsh.PermissionOption
-import uk.xa0.dsh.SessionItem
-import uk.xa0.dsh.WorkspaceItem
+import uk.xa0.dsh.model.SessionItem
+import uk.xa0.dsh.model.WorkspaceItem
 import uk.xa0.dsh.model.ConnectionRestart
 import uk.xa0.dsh.model.HostSettings
 import uk.xa0.dsh.model.HostVersion
