@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -26,6 +27,7 @@ import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.markdown.LocalImageBytes
 import uk.xa0.dsh.ui.theme.DshTheme
+import uk.xa0.dsh.ui.theme.WindowBackground
 
 import android.net.Uri
 
@@ -60,10 +62,20 @@ class MainActivity : ComponentActivity() {
         consume(intent)
         maybeAskForNotifications()
         reserveLeftEdgeForDrawer()
+        paintWindowForStoredAppearance()
 
         setContent {
             val vm: DshViewModel = viewModel()
             val ui by vm.ui.collectAsStateWithLifecycle()
+
+            // The window behind Compose is painted once above and again here, so an
+            // appearance change — or the system flipping light/dark under "follow the
+            // system" — repaints the frame before the next first frame of a screen.
+            // Cheap and rare: it runs when the two inputs change, not per frame.
+            val systemDark = isSystemInDarkTheme()
+            LaunchedEffect(ui.themeMode, systemDark) {
+                WindowBackground.apply(this@MainActivity, ui.themeMode, systemDark)
+            }
 
             LaunchedEffect(provisioning.value) {
                 provisioning.value?.let { request ->
@@ -158,6 +170,22 @@ class MainActivity : ComponentActivity() {
             }
             }
         }
+    }
+
+    /**
+     * Paints the window in the appearance the reader chose, before Compose exists.
+     *
+     * `android:windowBackground` is one static colour and the app has seven
+     * appearances, so the resource can only be a fallback. The stored appearance is
+     * read here rather than from the view model because the view model is created
+     * inside `setContent` — by which time the window has already been painted once
+     * with the fallback, which is exactly the flash this removes. `ConfigStore`
+     * remembers the string, so this does not open the encrypted preferences on the
+     * main thread to re-read a value already read in `Application.onCreate`.
+     */
+    private fun paintWindowForStoredAppearance() {
+        val store = (application as? DshApplication)?.configStore ?: return
+        WindowBackground.apply(this, store.themeMode)
     }
 
     /**

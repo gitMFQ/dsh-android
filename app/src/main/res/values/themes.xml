@@ -2,8 +2,14 @@
 <resources>
     <!--
       Deliberately not an AppCompat/Material XML theme: all real theming is done in
-      Compose (see ui/theme/Theme.kt). This only needs to give the window a sane
+      Compose (see ui/theme/DshTheme.kt). This only needs to give the window a sane
       background before the first frame and drop the system action bar.
+
+      The background here is a *fallback*, not the decision. It cannot follow the
+      seven appearances — an XML resource is one value — so `MainActivity` repaints
+      the window from the resolved palette before Compose runs; see
+      `ui/theme/WindowBackground.kt`. The colour below is the dark palette's `bgBase`,
+      which is the case on screen longest.
     -->
     <style name="Theme.DSH" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/dsh_window_bg</item>

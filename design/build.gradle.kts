@@ -67,4 +67,9 @@ dependencies {
     // `KsuTokens.Motion` names spring/tween specs, whose types appear in the public
     // API, so this is `api` for the same reason as the rest.
     api("androidx.compose.animation:animation-core")
+
+    // `dshPalette` is a pure function of its arguments, which is the point: the
+    // Android window has no composition to read a token from, so the decision the
+    // window and `DshTheme` share is testable on the JVM without one.
+    testImplementation("junit:junit:4.13.2")
 }

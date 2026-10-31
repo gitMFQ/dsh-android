@@ -33,6 +33,20 @@ class ConfigStore(context: Context) {
         )
     }
 
+    /**
+     * The last appearance read or written, so a window painted before composition can
+     * know it without opening the encrypted preferences itself.
+     *
+     * Only the appearance: it is the one setting the *window* needs before there is a
+     * view model to ask, and keeping it to one string means this cannot quietly become
+     * a second source of truth for the rest of the config. It is a cache, not a
+     * decision — [load] still reads the store, and a value written by another build
+     * cannot reach it without going through [save] or [load].
+     */
+    @Volatile
+    var themeMode: String = ThemeMode.SYSTEM
+        private set
+
     fun load(): DshConfig = DshConfig(
         baseUrl = prefs.getString(KEY_BASE_URL, "").orEmpty(),
         lanUrl = prefs.getString(KEY_LAN_URL, "").orEmpty(),
@@ -69,7 +83,7 @@ class ConfigStore(context: Context) {
             prefs.getFloat(KEY_TERMINAL_FONT_SP, TerminalCellSize.DEFAULT_FONT_SP),
         ).fontSp,
         acceptedCerts = decodeAcceptedCerts(prefs.getString(KEY_ACCEPTED_CERTS, null)),
-    )
+    ).also { themeMode = it.themeMode }
 
     fun save(config: DshConfig) {
         prefs.edit()
@@ -99,6 +113,7 @@ class ConfigStore(context: Context) {
             .putFloat(KEY_TERMINAL_FONT_SP, config.terminalFontSp)
             .putString(KEY_ACCEPTED_CERTS, encodeAcceptedCerts(config.acceptedCerts))
             .apply()
+        themeMode = config.themeMode
     }
 
     fun clearCredentials() {
