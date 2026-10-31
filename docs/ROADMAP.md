@@ -44,7 +44,13 @@
 | 1.2b | `AcceptedCert` + `DshConfig` 进 `:core:model`（解 `net ⇄ data` 环） | 模块 | 全仓仍 1116 | 1.2 |
 | 1.3 | 抽 `:core:protocol`（`net/`，依赖 `:core:model` + `:core:term` + okhttp） | 模块 | 全仓仍 1116 | 1.2b |
 | 1.4 | 新建 `:design`：`KsuTokens` + `KsuTheme`（7 档外观） | 模块 | 设置页可切并持久化 | 1.1 |
-| 1.5 | Roborazzi 截图测试接入（外壳 + 设置页先覆盖） | 测试 | CI 跑出基线图 | 1.4 |
+| **1.5** ✅ 完成 2026-10-31 | Roborazzi 截图测试接入：4 张基线（About / Startup / 抽屉 / 抽屉空态），411×891，`en-rUS-w411dp-h891dp` | 已合入 `master`（PR #5） | **CI `tests=1116` + `screenshots=4` 比对通过（连跑两轮一致）** | 1.0 |
+
+> **1.5 提前做了**：原计划排在 `:design` 之后，但它其实只依赖「界面能无头渲染」，与模块拆分无关。放在拆分之前，是因为阶段 2 的换皮风险才是它要拦的东西 —— 拆模块不改变像素。
+>
+> 记录方式：`.github/workflows/screenshots.yml`（手动触发）在 CI 录基线并上传 artifact；`verify.yml` 的 `Screenshot gate` 步骤用 `verifyRoborazziDebug -Pscreenshots` 比对。**本机 aarch64 无法录基线**，所以基线必须经 CI 产出。
+>
+> 两个数字分开报，别合并：`tests=1116`（功能测试，每个 PR 的证据）与 `screenshots=4`（像素基线）。合成 1120 会让「少跑了一个测试」和「多了一个基线」看起来一样。
 
 > **验收里「仍 1116」不是形式**：`verify.yml` 现在只扫 `app/build/test-results/**`，测试一搬进新模块就会**从统计里消失而 CI 照样绿**。抽模块的 PR 必须把 glob 同步改成 `**/test-results/**`，并贴出前后数字。
 
