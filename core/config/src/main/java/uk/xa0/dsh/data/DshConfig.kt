@@ -28,7 +28,29 @@ data class DshConfig(
     val username: String = "",
     val password: String = "",
     val manualCookie: String = "",
+    /**
+     * The appearance this *device* draws in — the one value the theme reads.
+     *
+     * Separate from [hostThemeMode] because the two answer different questions. This
+     * one is a property of the phone: whether its panel is OLED (so black is worth
+     * having), and what its wallpaper looks like (so Monet has something to follow).
+     * The host cannot know either, and its settings schema has no word for them.
+     */
     val themeMode: String = ThemeMode.SYSTEM,
+    /**
+     * The host's own `ui-theme.preference`, mirrored so the next session and the web
+     * UI see the same choice.
+     *
+     * Kept apart from [themeMode] since the appearance list grew: the host's schema
+     * offers light/dark/system, and a device-only choice such as AMOLED has no
+     * representation to send it. Writing the host value back into [themeMode] would
+     * therefore silently reset an appearance the host cannot express — which is
+     * exactly what happened when the two shared one field.
+     *
+     * Blank until a host read supplies it; the settings row then shows it, and the
+     * appearance row shows [themeMode].
+     */
+    val hostThemeMode: String = "",
     /** Agent preset used for newly created sessions; blank means "host default". */
     val agentPreset: String = "",
     /**
@@ -131,11 +153,73 @@ data class DshConfig(
     val usesManualCookie: Boolean get() = manualCookie.isNotBlank()
 }
 
+/**
+ * The appearance the reader chose.
+ *
+ * Three of these predate this app's own look and match the web client's cube
+ * (Light / Dark / System). The rest are the phase-2 appearances from
+ * `docs/DESIGN-TOKENS.md` §4: AMOLED, and the three Monet entries that follow the
+ * wallpaper's colours on API 31+.
+ *
+ * They are stored as **strings in the same preference**, not as an enum, for the
+ * reason the drawer's Group mode is: the value has to survive a downgrade and a
+ * re-read of a document written by an older build. [parse] is therefore total — an
+ * unknown id falls back to [SYSTEM] rather than throwing, because a stored value
+ * this build cannot read must not be able to stop the app from starting.
+ */
 object ThemeMode {
     const val SYSTEM = "system"
     const val DARK = "dark"
     const val LIGHT = "light"
-    val all = listOf(SYSTEM, DARK, LIGHT)
+
+    /** Pure black surfaces. The point is an OLED panel drawing no light at all. */
+    const val AMOLED = "amoled"
+
+    /** Wallpaper-derived colour, following the system's light/dark setting. */
+    const val MONET_SYSTEM = "monet-system"
+
+    /** Wallpaper-derived colour, forced light. */
+    const val MONET_LIGHT = "monet-light"
+
+    /** Wallpaper-derived colour, forced dark. */
+    const val MONET_DARK = "monet-dark"
+
+    /**
+     * Every appearance, in the order the settings sheet lists them.
+     *
+     * Ordered light-to-dark then the derived ones, because that is how the reader
+     * scans a list of appearances: the three fixed choices first, then the two that
+     * follow something else (the system, the wallpaper).
+     */
+    val all = listOf(LIGHT, DARK, SYSTEM, AMOLED, MONET_LIGHT, MONET_DARK, MONET_SYSTEM)
+
+    /** True when this mode asks for wallpaper colours, which only API 31+ can give. */
+    fun isMonet(mode: String): Boolean =
+        mode == MONET_SYSTEM || mode == MONET_LIGHT || mode == MONET_DARK
+
+    /** True when the mode wants a dark palette, whatever decides that. */
+    fun isDark(mode: String, systemDark: Boolean): Boolean = when (mode) {
+        DARK, AMOLED, MONET_DARK -> true
+        LIGHT, MONET_LIGHT -> false
+        // SYSTEM and MONET_SYSTEM — and anything unreadable, which [parse] has
+        // already folded into SYSTEM by the time this is called.
+        else -> systemDark
+    }
+
+    /**
+     * A stored id as a mode this build understands.
+     *
+     * Total on purpose: the settings screen hands this value straight to the theme,
+     * so an unrecognised id has to mean *something*. System-following is the least
+     * surprising answer — it is also what a fresh install gets.
+     */
+    fun parse(stored: String?): String =
+        // `stored in all` would be a `List.contains` call with a nullable argument.
+        // On the JDK that resolves through the erased `contains(Object)` and is safe,
+        // but one of the collection implementations behind `all` could legitimately
+        // throw on null, and this is reached from a cold start with whatever a
+        // preference file holds. Spelling the null test out removes the question.
+        if (stored != null && all.contains(stored)) stored else SYSTEM
 }
 
 /** Accepted `busyEnter` values, mirroring the host's `BUSY_ENTER_BEHAVIORS`. */

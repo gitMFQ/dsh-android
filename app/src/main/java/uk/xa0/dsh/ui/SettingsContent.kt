@@ -292,18 +292,25 @@ private fun GeneralSection(
         )
     }
 
-    // Appearance: the persisted preference, never the resolved theme — and the
-    // web's cube order is Light, Dark, System.
+    // Appearance is this device's, so it lists every mode the client can draw —
+    // including AMOLED and Monet, which the host's schema has no word for. The row
+    // therefore takes its choices from the client, not from `appearance.choices`,
+    // and always applies locally; a successful local change is still mirrored to
+    // the host for the modes it can express (see `onTheme`).
     val appearance = hostSettings?.field(GeneralSettings.THEME_NS, GeneralSettings.THEME_PREFERENCE_FIELD)
     val appearanceWrite = writerFor(appearance)
     SettingsGroup(title = "Appearance") {
         SettingsChoiceRow(
-            choices = appearance?.choices.orEmpty().ifEmpty { APPEARANCE_CHOICES },
-            // Before a successful read the app's own stored mode is the only
-            // value that exists, and the app really does apply it.
-            selected = appearance?.value ?: themeMode,
-            enabled = !wired || (appearanceWrite != null && saving != appearance?.key),
-            onSelect = appearanceWrite ?: if (wired) NO_WRITE else onTheme,
+            choices = APPEARANCE_CHOICES,
+            selected = themeMode,
+            enabled = true,
+            onSelect = { mode ->
+                onTheme(mode)
+                // Mirror only what the host can represent; sending "amoled" would be
+                // refused by a schema whose enum is light/dark/system, and the reader
+                // already sees the appearance they picked.
+                if (mode in HOST_THEME_MODES) appearanceWrite?.invoke(mode)
+            },
         )
     }
 
@@ -367,12 +374,26 @@ private fun GeneralSection(
     }
 }
 
-/** The web's cube order (figma 501:30015-30017), for a schema that advertised none. */
+/**
+ * Every appearance this client can draw, in the order the sheet lists them.
+ *
+ * Not the host's `choices`: the schema's enum is light/dark/system, and three of the
+ * seven shapes here (AMOLED, Monet light/dark/system) describe *this device* — an OLED
+ * panel and a wallpaper — which no host can know about. Taking the choices from the
+ * host would have hidden them on every wired connection.
+ */
 private val APPEARANCE_CHOICES = listOf(
     SettingsChoice(ThemeMode.LIGHT, "Light"),
     SettingsChoice(ThemeMode.DARK, "Dark"),
     SettingsChoice(ThemeMode.SYSTEM, "System"),
+    SettingsChoice(ThemeMode.AMOLED, "AMOLED"),
+    SettingsChoice(ThemeMode.MONET_LIGHT, "Monet light"),
+    SettingsChoice(ThemeMode.MONET_DARK, "Monet dark"),
+    SettingsChoice(ThemeMode.MONET_SYSTEM, "Monet"),
 )
+
+/** The appearances the host's `ui-theme.preference` enum can carry. */
+private val HOST_THEME_MODES = setOf(ThemeMode.LIGHT, ThemeMode.DARK, ThemeMode.SYSTEM)
 
 /** The web's own two busy-Enter options (`EnterBehaviorRow.tsx`), same fallback. */
 private val BUSY_ENTER_CHOICES = listOf(

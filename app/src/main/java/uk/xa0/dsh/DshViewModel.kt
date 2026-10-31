@@ -795,7 +795,16 @@ data class UiState(
      * "done" reminder dot. Purely client-side state, cleared by opening the row.
      */
     val completedSessionIds: Set<String> = emptySet(),
+    /** The appearance this device draws in — see `DshConfig.themeMode`. */
     val themeMode: String = ThemeMode.SYSTEM,
+    /**
+     * The host's `ui-theme.preference`, mirrored.
+     *
+     * Separate from [themeMode] since the appearance list grew past what the host's
+     * schema can express (AMOLED, Monet). The settings row shows this; the theme
+     * reads [themeMode].
+     */
+    val hostThemeMode: String = "",
     /** What send does while running: `queue` (web default) or `steer`. */
     val busyEnter: String = BusyEnter.QUEUE,
     /** Sidebar Group mode: sibling Workspaces, the Workspace Tree, or one flat list; persisted. */
@@ -3012,7 +3021,8 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val config = configStore.load()
         client.applyConfig(config)
         _ui.value = _ui.value.copy(
-            themeMode = config.themeMode,
+            themeMode = ThemeMode.parse(config.themeMode),
+            hostThemeMode = config.hostThemeMode,
             agentPreset = config.agentPreset,
             terminalFontSp = config.terminalFontSp,
             busyEnter = config.busyEnter,
@@ -3440,10 +3450,17 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * The appearance chosen on this device.
+     *
+     * Distinct from [adoptHostSetting]'s path: this one writes the phone's own
+     * appearance, which may be a mode the host has no word for (AMOLED, Monet).
+     */
     fun updateTheme(mode: String) {
-        val config = configStore.load().copy(themeMode = mode)
+        val parsed = ThemeMode.parse(mode)
+        val config = configStore.load().copy(themeMode = parsed)
         configStore.save(config)
-        _ui.value = _ui.value.copy(themeMode = mode)
+        _ui.value = _ui.value.copy(themeMode = parsed)
     }
 
     /**
@@ -3717,7 +3734,17 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun adoptHostSetting(ns: String, name: String, value: String) {
         when (ns to name) {
-            "ui-theme" to "preference" -> updateTheme(value)
+            // The *mirror*, not the appearance. The host's schema offers
+            // light/dark/system only, so treating its value as this device's
+            // appearance would erase AMOLED or Monet the moment the host answered —
+            // silently, because `ThemeMode.parse` folds an unknown id into SYSTEM.
+            // The reader's device appearance and the host's preference are two
+            // different facts and are stored separately; see `DshConfig`.
+            "ui-theme" to "preference" -> {
+                val config = configStore.load().copy(hostThemeMode = value)
+                configStore.save(config)
+                _ui.value = _ui.value.copy(hostThemeMode = value)
+            }
             "ui-conversation" to "busyEnter" -> updateBusyEnter(value)
             else -> Unit
         }

@@ -40,6 +40,7 @@ class ConfigStore(context: Context) {
         password = prefs.getString(KEY_PASSWORD, "").orEmpty(),
         manualCookie = prefs.getString(KEY_COOKIE, "").orEmpty(),
         themeMode = prefs.getString(KEY_THEME, ThemeMode.SYSTEM) ?: ThemeMode.SYSTEM,
+        hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),
         busyEnter = prefs.getString(KEY_BUSY_ENTER, BusyEnter.QUEUE) ?: BusyEnter.QUEUE,
         // The three-way mode is stored under the web's own ids. The old boolean key
@@ -78,6 +79,7 @@ class ConfigStore(context: Context) {
             .putString(KEY_PASSWORD, config.password)
             .putString(KEY_COOKIE, config.manualCookie)
             .putString(KEY_THEME, config.themeMode)
+            .putString(KEY_HOST_THEME, config.hostThemeMode)
             .putString(KEY_PRESET, config.agentPreset)
             .putString(KEY_BUSY_ENTER, config.busyEnter)
             .putString(KEY_DRAWER_GROUPING, config.drawerGrouping.stored)
@@ -110,6 +112,7 @@ class ConfigStore(context: Context) {
         const val KEY_PASSWORD = "password"
         const val KEY_COOKIE = "cookie"
         const val KEY_THEME = "theme"
+        const val KEY_HOST_THEME = "host_theme"
         const val KEY_PRESET = "preset"
         const val KEY_BUSY_ENTER = "busy_enter"
         const val KEY_DRAWER_GROUP = "drawer_group_by_workspace"

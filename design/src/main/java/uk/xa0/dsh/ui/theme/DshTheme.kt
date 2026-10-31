@@ -1,16 +1,20 @@
 package uk.xa0.dsh.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -316,6 +320,109 @@ object DshType {
 
 val LocalDshColors: ProvidableCompositionLocal<DshColors> = staticCompositionLocalOf { DarkColors }
 
+/**
+ * The AMOLED appearance: the dark palette with every surface taken to black.
+ *
+ * A transform rather than a third hand-written palette. `DshColors` has fifty colour
+ * fields, and the seven appearances multiply that into a table nobody can review; the
+ * modes differ in a handful of *rules*, not in three hundred independent choices, so
+ * they are expressed as the rules.
+ *
+ * Only the surfaces and borders move. Text, the accent and every semantic colour stay
+ * exactly as the dark palette has them — that is what keeps "AMOLED" an appearance
+ * rather than a second design. The borders are lifted slightly instead of darkened:
+ * on pure black the dark palette's translucent white strokes are the only thing
+ * separating a card from the void, and scaling them with the surface would erase the
+ * edges the layout depends on.
+ */
+private fun DshColors.toAmoled(): DshColors = copy(
+    isDark = true,
+    bgBase = Color.Black,
+    bgLayer1 = AMOLED_SURFACE,
+    bgLayer2 = AMOLED_LIFTED,
+    bgLayer3 = AMOLED_LIFTED,
+    sidebarFill = AMOLED_SURFACE,
+    inputMajor = AMOLED_SURFACE,
+    menu = AMOLED_LIFTED,
+    tip = AMOLED_LIFTED,
+    selector = AMOLED_LIFTED,
+    bubble = AMOLED_SURFACE,
+    bubbleHighlight = AMOLED_LIFTED,
+    sidebarItemHover = AMOLED_SURFACE,
+    sidebarItemActive = AMOLED_LIFTED,
+    codeBlock = Color.Black,
+    codeBanner = AMOLED_SURFACE,
+    inlineCode = AMOLED_SURFACE,
+    scrollbar = AMOLED_OUTLINE,
+    borderL1 = Color(0x0AFFFFFF),
+    borderL2 = Color(0x14FFFFFF),
+    borderL3 = Color(0x1FFFFFFF),
+    borderL4 = Color(0x2EFFFFFF),
+)
+
+/** #0A0A0A — one step off black, so a card reads as a surface and not a hole. */
+private val AMOLED_SURFACE = Color(0xFF0A0A0A)
+
+/** #141414 — the raised step: menus, selected rows, the second layer. */
+private val AMOLED_LIFTED = Color(0xFF141414)
+
+/** #1A1A1A — scrollbar and hairlines, which must stay visible against black. */
+private val AMOLED_OUTLINE = Color(0xFF1A1A1A)
+
+/**
+ * The Monet appearance: the wallpaper's colours, on top of the same layout.
+ *
+ * Deliberately *not* "replace the palette with Material You's". `DshColors` names the
+ * web client's own aliases — `bgLayer1`, `labelPrimaryDimmed`, `synKeyword` — and
+ * Material You has no opinion about any of them; swapping in Google's scheme wholesale
+ * would repaint the transcript's code syntax and the tool-status colours with hues
+ * chosen for a completely different vocabulary.
+ *
+ * So exactly two things come from the wallpaper: the **accent family** (which the web
+ * itself treats as the one adjustable colour) and the **base surfaces**. Everything
+ * semantic — success, warning, error, the syntax palette, the bubble — keeps the
+ * app's own values, because those carry meaning a wallpaper cannot know.
+ *
+ * Below API 31 there is no wallpaper palette to read; the caller has already chosen
+ * the light or dark base by the mode, and this returns it untouched.
+ */
+@Composable
+private fun DshColors.toMonet(dark: Boolean): DshColors {
+    val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val context = LocalContext.current
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        return this
+    }
+    return copy(
+        accent = scheme.primary,
+        link = scheme.primary,
+        // The send button is the primary action; it follows the accent, and its glyph
+        // has to follow the fill or it disappears into it.
+        sendFill = scheme.primary,
+        sendGlyph = scheme.onPrimary,
+        accentLight = scheme.primaryContainer,
+        accentTertiary = scheme.secondaryContainer,
+        bgBase = scheme.background,
+        bgLayer1 = scheme.surfaceVariant,
+        bgLayer2 = scheme.surfaceVariant,
+        bgLayer3 = scheme.surfaceContainerHighest,
+        sidebarFill = scheme.surface,
+        inputMajor = scheme.surfaceVariant,
+        menu = scheme.surfaceContainerHighest,
+        tip = scheme.surfaceContainerHigh,
+        selector = scheme.surfaceContainerHighest,
+        bubble = scheme.surfaceVariant,
+        bubbleHighlight = scheme.secondaryContainer,
+        sidebarItemHover = scheme.surfaceVariant,
+        sidebarItemActive = scheme.secondaryContainer,
+        // Text keeps the app's own ladder rather than Material's on/onVariant pair:
+        // the transcript has six label steps and Material supplies two.
+        borderL3 = scheme.outline,
+        borderL4 = scheme.outlineVariant,
+    )
+}
+
 /** Material roles mapped from DSH tokens for the few M3 components in use. */
 private fun DshColors.toMaterialScheme(): ColorScheme {
     val base = if (isDark) darkColorScheme() else lightColorScheme()
@@ -344,12 +451,22 @@ fun DshTheme(
     themeMode: String = ThemeMode.SYSTEM,
     content: @Composable () -> Unit,
 ) {
-    val dark = when (themeMode) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
-        else -> isSystemInDarkTheme()
+    // `parse`, not the raw string: a stored id from another build must resolve to an
+    // appearance rather than fall through every `when` below.
+    val mode = ThemeMode.parse(themeMode)
+    val systemDark = isSystemInDarkTheme()
+    val dark = ThemeMode.isDark(mode, systemDark)
+
+    val base = if (dark) DarkColors else LightColors
+    val palette = when (mode) {
+        ThemeMode.AMOLED -> base.toAmoled()
+        // Wallpaper colours are API 31+, and the fallback is the plain light/dark
+        // palette on the same side of the divide the reader asked for — a phone
+        // without Material You still gets a valid appearance, not a missing one.
+        ThemeMode.MONET_SYSTEM, ThemeMode.MONET_LIGHT, ThemeMode.MONET_DARK ->
+            base.toMonet(dark)
+        else -> base
     }
-    val palette = if (dark) DarkColors else LightColors
     CompositionLocalProvider(LocalDshColors provides palette) {
         MaterialTheme(
             colorScheme = palette.toMaterialScheme(),
