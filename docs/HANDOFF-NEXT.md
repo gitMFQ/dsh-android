@@ -117,7 +117,7 @@
 | 1.1 ✅ | 抽 `:core:model`（`com.android.library`） | 50 文件 + 43 个纯 JVM 测试（413 个 `@Test`）；4 个测试留 `:app`；2 个 `internal` 提权；4 处跨模块 smart cast | 独立绿 + 全仓仍 1116（PR #6，`app: 703` / `model: 413`） |
 | 1.2 ✅ | 抽 `:core:term`（**纯 JVM**，`kotlin("jvm")`，PR #7） | 7 文件 + 10 个测试文件 / 186 个 `@Test`；0 个 `internal`；readout 的 id + 谓词从 `:core:model` 移入以切断依赖边 | 仍 1116（PR #7，`app: 517` / `model: 413` / `term: 186`） |
 | 1.2b ✅ | 抽 **`:core:config`**（`com.android.library`，PR #8） | ⚠️ **原计划「进 `:core:model`」已证伪**（`DshConfig` 闭包横跨 model+term；`AcceptedCert → CertPins → okhttp`）。独立模块：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ 编解码。`pinner()` 成 `:app` 扩展函数，调用点零改动。详见 research/13 **§2.7 / §2.8 / §2.9** | 仍 1116（PR #8，`config: 0` 是预期：源码搬、测试留） |
-| 1.3 | 抽 `:core:protocol`（`net/`） | **15** 文件（含 1.2b 外移的 `CertPinning.kt`）；`com.android.library`（`net/` 有 `android.net`/`Context`/`Log`）；提权 **2** 个（`hostOf` + `CertProbe.systemTrusts`）；**环已解，不再被 M4 阻塞** | 仍 1116（预计 `app: 444` / `protocol: 73`）→ 详见 research/13 **§2.10** |
+| 1.3 | 抽 `:core:protocol`（`net/`） | **14** 文件（原文 14 − `CertPins` + `CertPinning.kt`，仍是 14）；`com.android.library`（`net/` 有 `android.net`/`Context`/`Log`）；提权 **2** 个（`hostOf` + `CertProbe.systemTrusts`）；**环已解，不再被 M4 阻塞** | 仍 1116（预计 `app: 444` / `protocol: 73`）→ 详见 research/13 **§2.10** |
 | 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
 
 > **抽模块时必改两处**（1.1 实证，两处都会让 CI「绿着丢测试」）：

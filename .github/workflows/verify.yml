@@ -58,7 +58,7 @@ jobs:
       # live in :app, where the code that exercises them does), but naming it here is
       # what makes a test that moves in later actually run instead of silently not.
       - name: Unit tests
-        run: bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest :core:term:test :core:config:testDebugUnitTest
+        run: bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest :core:term:test :core:config:testDebugUnitTest :core:protocol:testDebugUnitTest
 
       # The visual gate. Phase 2 rewrites the shell, and ChatScreen.kt alone is
       # 3200 lines; this is what turns "the re-skin moved something" from

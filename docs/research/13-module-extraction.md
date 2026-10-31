@@ -480,7 +480,7 @@ M3 时**整个文件搬进 `:core:protocol`** 即可，`CertPins` 本身不动�
 
 因为包名不变，`import uk.xa0.dsh.net.X` 在 M3 之后仍然正确 —— 和 1.1 / 1.2 / 1.2b 一样，**源码零改动**。唯一要改的是 `DshViewModel.kt` 对 `CertProbe.systemTrusts` 的可见性（提权，不改调用）与 `CertificateSection.kt` 的 `hostOf`（同上）。此外 `:app` 需要加 `implementation(project(":core:protocol"))`。
 
-**风险提示**：M3 的消费面是三次里最大的（`ui/` 有 12 处 `net.` import，`root` 有 25 处），**smart cast 错误大概率不是 0**。§2.5 那 4 处全部来自 sealed 层级，`net/` 里 `DoorFault` / `CertReadout` / `DshRpcException` 都是候选。**先本机编译一遍收干净，别用 CI 试。**
+**风险提示（已被 M3 实测推翻，保留原文以便对照）**：原文写「消费面最大，smart cast 错误大概率不是 0」。**实测是 0**（见 §2.11）。错在把「类型跨模块」当成了「会触发 smart cast 失败」的充分条件 —— 实际判据见 §2.11：**只有「从跨模块属性上取值」才会失败，「对局部变量/参数做 `is` 收窄」永远合法**。
 
 ## 3. 建议的 PR 序列（单变量，每步一个 CI 门）
 
@@ -500,7 +500,7 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 | **M1** ✅ | #6 `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），`model/` 50 文件 + **43** 个纯 JVM 测试（413 个 `@Test`）搬进去；`:app` 加 `implementation(project(":core:model"))`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权（§2.2）；**4 处跨模块 smart cast 修复**（§2.5）；`verify.yml` + `build.yml` 显式加 `:core:model:testDebugUnitTest` 并把 glob 改成 `**/build/test-results/**` | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413` |
 | **M2** ✅ | #7 `core-term-module` | 新建 `:core:term`（**纯 JVM**，`kotlin("jvm")`，版本声明在根 build），搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入（§2.6），`term → model` 边清零；`:app` 3 处 import 改指向 | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186` |
 | **M2.5** ✅ | #8 `core-config-module` | 新建 **`:core:config`**（**`com.android.library`**，理由见 §2.8：闭包含 `:core:model`，做不了纯 JVM），搬 `DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ `encode`/`decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`（§2.9）。`pinner()` 成 `:app` 的扩展函数，调用点零改动。**不动 `net/`、不动 `data/` 的存储层**。解 `net ⇄ data` 环 | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186`（`config` 未出现 = 0 个，预期，§2.9） |
-| **M3** | `core-protocol-module` | 新建 `:core:protocol`（`com.android.library` —— `net/` 有 `android.net`/`Context`/`Log`，见 §2.10），搬 `net/` **15** 文件（含 1.2b 留在 app 的 `CertPinning.kt`）；依赖 `:core:model` + `:core:term` + **`:core:config`**（`api`，因 `DshClient.config` 是公开 `var`）+ okhttp。**要提权 2 个**：`hostOf`（`ui/components/CertificateSection.kt:55` 跨模块）与 `CertProbe.systemTrusts`（`DshViewModel.kt:3927` 跨模块）。**`net → data` 环已不存在**（M2.5 已解，见 §2.10），不需要先做 M4 | `tests=1116 failures=0` |
+| **M3** | `core-protocol-module` | 新建 `:core:protocol`（`com.android.library` —— `net/` 有 `android.net`/`Context`/`Log`，见 §2.10），搬 `net/` **14** 文件（原文 14 件 − `CertPins` 已去 `:core:config` + 1.2b 的 `CertPinning.kt`，数目仍是 14）；依赖 `:core:model` + `:core:term` + **`:core:config`**（`api`，因 `DshClient.config` 是公开 `var`）+ okhttp。**要提权 2 个**：`hostOf`（`ui/components/CertificateSection.kt:55` 跨模块）与 `CertProbe.systemTrusts`（`DshViewModel.kt:3927` 跨模块）。**`net → data` 环已不存在**（M2.5 已解，见 §2.10），不需要先做 M4 | `tests=1116 failures=0` |
 | **M4** | `data-depends-on-config` | **范围已被 M2.5 吃掉大半**：`ConfigStore` 在 1.2b 起就已经从 `:core:config` 拿 `DshConfig` / `AcceptedCert` / 两个 codec 了（靠包名不变，import 一行没改）。剩下要做的是**显式化**：确认 `data/` 对 `net/` 只剩零出边，必要时删掉残留 import | `tests=1116 failures=0` |
 
 > **M2 起每步必做的三件事**（M1 实证）：

@@ -85,7 +85,7 @@ jobs:
         # alone would let a regression in any of them land green.
         # `:core:model` is a separate test task since the module was extracted;
         # it is named explicitly because depending on it does not make it run.
-        run: bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest :core:term:test :core:config:testDebugUnitTest
+        run: bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest :core:term:test :core:config:testDebugUnitTest :core:protocol:testDebugUnitTest
 
       - name: Build
         run: bash build.sh :app:assembleDebug
