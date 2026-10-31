@@ -98,7 +98,7 @@ private enum class ChatView(val label: String) {
 | **2.2b** ✅ | `refactor/terminal-stateless` | **已交付（PR #14）**。`TerminalScreen` 的树抽成 `internal fun TerminalPanel(state, emulator, …)`，8 处 `vm::x` 换成参数；`TerminalScreen` 保留 `StateFlow`/RPC/离场 hook，成为唯一调用方。**纯搬运**，不加测试 | `tests=1136` / `screenshots=7` 均不变（实测 = 搬运没改树） | 低 |
 | **2.2c** ✅ | `test/baseline-terminal` | **已交付（PR #15）**。给 `TerminalPanel` 录 `terminal.png`（80×24、running、十几行输出） | `screenshots=8`（实测）；原有 7 张 sha256 逐字节相同 | 低（纯测试） |
 | **2.3** ✅ | `spike/miuix-adoption` | **已交付（PR #16）—— 结论：行。** 一个 `SwitchPreference` 套在 `DshTheme` 里，实测能画。两个必须带进后续 PR 的结论见 §2.2 下方 | `tests=1136`（不变）/ `screenshots=9` | 已完成 |
-| **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs` | 底栏 4 项；基线新增底栏屏 | 中 |
+| **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs`。**⚠️ 第一件事是写 `DshColors → miuix Colors` 适配器**（2.3 结论 §2.2：不写就是两个强调色同屏且不报错）。**⚠️ 先定 `ROUTER` 去留**（§1.3：条件性项目进底栏会让项数在运行中变化） | 底栏 4 项；基线新增底栏屏；原有 9 张仅被底栏实际挤到的变动 | 中 |
 | **2.5** | `feat/pager-navigation` | 4 目的地 pager + 弹簧切页；宽屏切 `NavigationRail` | 切页流畅；旋转保持 | 中 |
 | **2.6** | `feat/topbar-collapse` | TopBar 折叠 + 状态胶囊 | 滚动折叠无跳变 | 中 |
 | **2.7** | `feat/drawer-reskin` | 抽屉换装（搜索栏 / 分段列表 / 分组排序） | 基线 diff 符合预期 | 中 |
