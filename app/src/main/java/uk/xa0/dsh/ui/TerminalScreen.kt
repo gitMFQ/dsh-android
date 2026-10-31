@@ -127,17 +127,63 @@ fun TerminalScreen(
     // same size, and the persisted value is what makes them so.
     val cellSize = TerminalCellSize.of(fontSp)
 
+    TerminalPanel(
+        state = state,
+        emulator = emulator,
+        screenTitle = screenTitle,
+        cellSize = cellSize,
+        modifier = modifier,
+        onCellSize = vm::setTerminalFontSp,
+        onNew = vm::newTerminal,
+        onClose = vm::closeActiveTerminal,
+        onRetry = vm::retryTerminal,
+        onSelect = vm::selectTerminal,
+        onSeat = vm::selectSeat,
+        onWrite = vm::terminalWrite,
+        onResize = vm::terminalResize,
+    )
+}
+
+/**
+ * Everything [TerminalScreen] draws, with the view model taken out.
+ *
+ * A pure extraction: the body below is the same tree with `vm::x` replaced by a
+ * parameter `x`, and [TerminalScreen] is its only caller. It exists because the
+ * screen itself cannot be photographed — it collects a `StateFlow`, enters the
+ * terminal over RPC and leaves it on dispose — while everything worth protecting is
+ * in here: the bar's seats and the grid's own drawing. A screenshot baseline can hold
+ * this still; it could never hold the screen still.
+ *
+ * Every callback stays a plain function value for that reason. Nothing here reads a
+ * client, a clock or the host, so the same arguments always draw the same frame.
+ */
+@Composable
+internal fun TerminalPanel(
+    state: TerminalUiState,
+    emulator: TerminalEmulator?,
+    screenTitle: String,
+    cellSize: TerminalCellSize,
+    modifier: Modifier = Modifier,
+    onCellSize: (Float) -> Unit,
+    onNew: () -> Unit,
+    onClose: () -> Unit,
+    onRetry: () -> Unit,
+    onSelect: (String) -> Unit,
+    onSeat: (TerminalSeat) -> Unit,
+    onWrite: (String) -> Unit,
+    onResize: (Int, Int) -> Unit,
+) {
     Column(modifier.fillMaxWidth().background(DshTheme.colors.bgBase)) {
         TerminalBar(
             state = state,
             screenTitle = screenTitle,
             cellSize = cellSize,
-            onCellSize = vm::setTerminalFontSp,
-            onNew = vm::newTerminal,
-            onClose = vm::closeActiveTerminal,
-            onRetry = vm::retryTerminal,
-            onSelect = vm::selectTerminal,
-            onSeat = vm::selectSeat,
+            onCellSize = onCellSize,
+            onNew = onNew,
+            onClose = onClose,
+            onRetry = onRetry,
+            onSelect = onSelect,
+            onSeat = onSeat,
         )
         Box(Modifier.fillMaxWidth().weight(1f)) {
             if (emulator != null &&
@@ -147,12 +193,12 @@ fun TerminalScreen(
                     emulator = emulator,
                     revision = state.revision,
                     cellSize = cellSize,
-                    onCellSize = vm::setTerminalFontSp,
-                    onWrite = vm::terminalWrite,
-                    onResize = vm::terminalResize,
+                    onCellSize = onCellSize,
+                    onWrite = onWrite,
+                    onResize = onResize,
                 )
             } else {
-                TerminalPlaceholder(state = state, onRetry = vm::retryTerminal)
+                TerminalPlaceholder(state = state, onRetry = onRetry)
             }
         }
     }
