@@ -27,10 +27,20 @@ import androidx.compose.ui.unit.sp
  * reproduction of an existing design. [KsuTokens] is the opposite: the shell's own
  * scale, chosen rather than copied, and free to move when the shell does.
  *
- * Both will be in use at once, and that is intended: the transcript keeps rendering at
- * the web's measurements while the chrome around it takes these. Merging them would
- * force one to change whenever the other does, which is the problem phase 2 is meant
- * to avoid.
+ * ## Why there is no `Space` here
+ *
+ * There was one, and it overlapped `DshSpacing` on five of its seven steps while
+ * disagreeing on the other two (`xxl` 20 vs 24, `xxxl` 24 vs 32). Both are live in
+ * the same composition — the transcript reads `DshSpacing`, the shell would have read
+ * `Space` — so the two would have appeared on one screen with nothing to report it.
+ * `DshSpacing` already covers every step `Space` had, plus the `2dp` and `32dp` ends,
+ * so spacing is one object: `DshSpacing`, for the whole app. See
+ * `docs/DESIGN-TOKENS.md` §4.2, option A.
+ *
+ * Radius and type will be in use at once, and that is intended: the transcript keeps
+ * rendering at the web's measurements while the chrome around it takes these. Merging
+ * them would force one to change whenever the other does, which is the problem phase 2
+ * is meant to avoid. Spacing is the one exception, and the section above says why.
  *
  * ## Sizes are in dp, not px
  *
@@ -38,23 +48,6 @@ import androidx.compose.ui.unit.sp
  * so a baseline recorded at 411×891 and a device at the same width agree.
  */
 object KsuTokens {
-
-    /**
-     * The 4dp-family spacing scale.
-     *
-     * A closed set: if a layout needs something between two of these, the layout is
-     * the thing to reconsider. That constraint is the whole point — the previous
-     * habit was a literal per call site.
-     */
-    object Space {
-        val xs: Dp = 4.dp
-        val sm: Dp = 6.dp
-        val md: Dp = 8.dp
-        val lg: Dp = 12.dp
-        val xl: Dp = 16.dp
-        val xxl: Dp = 20.dp
-        val xxxl: Dp = 24.dp
-    }
 
     /**
      * Corner radii.
