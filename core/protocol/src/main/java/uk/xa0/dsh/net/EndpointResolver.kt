@@ -18,8 +18,14 @@ import java.util.concurrent.atomic.AtomicLong
  * The config stores what the user typed — `192.168.1.110`, `http://…`,
  * `https://…` — and only [DshClient]'s own normaliser knows the default scheme,
  * so the private-address check cannot assume a URL.
+ *
+ * Public because `:app`'s certificate sheet has to show the host of the address
+ * being judged (`ui/components/CertificateSection.kt`), and this module is no
+ * longer the same compilation unit as that sheet. It was `internal` while both
+ * lived in `:app`; the move is what makes the visibility wrong, not a change of
+ * intent.
  */
-internal fun hostOf(raw: String): String? {
+fun hostOf(raw: String): String? {
     val trimmed = raw.trim()
     if (trimmed.isEmpty()) return null
     val withScheme = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {

@@ -157,6 +157,12 @@ dependencies {
     // was rewritten.
     implementation(project(":core:config"))
 
+    // The protocol layer: HTTP, WebSocket, the terminal stream and route resolution.
+    // Moved after :core:config for a reason recorded in that module's build file —
+    // `net/` and `data/` used to import each other, and config is what broke the
+    // cycle. Kotlin packages are unchanged, so no import in this module changed.
+    implementation(project(":core:protocol"))
+
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 

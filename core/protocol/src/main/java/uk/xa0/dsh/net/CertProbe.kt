@@ -90,8 +90,12 @@ object CertProbe {
      * the readout's own sentence. It is never a reason to trust a pin: the whole
      * point of a pin is that this answer can be yes for a certificate that is not
      * ours.
+     *
+     * Public because `:app`'s view model builds a certificate prompt for a chain the
+     * probe already refused (`DshViewModel`), and this module is no longer the same
+     * compilation unit. It was `internal` while both lived in `:app`.
      */
-    internal fun systemTrusts(chain: List<X509Certificate>): Boolean {
+    fun systemTrusts(chain: List<X509Certificate>): Boolean {
         val leaf = chain.firstOrNull() ?: return false
         return runCatching {
             CertTrust.systemTrust.checkServerTrusted(chain.toTypedArray(), authTypeOf(leaf))
