@@ -6,13 +6,17 @@
 
 ## 1. 一句话现状
 
-仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1136 个功能测试全绿 + 8 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
+仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1136 个功能测试全绿 + 9 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入且**已验证可用（见 2.3 闸门）**。
 
 **换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**五个模块已经抽出来了**：`:core:model`（PR #6，413 个测试）、`:core:term`（PR #7，186 个测试，**纯 JVM —— 本仓第一次能在本机跑功能测试**）、`:core:config`（PR #8）、`:core:protocol`（PR #9，73 个测试 —— **并抓出第一个生产缺陷**，见 research/13 §2.11）、`:design`（PR #10，7 个测试）。
 
 **阶段 1 已完成**。`:design` 顺带交付了 **7 档外观**（Light / Dark / System / AMOLED / Monet ×3），测试总数 **1116 → 1123**。
 
-**阶段 2 已开工（2026-11-01）**：2.0（窗口底色跟随外观）、2.1（删 `KsuTokens.Space`）、2.2a/b/c（基线 4 → 8 张 + 抽 `TerminalPanel`）全部合入。当前 **`tests=1136` + `screenshots=8`**。下一个决定点是 **2.3（miuix 实验闸门）**，见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2。
+**阶段 2 已开工（2026-11-01）**：2.0（窗口底色跟随外观）、2.1（删 `KsuTokens.Space`）、2.2a/b/c（基线 4 → 8 张 + 抽 `TerminalPanel`）、**2.3（miuix 闸门 —— 结论是可以，见下）** 全部合入。当前 **`tests=1136` + `screenshots=9`**。下一步是 **2.4 浮动底栏**。
+
+> **2.3 闸门的结论，接手的人必须先看这两条**：
+> 1. **miuix 能画** —— 但它的 0.9.4 是 **Java 21 字节码**，测试 JVM 已从 17 升到 21（`verify.yml` / `screenshots.yml`）。APK 侧 D8 一直没问题。
+> 2. **调色板不会自动同步** —— miuix 默认强调色 `#3482FF` ≠ 本 app 的 `#4176E6`。**每个 miuix 屏都要先写一个 `DshColors → miuix Colors` 的适配器**，否则会做出「配色不跟 7 档外观走、而且不报错」的屏。
 
 ## 2. 已完成（L1–L4，全部合入 master）
 
@@ -73,6 +77,9 @@
 | **网络需代理** | `dl.google.com` / `repo.maven.apache.org` 单文件可达但 **Gradle 并行解析器会卡死**。`settings.gradle.kts` 已把 Aliyun 镜像放最前。`git push` 偶尔 GnuTLS 失败，加 `ALL_PROXY=http://127.0.0.1:7890` 重试。 |
 | **AGP 9 不允许 `org.jetbrains.kotlin.android`** | 内置 Kotlin，应用该插件直接 build fail。`kotlin { compilerOptions { } }` 仍可用。 |
 | **不引 `miuix-blur`** | 模块 `minSdk = 33`，我们 26。玻璃效果自写（`Modifier.blur` API31+ + 降级）。 |
+| **miuix 是 Java 21 字节码**（2.3 实测） | 0.9.4 的 class file 版本是 **65**。D8 打进 APK 没问题，但**任何加载它的 JVM 必须 ≥21** —— 测试 JVM 卡在 17 时表现为 `UnsupportedClassVersionError`，而且是在**用到 miuix 的那一行**才炸，编译期完全正常。`verify.yml` / `screenshots.yml` 已改 21。 |
+| **miuix 的配色不会跟 `DshTheme` 走**（2.3 实测） | 不给 `MiuixTheme` 参数时用的是 miuix 自己的 `#3482FF`，本 app 亮色强调色是 `#4176E6`。**每个 miuix 屏都要先有 `DshColors → miuix Colors` 适配器**（`Colors` 有 `copy`，可行），否则 7 档外观换不动它，且不报错。 |
+| **`Screenshots` workflow 用哪份文件** | 用**被 `--ref` 指定那个分支上的 workflow 文件**。`--ref master -f branch=feat/x` 跑的是 master 的 JDK/步骤，只是 checkout 了 feat/x 的代码。改了 workflow 的分支要录基线，必须 `--ref feat/x`。2.3 第一次就是这么失败的。 |
 | **不引 `miuix-nav`** | 要求所有路由改成 `@Serializable NavKey`，收益不抵成本。 |
 | **Compose 1.11 的 Password 语义 bug** | `CoreTextFieldSemanticsModifier.updateNodeSemantics` 从不写回 `this.isPassword`，`BasicTextField(value=)` 路径的 Password 语义无法变化。测试已改为断言可见文本。 |
 | **跨模块 smart cast 编不过** | Kotlin 不能对「声明在另一个模块里的属性」做 smart cast（`val` 也不行，编译器无法证明别的模块不会改）。抽模块后 UI 里所有 `x.prop is T && x.prop.y` / `x.prop != null && x.prop.z` 都会报 `Smart cast ... is impossible ... declared in different module`。**修法：先把属性读进局部变量再判断**，不要改成 `var`、不要加 `!!`。1.1 一次踩了 4 处。 |
@@ -182,7 +189,7 @@
 **但不要照 ROADMAP 那六行直接开工**，那六行没提四件会立刻踩到的事：
 1. **基线只有 4 张**，而阶段 2 要动的屏大多没覆盖 → 第 2 个 PR 应是补基线，不是换皮；
 2. **当前导航是抽屉 + 顶部 `ViewTabs`**，`ChatView` 有 **5** 个值（`ROUTER` 还是条件性的），不是 ROADMAP 写的「4 目的地」；
-3. **miuix 依赖已在但零使用**，能不能与现有主题同栈共存尚未验证 → 需要一个实验 PR 当闸门；
+3. ~~miuix 依赖已在但零使用，能不能与现有主题同栈共存尚未验证~~ → **已验证（2.3 / PR #16）：可行**，代价是测试 JVM ≥21 + 每个 miuix 屏要先写调色板适配器；
 4. 窗口底色 `#0B0F14` 与 `bgBase` `#151517` 不一致，7 档外观下冷启动会闪 → 独立先修。
 
 PHASE-2-PLAN 里给了 2.0–2.9 的完整序列和每步验收。

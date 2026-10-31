@@ -57,6 +57,8 @@ private enum class ChatView(val label: String) {
 
 > **后果**：「4 目的地 pager」这个说法与实际不符。底栏要么放 4 项（Chat/Trajectory/Shell/设置），要么把条件性的 `ROUTER` 也塞进去——后者会让底栏项数在运行中变化，是明确的坏设计。**开工第一件事是定这个。**
 
+> **2026-11-01 更新：这一节的问题已经回答了，见 §2.2 的结论表。答案是可以共存，代价是测试 JVM 要 ≥21、以及每个 miuix 屏都要先写调色板适配器。**下面保留原始取证，因为「为什么当时必须做实验」本身是方法论。
+
 ### 1.4 miuix 已依赖但是零使用
 
 `app/build.gradle.kts` 有四个 miuix 依赖（ui / preference / icons / squircle），而全仓 `MiuixTheme` / `top.yukonga.miuix` 的**使用处 = 0**（实测 grep）。
@@ -95,7 +97,7 @@ private enum class ChatView(val label: String) {
 | **2.2a** ✅ | `test/baseline-expand` | **已交付（PR #13）**。补基线 **Composer / Files / Permission sheet** 三张。**聊天主界面没做**：`ChatScreen(vm)` 单文件 100+ 处 `ui.` 读取 + `LaunchedEffect` 里发网络 + 1 秒走时器，要抓它得先拆「无状态屏」，属改生产代码 | `screenshots=7`（实测），原有 4 张 sha256 逐字节相同 | 低（纯测试） |
 | **2.2b** ✅ | `refactor/terminal-stateless` | **已交付（PR #14）**。`TerminalScreen` 的树抽成 `internal fun TerminalPanel(state, emulator, …)`，8 处 `vm::x` 换成参数；`TerminalScreen` 保留 `StateFlow`/RPC/离场 hook，成为唯一调用方。**纯搬运**，不加测试 | `tests=1136` / `screenshots=7` 均不变（实测 = 搬运没改树） | 低 |
 | **2.2c** ✅ | `test/baseline-terminal` | **已交付（PR #15）**。给 `TerminalPanel` 录 `terminal.png`（80×24、running、十几行输出） | `screenshots=8`（实测）；原有 7 张 sha256 逐字节相同 | 低（纯测试） |
-| **2.3** | `spike/miuix-adoption` | **实验 PR，可丢弃**：在一个 Settings 行里用 miuix `SwitchPreference`，套 `MiuixTheme`，跑一遍基线看是否崩、颜色是否可用 | 编译 + 基线可生成 | **中**（决定 2.5 走哪条路） |
+| **2.3** ✅ | `spike/miuix-adoption` | **已交付（PR #16）—— 结论：行。** 一个 `SwitchPreference` 套在 `DshTheme` 里，实测能画。两个必须带进后续 PR 的结论见 §2.2 下方 | `tests=1136`（不变）/ `screenshots=9` | 已完成 |
 | **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs` | 底栏 4 项；基线新增底栏屏 | 中 |
 | **2.5** | `feat/pager-navigation` | 4 目的地 pager + 弹簧切页；宽屏切 `NavigationRail` | 切页流畅；旋转保持 | 中 |
 | **2.6** | `feat/topbar-collapse` | TopBar 折叠 + 状态胶囊 | 滚动折叠无跳变 | 中 |
@@ -104,6 +106,22 @@ private enum class ChatView(val label: String) {
 | **2.9** | `feat/sheet-unify` | Sheet/Dialog 统一（11 个）；危险操作红卡 + 二次确认 | 审批走 Sheet + 二次确认 | 中 |
 
 > **2.3 是一道闸门**：如果 miuix 实验失败，2.5 / 2.7 / 2.8 / 2.9 全部改为**自绘**（工期 +1 周，但零依赖风险）。这个判断必须在 2.4 之前做完。
+
+### 2.2 闸门的结论（2026-11-01，PR #16）—— **miuix 可行**
+
+三道问题全部实测过，答案是「能，但有两个前提」：
+
+| 问题 | 答案 | 证据 |
+|---|---|---|
+| miuix 能画在 `DshTheme` 里吗 | **能** | `SwitchPreference` 用 miuix 自己的文字样式、开关、行度量画出来了；基线 `miuix-probe.png` 在 master |
+| 前置条件 | **测试 JVM 必须 ≥ 21** | miuix 0.9.4 发的是 **Java 21 字节码（class file 65）**。D8 能塞进 APK（debug 包 4868 处 miuix 引用，Build 绿），但 Robolectric 的 JVM 要能**加载**它：17 上 `UnsupportedClassVersionError`，21 上正常。`verify.yml` / `screenshots.yml` 已升到 21 |
+| 调色板会自动传过去吗 | **不会** | 不给参数时开关是 **`#3482FF`（miuix 默认强调色）**，本 app 亮色强调色是 `#4176E6`。同屏两个强调色正是 7 档外观要防的事 |
+
+> **对 2.5 / 2.7 / 2.8 / 2.9 的直接影响**：每个 PR 的**第一件事是写调色板适配器**（用 `DshTheme.colors` 构造 miuix 的 `Colors`，`Colors` 有 `copy`，可行），而不是先摆组件。谁跳过这一步，谁就会做出「配色不跟外观走」的 miuix 屏 —— 而且**不会报错**。
+>
+> 另：JDK 17→21 升级本身已验证是**版本下限调整、不是渲染变更** —— 升完重录，另外 8 张基线 sha256 逐字节相同。
+
+> **流程坑（已踩）**：`Screenshots` workflow **用的是被 checkout 那个分支上的 workflow 文件**。`gh workflow run screenshots.yml --ref master -f branch=feat/x` 跑的是 **master 的**那个文件（JDK 17），不是 feat/x 的。要录一个改了 workflow 的分支，必须 `--ref feat/x`。
 
 ### 2.1 执行中修正的四件事（2026-11-01）
 
