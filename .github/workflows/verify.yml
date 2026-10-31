@@ -93,20 +93,51 @@ jobs:
             app/build/test-results/**
           if-no-files-found: ignore
 
+      # Two numbers, reported separately on purpose.
+      #
+      # The functional suite is the gate every PR quotes — "tests=1116" — and it
+      # must stay exactly 1116, because a number that quietly grew is how a
+      # deleted test goes unnoticed. The screenshot captures are a different
+      # kind of test (they assert pixels, not behaviour) and live in their own
+      # XML files under uk/xa0/dsh/screenshot/, so they are counted apart rather
+      # than folded in and silently raising the functional total to 1120.
       - name: Summarize executed tests
         if: always()
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import glob, xml.etree.ElementTree as ET
-          total = failures = errors = skipped = 0
+          import glob, os, xml.etree.ElementTree as ET
+
+          def tally(pattern):
+              total = failures = errors = skipped = 0
+              for f in glob.glob(pattern, recursive=True):
+                  r = ET.parse(f).getroot()
+                  total += int(r.get('tests', 0))
+                  failures += int(r.get('failures', 0))
+                  errors += int(r.get('errors', 0))
+                  skipped += int(r.get('skipped', 0))
+              return total, failures, errors, skipped
+
+          # Robolectric writes one XML per test class, named after the class, so
+          # the screenshot class is excluded by its own name rather than by
+          # where the run happened to put it.
+          screenshot = 0
+          functional = [0, 0, 0, 0]
           for f in glob.glob('app/build/test-results/**/*.xml', recursive=True):
               r = ET.parse(f).getroot()
-              total += int(r.get('tests', 0))
-              failures += int(r.get('failures', 0))
-              errors += int(r.get('errors', 0))
-              skipped += int(r.get('skipped', 0))
-          print(f"tests={total} failures={failures} errors={errors} skipped={skipped}")
+              n = int(r.get('tests', 0))
+              if 'screenshot' in os.path.basename(f).lower():
+                  screenshot += n
+              else:
+                  functional[0] += n
+                  functional[1] += int(r.get('failures', 0))
+                  functional[2] += int(r.get('errors', 0))
+                  functional[3] += int(r.get('skipped', 0))
+
+          t, fa, er, sk = functional
+          print(f"tests={t} failures={fa} errors={er} skipped={sk}")
+          print(f"screenshots={screenshot} (baseline captures, compared separately)")
           with open('$GITHUB_STEP_SUMMARY', 'a') as s:
-              s.write(f"\n### JVM tests\n\ntests={total} failures={failures} errors={errors} skipped={skipped}\n")
+              s.write(f"\n### JVM tests\n\ntests={t} failures={fa} errors={er} skipped={sk}\n")
+              s.write(f"\nscreenshots={screenshot} baseline captures compared\n")
           PY
