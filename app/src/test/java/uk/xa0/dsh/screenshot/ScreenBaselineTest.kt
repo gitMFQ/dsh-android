@@ -3,7 +3,10 @@ package uk.xa0.dsh.screenshot
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -14,15 +17,26 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import uk.xa0.dsh.FULL_ACCESS_PRESET
+import uk.xa0.dsh.PendingAttachment
+import uk.xa0.dsh.PermissionOption
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.model.DrawerGrouping
+import uk.xa0.dsh.model.FileTouch
+import uk.xa0.dsh.model.SessionFile
+import uk.xa0.dsh.model.SessionFiles
 import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.model.WorkspaceListPhase
 import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.ui.AboutContent
+import uk.xa0.dsh.ui.ModelTriggerState
+import uk.xa0.dsh.ui.PermissionSheet
 import uk.xa0.dsh.ui.SessionsDrawer
 import uk.xa0.dsh.ui.StartupScreen
+import uk.xa0.dsh.ui.components.Composer
+import uk.xa0.dsh.ui.components.FilesPanel
+import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 
 /**
@@ -193,6 +207,136 @@ class ScreenBaselineTest {
                 onOrderByUpdated = {},
                 onShowArchived = {},
                 onCollapsedSections = {},
+            )
+        }
+    }
+
+    /**
+     * The composer, which is the one surface every session ends at.
+     *
+     * Captured with text in it and an attachment attached, because those are the two
+     * states that change the card's geometry — the send control swaps for a stop
+     * button while running, and an attachment adds a chip row. An empty composer is
+     * the state that can be inferred from the others; a populated one cannot.
+     *
+     * The horizontal inset is `DshSpacing.xl`, matching where the real screen puts
+     * it. Without it the card measures the full 411dp and the baseline would be 32dp
+     * wider than anything a reader ever sees.
+     *
+     * The capture is only as tall as the card: below it is the harness's own
+     * background, not a screen. That is stated rather than padded away — a fake
+     * conversation behind it would be a fixture pretending to be a transcript.
+     */
+    @Test
+    fun composer() {
+        capture("composer") {
+            val state = remember { TextFieldState("Re-skin the shell, one screen at a time.") }
+            Column(Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.md)) {
+                Composer(
+                    state = state,
+                    onSend = {},
+                    onStop = {},
+                    running = false,
+                    modelTrigger = ModelTriggerState(
+                        label = "DeepSeek V4 · High",
+                        marker = null,
+                        description = null,
+                        alert = false,
+                    ),
+                    onModelClick = {},
+                    permissionLabel = "Full access",
+                    onPermissionClick = {},
+                    planActive = false,
+                    onExitPlan = {},
+                    contextPercent = 12,
+                    contextTokens = 12_000,
+                    contextWindow = 100_000,
+                    contextBreakdown = null,
+                    // One attachment, because the chip row is the part of this card
+                    // that only exists in a state this test would otherwise never
+                    // reach — and it is the reason the card grows a row.
+                    attachments = listOf(
+                        PendingAttachment(
+                            id = "att-1",
+                            name = "screenshot.png",
+                            bytes = 184_320,
+                            mediaType = "image/png",
+                        ),
+                    ),
+                    onToggleCommands = {},
+                    onRemoveAttachment = {},
+                )
+            }
+        }
+    }
+
+    /**
+     * The Files panel, on the state a session actually reaches: a file it touched,
+     * open in the preview.
+     *
+     * The list and the preview are exclusive on a phone (`maxWidth < 720.dp`), so one
+     * capture can only show one of them. The preview is the half worth protecting —
+     * the list is rows, the preview is where markdown, syntax colour and the
+     * truncated badge meet. The 720dp two-pane reading gets no baseline here, and
+     * this comment is the record of that rather than a silent gap.
+     */
+    @Test
+    fun files() {
+        val path = "/home/user/var/work/dsh-android/out/REPORT.md"
+        capture("files") {
+            FilesPanel(
+                files = listOf(
+                    SessionFile(
+                        path = path,
+                        touches = listOf(FileTouch.PRESENTED),
+                        reads = 0,
+                        writes = 0,
+                        edits = 0,
+                        presents = 1,
+                        firstSeq = 1,
+                        lastSeq = 1,
+                    ),
+                ),
+                root = "/home/user/var/work/dsh-android",
+                cached = mapOf(
+                    path to SessionFiles.previewOfText(
+                        path,
+                        "# Findings\n\n- the drawer re-skins first\n- then the composer\n",
+                    ),
+                ),
+                initialPath = path,
+            )
+        }
+    }
+
+    /**
+     * The access-mode sheet — the one dialog that is both wholly argument-driven and
+     * short enough to capture whole.
+     *
+     * Chosen over the other five because they are either lazy (`ModelSheet`,
+     * `AgentPresetSheet`), so a capture shows only the viewport, or take a host
+     * document. This one is a `Column` of three rows, and it carries the colour that
+     * matters most: "Full access" is drawn in the warning tint and is the only option
+     * that opens a second confirmation.
+     *
+     * A `ModalBottomSheet` is its own window, so this is the first capture here that
+     * is not simply the activity's content root. It is committed with the fixture
+     * rather than behind a separate mechanism: if `onRoot()` cannot see the sheet,
+     * the record fails loudly on the first run rather than silently capturing an
+     * empty window.
+     */
+    @Test
+    fun permission() {
+        capture("permission") {
+            PermissionSheet(
+                options = listOf(
+                    PermissionOption("read-only", "Read-only", "Read files, run nothing."),
+                    PermissionOption("default", "Default", "Ask before each step."),
+                    PermissionOption(FULL_ACCESS_PRESET, "Full access", "Reduce confirmation steps."),
+                ),
+                current = "default",
+                onSelect = {},
+                onDismiss = {},
             )
         }
     }
