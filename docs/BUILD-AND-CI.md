@@ -40,7 +40,7 @@
 | 问题 | 现象 | 本机临时绕过 |
 |---|---|---|
 | `platforms/android-37/source.properties` 里 `AndroidVersion.ApiLevel=37.0` 是小数 | `Failed to find target with hash string 'android-37.0'` | 改成 `37`（**仅本机**，勿提交） |
-| `build-tools 37.0.0` 未安装，且无 `sdkmanager` | `Failed to find Build Tools revision 37.0.0` | 两处 `buildToolsVersion` 临时改 `36.0.0`（**验证完必须还原**） |
+| `build-tools 37.0.0` 未安装，且无 `sdkmanager` | `Failed to find Build Tools revision 37.0.0` | **五处** `buildToolsVersion` 临时改 `36.0.0`（`app` / `core:model` / `core:config` / `core:protocol` / `design` —— 原文的「两处」是只有 2 个模块时的数字，已过时）。**验证完必须还原**：`git diff` 里冒出 `buildToolsVersion` 就是忘了 |
 
 改完后：
 
@@ -52,6 +52,10 @@ bash build.sh :core:model:testDebugUnitTest
 ```
 
 **意义**：抽模块 / 改 UI 时，**编译错误可以在本机一轮内收干净**，不必用 CI 的 7 分钟去试。测试与资源打包仍只能走 CI。
+
+> **2026-11-01 补充（阶段 2 实测）**：除了 `compileDebugKotlin`，本机还能编译 **测试源码**吗？**不能**——`:app:compileDebugUnitTestKotlin` 依赖 `bundleDebugClassesToCompileJar`，而它要 `processDebugResources` 产出的 `R.jar`，于是又撞上 aapt2。`:design` 的测试源码可以单独编译（`:design:compileDebugUnitTestKotlin`），`:app` 的不行。
+>
+> 更要紧的是：**本机能跑 `:design` 的单元测试**（`bash build.sh :design:testDebugUnitTest`，实测 2 分钟、8/8 绿）—— `:design` 是 Android library 但它的测试不碰资源打包时就能跑通，这一点与 `:core:model` 不同（后者挂在 `processDebugUnitTestResources`）。**新写的纯函数逻辑尽量放进 `:design` 或 `:core:term`，本机就能验。**
 
 > `build.sh` 里是 `--no-daemon`，13 分钟是冷启动。同样的验证在 CI 上是 7 分钟全流程，所以**只在本机能省下往返时才用**（例如要迭代编译器报错）。
 

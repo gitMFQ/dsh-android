@@ -30,7 +30,8 @@
 > 本机（aarch64 Debian）只能验证到 Gradle 配置阶段（`gradle help` 成功）；资源编译与测试必须在 CI —— 原因见 [BUILD-AND-CI.md](BUILD-AND-CI.md) §0。
 
 > 两个 **仍然不要**：**不引 `miuix-blur`**（模块 minSdk 33，我们 26 —— 除非把 minSdk 抬到 33，那会丢掉 Android 8–12 用户）；**不引 `miuix-nav`**（虽然 0.9.4 有，但它要求把所有路由改成 `@Serializable NavKey`）。
-> **JDK**：AGP 9 需要 JDK 17+，miuix 自身用 21。本机目前只有 17，若 CI/本地报错需 `apt install openjdk-21-jdk-headless`。
+> **JDK**：AGP 9 需要 JDK 17+；**miuix 0.9.4 是 Java 21 字节码**，所以任何**加载**它的 JVM 都要 ≥21（2.3 实测，见 [HANDOFF-NEXT.md](HANDOFF-NEXT.md) §3 与 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.2）。
+> CI 的 `verify.yml` / `screenshots.yml` 已是 21；**本机 2026-11-01 也装了 21**（`/usr/lib/jvm/java-21-openjdk-arm64`）。`build.sh` 仍把 `JAVA_HOME` 指向 `.toolchain/jdk-17.0.20.1+1`，跑会碰 miuix 的测试时前置 `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64`。
 
 ## 阶段 1 · 结构（1 周）
 
