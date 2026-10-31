@@ -56,15 +56,16 @@ jobs:
       # something a person notices on a phone days later into a red check with a
       # diff image attached.
       #
-      # Filtered to the screenshot class on purpose: the 1 116 functional tests
-      # ran in the step above and their count is the evidence quoted in every
-      # PR, so this step must not re-run them or double-count them. The build is
-      # already warm by this point, so the incremental cost is the four captures.
+      # `-Pscreenshots` is what admits the screenshot class: the build excludes it
+      # from the ordinary test task, so the 1 116 functional tests above are not
+      # re-run or double-counted here, and their count stays the evidence quoted
+      # in every PR. The build is warm by this point, so the incremental cost is
+      # the four captures.
       #
       # It compares strictly. If that ever proves flaky on a runner image change,
       # the fix is a documented threshold in the test, not a deleted gate.
       - name: Screenshot gate
-        run: bash build.sh :app:verifyRoborazziDebug --tests 'uk.xa0.dsh.screenshot.*'
+        run: bash build.sh :app:verifyRoborazziDebug -Pscreenshots
 
       # A failed comparison writes `[name]_compare.png` beside the baseline, which
       # is the only artifact that says *what* moved. Uploaded even on success so a

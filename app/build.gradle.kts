@@ -74,15 +74,20 @@ android {
 
         // The screenshot class is a *baseline* test, not a functional one: it
         // asserts nothing about behaviour, and its whole value is the image diff
-        // that `verifyRoborazziDebug` runs. Letting it into `testDebugUnitTest`
-        // would do two bad things at once — inflate the 1116 functional-test
-        // count that every PR quotes as evidence, and turn a pixel diff into a
-        // red "unit test" with no image attached.
+        // that `verifyRoborazziDebug` runs. Letting it into the functional suite
+        // would do two bad things at once — inflate the 1116-test count that
+        // every PR quotes as evidence, and turn a pixel diff into a red "unit
+        // test" with no image attached.
         //
-        // `--tests` on the Roborazzi task re-includes it, so the gate still runs
-        // it; see verify.yml.
-        filter {
-            excludeTestsMatching("uk.xa0.dsh.screenshot.*")
+        // It is switched on by a property rather than by `--tests`, because a
+        // Gradle test filter cannot re-include what another filter excluded: the
+        // `--tests 'uk.xa0.dsh.screenshot.*'` on the Roborazzi task was silently
+        // overruled by the exclusion below and failed with "No tests found for
+        // given includes". The gate passes -Pscreenshots instead; see verify.yml.
+        if (!project.hasProperty("screenshots")) {
+            filter {
+                excludeTestsMatching("uk.xa0.dsh.screenshot.*")
+            }
         }
     }
 

@@ -53,10 +53,10 @@ jobs:
           test -x .toolchain/gradle-9.5.0/bin/gradle
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
 
-      # Only the screenshot class, so a baseline refresh does not spend seven
-      # minutes running the other 1 100 tests.
+      # `-Pscreenshots` admits the screenshot class, which the ordinary test task
+      # excludes; without it this task would find no tests at all.
       - name: Record
-        run: bash build.sh :app:recordRoborazziDebug --tests 'uk.xa0.dsh.screenshot.*'
+        run: bash build.sh :app:recordRoborazziDebug -Pscreenshots
 
       - name: Upload recorded baselines
         if: always()
