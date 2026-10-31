@@ -41,7 +41,7 @@
 | **1.0** ✅ 完成 2026-10-31 | 5 个宿主行类移出根包（`SessionItem`/`WorkspaceItem`/`JobItem`/`QueueAttachment`/`QueuedMessage` → `model/`），`model → root` 边 **14 → 0** | 已合入 `master`（PR #4） | **CI `tests=1116 failures=0`** | 0.5 |
 | **1.1** ✅ 完成 2026-10-31 | 抽 `:core:model`（`model/` 50 文件 + **43** 个纯 JVM 测试 / 413 个 `@Test`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权；4 处跨模块 smart cast 修复） | 已合入 `master`（PR #6） | **CI `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413`** | 1.0 |
 | 1.2 | 抽 `:core:term`（`term/`，只依赖 `:core:model`） | 模块 | 全仓仍 1116 | 1.1 |
-| 1.2b | 新建 **`:core:config`**：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 okhttp 的 `pinner()`）+ 证书编解码（解 `net ⇄ data` 环）。**原计划「进 `:core:model`」已实测证伪**，见 [research/13](research/13-module-extraction.md) §2.7–§2.9 | 模块 | 全仓仍 1116（`config` 自身 0 个测试，是预期） | 1.2 |
+| **1.2b** ✅ 完成 2026-10-31 | 新建 **`:core:config`**：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 okhttp 的 `pinner()`）+ 证书编解码（解 `net ⇄ data` 环）。**原计划「进 `:core:model`」已实测证伪**，见 [research/13](research/13-module-extraction.md) §2.7–§2.9 | 已提交（PR #8） | **CI `tests=1116` + `screenshots=4`**，`app: 517` / `model: 413` / `term: 186`（`config: 0` 是预期） | 1.2 |
 | 1.3 | 抽 `:core:protocol`（`net/`，依赖 `:core:model` + `:core:term` + **`:core:config`** + okhttp）。`CertPins.pinner()` 目前是 `:app` 的扩展函数，届时随 `net/` 一起进本模块 | 模块 | 全仓仍 1116 | 1.2b |
 | 1.4 | 新建 `:design`：`KsuTokens` + `KsuTheme`（7 档外观） | 模块 | 设置页可切并持久化 | 1.1 |
 | **1.5** ✅ 完成 2026-10-31 | Roborazzi 截图测试接入：4 张基线（About / Startup / 抽屉 / 抽屉空态），411×891，`en-rUS-w411dp-h891dp` | 已合入 `master`（PR #5） | **CI `tests=1116` + `screenshots=4` 比对通过（连跑两轮一致）** | 1.0 |

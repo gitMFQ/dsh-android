@@ -22,7 +22,7 @@
 | **1.5** | Roborazzi **1.77.0** + 4 张基线（About / Startup / 抽屉 / 抽屉空态），411×891 | `tests=1116` + `screenshots=4`（PR #5） |
 | **1.1** | 抽 `:core:model`（`com.android.library`）：50 个源文件 + 43 个测试文件搬出 `:app`；包名不变所以**全仓零 import 改动**；2 个 `internal` 提权；4 处跨模块 smart cast 修复 | `app: 703` + `model: 413` = `tests=1116` + `screenshots=4`（PR #6） |
 | **1.2** | 抽 `:core:term`（**纯 JVM**）：7 源文件 + 10 测试文件（186 个 `@Test`）搬出 `:app`；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入以切断依赖边；`term → model` 边清零 | `app: 517` + `model: 413` + `term: 186` = `tests=1116` + `screenshots=4`（PR #7） |
-| **1.2b** | 抽 `:core:config`（`com.android.library`，`api` 依赖 model + term）：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（**除 okhttp 的 `pinner()`**）+ 证书编解码（`CertTrust.encode/decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`）。`pinner()` 变 `:app` 的**扩展函数**，调用点零改动 | 目标 `tests=1116`（`config: 0`，源码搬测试未搬，见 research/13 §2.9） |
+| **1.2b** | 抽 `:core:config`（`com.android.library`，`api` 依赖 model + term）：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（**除 okhttp 的 `pinner()`**）+ 证书编解码（`CertTrust.encode/decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`）。`pinner()` 变 `:app` 的**扩展函数**，调用点零改动 | `tests=1116` + `screenshots=4`（PR #8；`app: 517` / `model: 413` / `term: 186`，`config: 0` 是预期，见 research/13 §2.9） |
 
 每个 PR 都是**单一变量**，失败时能立刻定位。这个方法论请延续。
 
@@ -116,7 +116,7 @@
 | 1.0 ✅ | 宿主行类移入 `model/` | `model → root` 边 14 → 0 | 1116 绿（PR #4） |
 | 1.1 ✅ | 抽 `:core:model`（`com.android.library`） | 50 文件 + 43 个纯 JVM 测试（413 个 `@Test`）；4 个测试留 `:app`；2 个 `internal` 提权；4 处跨模块 smart cast | 独立绿 + 全仓仍 1116（PR #6，`app: 703` / `model: 413`） |
 | 1.2 ✅ | 抽 `:core:term`（**纯 JVM**，`kotlin("jvm")`，PR #7） | 7 文件 + 10 个测试文件 / 186 个 `@Test`；0 个 `internal`；readout 的 id + 谓词从 `:core:model` 移入以切断依赖边 | 仍 1116（PR #7，`app: 517` / `model: 413` / `term: 186`） |
-| 1.2b ✅ | 抽 **`:core:config`**（`com.android.library`） | ⚠️ **原计划「进 `:core:model`」已证伪**（`DshConfig` 闭包横跨 model+term；`AcceptedCert → CertPins → okhttp`）。独立模块：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ 编解码。`pinner()` 成 `:app` 扩展函数，调用点零改动。详见 research/13 **§2.7 / §2.8 / §2.9** | `config: 0` 测试是预期（源码搬、测试留），总目标仍 1116 |
+| 1.2b ✅ | 抽 **`:core:config`**（`com.android.library`，PR #8） | ⚠️ **原计划「进 `:core:model`」已证伪**（`DshConfig` 闭包横跨 model+term；`AcceptedCert → CertPins → okhttp`）。独立模块：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ 编解码。`pinner()` 成 `:app` 扩展函数，调用点零改动。详见 research/13 **§2.7 / §2.8 / §2.9** | 仍 1116（PR #8，`config: 0` 是预期：源码搬、测试留） |
 | 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件；`CertTrust` 带着 `pinner()` 一起进 | 仍 1116 |
 | 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
 

@@ -379,7 +379,7 @@ data class AcceptedCert(
 
 ### 2.9 M2.5 落地：`:core:config` 建成后的实测（**新**）
 
-本节记录 §2.8 方案的实施结果。**目标仍是总测试数 1116 保持不变**（`app: 517` / `model: 413` / `term: 186`，`:core:config` 自身 0 个 —— 见下方「测试为什么一个都没搬」）。CI 实测数字在本 PR 跑完后回填。
+本节记录 §2.8 方案的实施结果。**总测试数 1116 保持不变**，CI 实测（PR #8）：`tests=1116 failures=0 errors=0 skipped=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186`，`:core:config` 自身 **0** 个 —— 这是预期的，理由见下方「测试为什么一个都没搬」。
 
 **模块形状**
 
@@ -411,7 +411,7 @@ data class AcceptedCert(
 **测试为什么一个都没搬**：`CertTrustTest`（12 个 `@Test`）留在 `:app`。它同时用 `CertPins`（已进 config）和 `CertTrust`（还在 app），而 `CertTrust` 要到 M3 才动 —— 现在搬进 `:core:config` 会立刻编不过。**这是 M2.5 与 M1/M2 的一个真实差别：这次搬的是源码不是测试，测试数不变是正确结果，不是漏搬。**
 `:core:config:testDebugUnitTest` 仍然写进了 `verify.yml` 和 `build.yml` 的任务列表：它现在跑 0 个测试，但任务名必须在，否则 M3 搬进来的测试会**静默不跑**（§3.2 那个坑）。
 
-**实测（2026-10-31）**：本机 `:core:config:compileDebugKotlin` 与 `:app:compileDebugKotlin` 均通过，**0 处跨模块 smart cast 错误**。
+**实测（2026-10-31，PR #8）**：本机 `:core:config:compileDebugKotlin` 与 `:app:compileDebugKotlin` 均通过，**0 处跨模块 smart cast 错误**；CI `tests=1116 failures=0` + `screenshots=4`，截图门禁 `BUILD SUCCESSFUL`（像素未动，符合「拆模块不改变像素」的预期）。
 这与 §2.5 的预期相反，值得记下来：`DshConfig` 虽然被 UI 大量消费，但消费方式全是 `.copy(...)` 和直接读**值类型**字段（`String` / `Boolean` / `Float`），没有一处是「先判 `is`/`!= null` 再从属性上取值」。§2.5 的 4 处错误全部出自 **`ChatEntry` 这类 sealed 层级**，而 config 里没有 sealed 类型。**判据：smart cast 错误来自「对跨模块属性做类型收窄」，不是「类型跨了模块」。**
 
 ## 3. 建议的 PR 序列（单变量，每步一个 CI 门）
@@ -431,7 +431,7 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 | **M0** ✅ | #4 `split-model-rows` | 5 个宿主行类移入 `model/`，`model → root` 边清零 | `tests=1116 failures=0` |
 | **M1** ✅ | #6 `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），`model/` 50 文件 + **43** 个纯 JVM 测试（413 个 `@Test`）搬进去；`:app` 加 `implementation(project(":core:model"))`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权（§2.2）；**4 处跨模块 smart cast 修复**（§2.5）；`verify.yml` + `build.yml` 显式加 `:core:model:testDebugUnitTest` 并把 glob 改成 `**/build/test-results/**` | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413` |
 | **M2** ✅ | #7 `core-term-module` | 新建 `:core:term`（**纯 JVM**，`kotlin("jvm")`，版本声明在根 build），搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入（§2.6），`term → model` 边清零；`:app` 3 处 import 改指向 | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186` |
-| **M2.5** 🔄 | `core-config-module` | 新建 **`:core:config`**（**`com.android.library`**，理由见 §2.8：闭包含 `:core:model`，做不了纯 JVM），搬 `DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ `encode`/`decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`（§2.9）。`pinner()` 成 `:app` 的扩展函数，调用点零改动。**不动 `net/`、不动 `data/` 的存储层**。解 `net ⇄ data` 环 | 本机 `:core:config` + `:app` 编译通过；**CI 数字待本 PR 跑完回填**（测试未搬，`config: 0` 是预期，见 §2.9） |
+| **M2.5** ✅ | #8 `core-config-module` | 新建 **`:core:config`**（**`com.android.library`**，理由见 §2.8：闭包含 `:core:model`，做不了纯 JVM），搬 `DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ `encode`/`decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`（§2.9）。`pinner()` 成 `:app` 的扩展函数，调用点零改动。**不动 `net/`、不动 `data/` 的存储层**。解 `net ⇄ data` 环 | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186`（`config` 未出现 = 0 个，预期，§2.9） |
 | **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + **`:core:config`** + okhttp。`CertPins.pinner()` 留在此层（调用点仅 `DshClient.kt:211`）。`hostOf` 在这里提权 | `tests=1116 failures=0` |
 | **M4** | `data-depends-on-config` | `data/` 的 `ConfigStore` 改为 import `:core:config` 的类型；`net → data` 环彻底消失 | `tests=1116 failures=0` |
 
