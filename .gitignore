@@ -17,6 +17,8 @@
 
 # Gradle / Android
 .gradle/
+# Kotlin 2.x build session data written at the repo root by the compiler.
+.kotlin/
 build/
 app/build/
 local.properties

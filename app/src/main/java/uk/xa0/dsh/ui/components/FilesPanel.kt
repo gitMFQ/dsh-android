@@ -621,9 +621,12 @@ private fun ExplorerRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        if (entry.size != null) {
+        // Bound to a local first: `entry.size` is a public API property from
+        // :core:model, and Kotlin will not smart-cast across a module boundary.
+        val entrySize = entry.size
+        if (entrySize != null) {
             Text(
-                text = formatSize(entry.size),
+                text = formatSize(entrySize),
                 style = DshType.bodySmall,
                 color = colors.labelTertiary,
                 maxLines = 1,

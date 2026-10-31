@@ -108,14 +108,18 @@ fun RouterTab(
             color = colors.labelCaption,
         )
         RouterRow("Model", target.modelId)
-        val declaredModel = target.model
         // The display name earns its row only when it says something the model row
         // above does not: the host's document usually gives `name` as the same
         // string as the id (`Spark-X2.5-4B-Q4_K_M-768k`), and drawing it twice is
         // noise. `LocalModelEntry` names its own id `id`, which is the very string
         // the entry was looked up by — so this compares against `target.modelId`.
-        if (declaredModel?.name != null && declaredModel.name != target.modelId) {
-            RouterRow("Display name", declaredModel.name)
+        // The entry is bound to a local first. `declaredModel?.name != null` used to
+        // be followed by a smart cast, which stopped working when `LocalModelEntry`
+        // moved to :core:model — Kotlin will not smart-cast a public API property
+        // across a module boundary. Same test, one binding.
+        val declaredName = target.model?.name
+        if (declaredName != null && declaredName != target.modelId) {
+            RouterRow("Display name", declaredName)
         }
         if (!effort.isNullOrEmpty()) RouterRow("Reasoning effort", effort)
 
