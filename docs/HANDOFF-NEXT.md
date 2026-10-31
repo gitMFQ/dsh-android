@@ -117,7 +117,7 @@
 | 1.1 ✅ | 抽 `:core:model`（`com.android.library`） | 50 文件 + 43 个纯 JVM 测试（413 个 `@Test`）；4 个测试留 `:app`；2 个 `internal` 提权；4 处跨模块 smart cast | 独立绿 + 全仓仍 1116（PR #6，`app: 703` / `model: 413`） |
 | 1.2 ✅ | 抽 `:core:term`（**纯 JVM**，`kotlin("jvm")`，PR #7） | 7 文件 + 10 个测试文件 / 186 个 `@Test`；0 个 `internal`；readout 的 id + 谓词从 `:core:model` 移入以切断依赖边 | 仍 1116（PR #7，`app: 517` / `model: 413` / `term: 186`） |
 | 1.2b ✅ | 抽 **`:core:config`**（`com.android.library`，PR #8） | ⚠️ **原计划「进 `:core:model`」已证伪**（`DshConfig` 闭包横跨 model+term；`AcceptedCert → CertPins → okhttp`）。独立模块：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ 编解码。`pinner()` 成 `:app` 扩展函数，调用点零改动。详见 research/13 **§2.7 / §2.8 / §2.9** | 仍 1116（PR #8，`config: 0` 是预期：源码搬、测试留） |
-| 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件；`CertTrust` 带着 `pinner()` 一起进 | 仍 1116 |
+| 1.3 | 抽 `:core:protocol`（`net/`） | **15** 文件（含 1.2b 外移的 `CertPinning.kt`）；`com.android.library`（`net/` 有 `android.net`/`Context`/`Log`）；提权 **2** 个（`hostOf` + `CertProbe.systemTrusts`）；**环已解，不再被 M4 阻塞** | 仍 1116（预计 `app: 444` / `protocol: 73`）→ 详见 research/13 **§2.10** |
 | 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
 
 > **抽模块时必改两处**（1.1 实证，两处都会让 CI「绿着丢测试」）：
@@ -127,6 +127,14 @@
 > 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。第 2 条每加一个模块都要再写一遍（1.2 起还要加 `:core:term:test`，1.2b 起还要加 `:core:config:testDebugUnitTest`）。
 
 > **1.2b 的一个反例，别把「测试数没涨」当漏搬**：`:core:config` 搬的是**源码**，`CertTrustTest`（12 个 `@Test`）留在 `:app` —— 它同时用 `CertTrust`（M3 才走），现在搬进去就编不过。**模块建好了、测试数没变，是正确结果。** 但任务名仍要写进两个 workflow：现在跑 0 个，M3 搬进来的才会真的跑。
+
+> **⚠️ 1.2b 之后 `net/` 的状态变了，M3 前必读 [research/13](research/13-module-extraction.md) §2.10**：
+> 1. **`net → data` 环已不存在** —— `DshClient.kt:25` 那行 import 现在指向 `:core:config` 的 `DshConfig`。**M3 不再被 M4 阻塞。**
+> 2. **`pinner()` 已是一个独立文件**（`net/CertPinning.kt`），整体搬即可，不用再从 `CertPins` 里切一次。
+> 3. **要提权的是 2 个 `internal`**（`hostOf` + `CertProbe.systemTrusts`），原文只写了 1 个。
+> 4. **`:core:protocol` 必须是 `com.android.library`**，不能照 `:core:term` 用 `kotlin("jvm")`。
+>
+> 教训（值得记）：**包名不变（方案 A）让「一条 import 指向哪个模块」看不出来** —— 源码一个字没改，依赖闭包却换了模块，而 CI 编译是通过的，不会报错。判断归属只能看**符号现在住在哪个模块**。
 
 > **1.2b 为什么不是「塞进 `:core:model`」**（复盘，[research/13](research/13-module-extraction.md) **§2.7 + §2.8**）：
 > 原文推荐的「`AcceptedCert` + `DshConfig` 进 `:core:model`」**已实测证伪**。三条阻塞：

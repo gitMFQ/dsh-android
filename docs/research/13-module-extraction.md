@@ -414,6 +414,74 @@ data class AcceptedCert(
 **实测（2026-10-31，PR #8）**：本机 `:core:config:compileDebugKotlin` 与 `:app:compileDebugKotlin` 均通过，**0 处跨模块 smart cast 错误**；CI `tests=1116 failures=0` + `screenshots=4`，截图门禁 `BUILD SUCCESSFUL`（像素未动，符合「拆模块不改变像素」的预期）。
 这与 §2.5 的预期相反，值得记下来：`DshConfig` 虽然被 UI 大量消费，但消费方式全是 `.copy(...)` 和直接读**值类型**字段（`String` / `Boolean` / `Float`），没有一处是「先判 `is`/`!= null` 再从属性上取值」。§2.5 的 4 处错误全部出自 **`ChatEntry` 这类 sealed 层级**，而 config 里没有 sealed 类型。**判据：smart cast 错误来自「对跨模块属性做类型收窄」，不是「类型跨了模块」。**
 
+### 2.10 M3 开工前的实测基线：`net/` 现在是什么状态（**新**，取代原文对 M3 的假设）
+
+以下全部在 M2.5（PR #8）合入后重新采集。**原文对 M3 的描述有 4 处已经过时**，逐条列出，否则 M3 会按错误的假设开工。
+
+**① `net → data` 环已不存在，M3 不再被 M4 阻塞**
+
+原文说 `net/DshClient.kt:25` 用 `data.DshConfig`，与 `data → net` 形成环，所以要先做 M4。**现在这条边指向的是 `:core:config` 里的 `uk.xa0.dsh.data.DshConfig`**，不是 `:app` 的 `data/` 包 —— 包名不变（§2.3 方案 A）让同一行 import 的**归属模块**换了。
+
+实测 `net/` 的对外 import，按包名归组：
+
+| 指向包 | 条数 | 实际归属模块 |
+|---|---|---|
+| `uk.xa0.dsh.model.*` | 25 | `:core:model` |
+| `uk.xa0.dsh.term.*` | 9 | `:core:term` |
+| `uk.xa0.dsh.data.DshConfig` | 1 | **`:core:config`**（不是 `:app`） |
+
+**`net/` 对 `:app` 的依赖边 = 0。** 反向确认：`net/` 里没有任何 `import uk.xa0.dsh.<根包>` 的语句。所以 M3 可以直接做。
+
+> 这正是「判据看依赖闭包」的第三次应用，但形态和前两次不同：前两次（§2.6 / §2.8）是「源码看着纯、闭包不纯」。这次是**源码一个字没改，闭包却变干净了** —— 因为搬动的是它依赖的那个类，而不是它自己。**判断一条边指向哪个模块，要看被 import 的符号现在住在哪个模块，不能只看包名。** 包名不变（方案 A）让这条判断变得容易出错，而 CI 不会报错，因为编译是通过的。
+
+**② `pinner()` 不在 `:app` 的 `CertPins` 里等着被"留下"，它已经是一个独立的文件**
+
+1.2b 把 `pinner()` 从 `CertPins` 拆出来做成了 `:app` 的扩展函数，落在 `net/CertPinning.kt`（31 行，import 只有 `okhttp3.CertificatePinner`）。
+M3 时**整个文件搬进 `:core:protocol`** 即可，`CertPins` 本身不动（它已在 `:core:config`）。原文「`pinner()` 留在此层」表述含糊，容易被读成「从 `CertPins` 里再切一次」。
+
+**③ 要提权的是 2 个 `internal`，不是 1 个**
+
+原文只列了 `hostOf`。实测跨模块调用点后，`CertProbe.systemTrusts` 也是：
+
+| 声明 | 定义 | 跨模块调用点 | M3 处理 |
+|---|---|---|---|
+| `hostOf(raw: String)` | `net/EndpointResolver.kt:22` | `ui/components/CertificateSection.kt:55` | 改 `public` |
+| `CertProbe.systemTrusts(chain)` | `net/CertProbe.kt:94` | `DshViewModel.kt:3927` | 改 `public` |
+| `CertTrust.systemTrust` | `net/CertTrust.kt:220` | 无（仅 `CertProbe.kt:97` 同包） | 不动 |
+| `isPrivateLanHost` | `net/EndpointResolver.kt:41` | 无（仅 `DshClient.kt:517` 同包） | 不动 |
+| `subnetRewritten` | `net/EndpointResolver.kt:63` | 无 | 不动 |
+
+> 原文只数了 1 个，是因为当时 `net/` 和 `ui/` 都在 `:app` 里 —— `hostOf` 那是因为**跨包**才被注意到，`systemTrusts` 被漏了。**提权判据是「调用点是否在新模块之外」，跨包不是判据。** 模块一划，跨包调用全变成跨模块调用。
+
+**④ `:core:protocol` 必须是 `com.android.library`**
+
+`net/` 不是纯 JVM：`DshClient.kt:3-8` 用 `android.content.Context` / `android.net.ConnectivityManager|LinkProperties|Network|NetworkCapabilities` / `android.util.Log`，`PersistentCookieJar.kt:3` 用 `Context`，`RemoteMux.kt:3` 用 `Log`。这一点原文没写死，容易在 M3 时照 `:core:term` 的样子误用 `kotlin("jvm")`。
+
+**⑤ 测试迁移：7 个搬、1 个留**
+
+`app/src/test/java/uk/xa0/dsh/net/` 现有 8 个测试文件、77 个 `@Test`：
+
+| 文件 | `@Test` | 去向 |
+|---|---|---|
+| `CertTrustTest` | 12 | 搬 |
+| `EndpointResolverTest` | 33 | 搬 |
+| `MultipartTest` | 12 | 搬 |
+| `ConnectivityGateTest` | 5 | 搬 |
+| `GatewayAnswerTextTest` | 5 | 搬 |
+| `DshClientResetTest` | 4 | **留** —— `@RunWith(RobolectricTestRunner)` + `@Config(application = HarnessApplication::class)`，后者定义在 `app/src/test/.../scroll/ScrollHarnessTest.kt:41` |
+| `DoorFaultForAnswerTest` | 3 | 搬 |
+| `TransportResetTest` | 3 | 搬 |
+
+搬走 73、留下 4，**总数 77 不变**，所以全仓仍应是 `app: 517 - 73 = 444` / `model: 413` / `term: 186` / `config: 0` / `protocol: 73` = **1116**。
+
+> `:core:protocol` 的测试需要 `testImplementation("org.json:json:20240303")`（`MultipartTest` / `GatewayAnswerTextTest` 解析 JSON，桩实现会抛 `Stub!`，§2.4）与 okhttp 的 test 依赖；`DshClientResetTest` 留下后 `:app` 侧不需要额外改动。
+
+**⑥ `:app` 侧要改的 import：`net.` 前缀基本不动**
+
+因为包名不变，`import uk.xa0.dsh.net.X` 在 M3 之后仍然正确 —— 和 1.1 / 1.2 / 1.2b 一样，**源码零改动**。唯一要改的是 `DshViewModel.kt` 对 `CertProbe.systemTrusts` 的可见性（提权，不改调用）与 `CertificateSection.kt` 的 `hostOf`（同上）。此外 `:app` 需要加 `implementation(project(":core:protocol"))`。
+
+**风险提示**：M3 的消费面是三次里最大的（`ui/` 有 12 处 `net.` import，`root` 有 25 处），**smart cast 错误大概率不是 0**。§2.5 那 4 处全部来自 sealed 层级，`net/` 里 `DoorFault` / `CertReadout` / `DshRpcException` 都是候选。**先本机编译一遍收干净，别用 CI 试。**
+
 ## 3. 建议的 PR 序列（单变量，每步一个 CI 门）
 
 ### 3.0 先修正 ROADMAP 的顺序
@@ -432,8 +500,8 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 | **M1** ✅ | #6 `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），`model/` 50 文件 + **43** 个纯 JVM 测试（413 个 `@Test`）搬进去；`:app` 加 `implementation(project(":core:model"))`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权（§2.2）；**4 处跨模块 smart cast 修复**（§2.5）；`verify.yml` + `build.yml` 显式加 `:core:model:testDebugUnitTest` 并把 glob 改成 `**/build/test-results/**` | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413` |
 | **M2** ✅ | #7 `core-term-module` | 新建 `:core:term`（**纯 JVM**，`kotlin("jvm")`，版本声明在根 build），搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入（§2.6），`term → model` 边清零；`:app` 3 处 import 改指向 | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186` |
 | **M2.5** ✅ | #8 `core-config-module` | 新建 **`:core:config`**（**`com.android.library`**，理由见 §2.8：闭包含 `:core:model`，做不了纯 JVM），搬 `DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ `encode`/`decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`（§2.9）。`pinner()` 成 `:app` 的扩展函数，调用点零改动。**不动 `net/`、不动 `data/` 的存储层**。解 `net ⇄ data` 环 | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186`（`config` 未出现 = 0 个，预期，§2.9） |
-| **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + **`:core:config`** + okhttp。`CertPins.pinner()` 留在此层（调用点仅 `DshClient.kt:211`）。`hostOf` 在这里提权 | `tests=1116 failures=0` |
-| **M4** | `data-depends-on-config` | `data/` 的 `ConfigStore` 改为 import `:core:config` 的类型；`net → data` 环彻底消失 | `tests=1116 failures=0` |
+| **M3** | `core-protocol-module` | 新建 `:core:protocol`（`com.android.library` —— `net/` 有 `android.net`/`Context`/`Log`，见 §2.10），搬 `net/` **15** 文件（含 1.2b 留在 app 的 `CertPinning.kt`）；依赖 `:core:model` + `:core:term` + **`:core:config`**（`api`，因 `DshClient.config` 是公开 `var`）+ okhttp。**要提权 2 个**：`hostOf`（`ui/components/CertificateSection.kt:55` 跨模块）与 `CertProbe.systemTrusts`（`DshViewModel.kt:3927` 跨模块）。**`net → data` 环已不存在**（M2.5 已解，见 §2.10），不需要先做 M4 | `tests=1116 failures=0` |
+| **M4** | `data-depends-on-config` | **范围已被 M2.5 吃掉大半**：`ConfigStore` 在 1.2b 起就已经从 `:core:config` 拿 `DshConfig` / `AcceptedCert` / 两个 codec 了（靠包名不变，import 一行没改）。剩下要做的是**显式化**：确认 `data/` 对 `net/` 只剩零出边，必要时删掉残留 import | `tests=1116 failures=0` |
 
 > **M2 起每步必做的三件事**（M1 实证）：
 > 1. 新模块的测试任务要在 `verify.yml` **和** `build.yml` 里**显式写名字**（依赖模块 ≠ 跑它的测试）；
@@ -496,7 +564,7 @@ bash build.sh :core:term:test
 这比 §2.5 的预期好：`term/` 的类型被 UI 消费得浅，`when (action) { is TerminalFrameAction.X -> }` 这类写法不触发
 （`is` 分支收窄的是 `val` 参数而不是跨模块属性）。**但 M3 抽 `net/` 时不要据此假设为 0** —— 那时消费面大得多。
 
-**M3 之前请先读 §2.6**：`net/` 的依赖闭包里有 `data.DshConfig`，同样是「源码纯不纯」之外的第二个判据。
+**M3 之前请先读 §2.10**：M2.5 之后 `net/` 的状态与原文假设不同 —— 环已解、`pinner()` 已外移、要提权的是 2 个而不是 1 个。
 
 ### 3.2 每一步的测试数怎么算
 
