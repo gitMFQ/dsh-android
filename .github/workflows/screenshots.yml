@@ -1,0 +1,79 @@
+name: Screenshots
+
+# Records the visual baselines that `verify.yml` compares against.
+#
+# This is a separate, manually dispatched workflow because recording is a
+# *writing* operation: it produces the PNGs that the compare gate then treats as
+# the truth. Recording on every push would mean the baseline silently follows
+# whatever the code does, and the gate would compare the app against itself.
+#
+# It also has to run in CI at all: the development box for this repository is
+# aarch64 with no usable aapt2, so `recordRoborazziDebug` cannot run there. See
+# docs/BUILD-AND-CI.md §0.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to record baselines on (defaults to the branch this is dispatched from)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  record:
+    name: Record baselines
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Same .toolchain layout build.sh expects; kept identical to verify.yml so
+      # there is one description of how this project is built.
+      - name: Lay out .toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p .toolchain/android-home .toolchain/xdg-data
+          ln -s "$JAVA_HOME" .toolchain/jdk-17.0.20.1+1
+          curl -fsSL --retry 3 https://services.gradle.org/distributions/gradle-9.5.0-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d .toolchain
+          test -x .toolchain/gradle-9.5.0/bin/gradle
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+
+      # `-Pscreenshots` admits the screenshot class, which the ordinary test task
+      # excludes; without it this task would find no tests at all.
+      - name: Record
+        run: bash build.sh :app:recordRoborazziDebug -Pscreenshots
+
+      - name: Upload recorded baselines
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roborazzi-baselines
+          path: app/src/test/screenshots/**
+          if-no-files-found: warn
+
+      # The diff images are the other half of a failed compare: they show what
+      # moved. Uploaded from the same directory Roborazzi writes them to.
+      - name: Upload comparison output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roborazzi-output
+          path: |
+            app/build/outputs/roborazzi/**
+            app/build/test-results/**
+          if-no-files-found: ignore

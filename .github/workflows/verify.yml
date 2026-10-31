@@ -51,6 +51,35 @@ jobs:
       - name: Unit tests
         run: bash build.sh :app:testDebugUnitTest
 
+      # The visual gate. Phase 2 rewrites the shell, and ChatScreen.kt alone is
+      # 3200 lines; this is what turns "the re-skin moved something" from
+      # something a person notices on a phone days later into a red check with a
+      # diff image attached.
+      #
+      # `-Pscreenshots` is what admits the screenshot class: the build excludes it
+      # from the ordinary test task, so the 1 116 functional tests above are not
+      # re-run or double-counted here, and their count stays the evidence quoted
+      # in every PR. The build is warm by this point, so the incremental cost is
+      # the four captures.
+      #
+      # It compares strictly. If that ever proves flaky on a runner image change,
+      # the fix is a documented threshold in the test, not a deleted gate.
+      - name: Screenshot gate
+        run: bash build.sh :app:verifyRoborazziDebug -Pscreenshots
+
+      # A failed comparison writes `[name]_compare.png` beside the baseline, which
+      # is the only artifact that says *what* moved. Uploaded even on success so a
+      # reviewer can see the current render without checking out the branch.
+      - name: Upload screenshot comparisons
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roborazzi-comparison
+          path: |
+            app/build/outputs/roborazzi/**
+            app/build/reports/roborazzi/**
+          if-no-files-found: ignore
+
       # Always uploaded (not only on failure): the XML under test-results carries
       # the executed test count, which is the evidence that the Kotlin 2.4.21
       # migration actually ran 1116 tests rather than skipping them.
@@ -64,20 +93,51 @@ jobs:
             app/build/test-results/**
           if-no-files-found: ignore
 
+      # Two numbers, reported separately on purpose.
+      #
+      # The functional suite is the gate every PR quotes — "tests=1116" — and it
+      # must stay exactly 1116, because a number that quietly grew is how a
+      # deleted test goes unnoticed. The screenshot captures are a different
+      # kind of test (they assert pixels, not behaviour) and live in their own
+      # XML files under uk/xa0/dsh/screenshot/, so they are counted apart rather
+      # than folded in and silently raising the functional total to 1120.
       - name: Summarize executed tests
         if: always()
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import glob, xml.etree.ElementTree as ET
-          total = failures = errors = skipped = 0
+          import glob, os, xml.etree.ElementTree as ET
+
+          def tally(pattern):
+              total = failures = errors = skipped = 0
+              for f in glob.glob(pattern, recursive=True):
+                  r = ET.parse(f).getroot()
+                  total += int(r.get('tests', 0))
+                  failures += int(r.get('failures', 0))
+                  errors += int(r.get('errors', 0))
+                  skipped += int(r.get('skipped', 0))
+              return total, failures, errors, skipped
+
+          # Robolectric writes one XML per test class, named after the class, so
+          # the screenshot class is excluded by its own name rather than by
+          # where the run happened to put it.
+          screenshot = 0
+          functional = [0, 0, 0, 0]
           for f in glob.glob('app/build/test-results/**/*.xml', recursive=True):
               r = ET.parse(f).getroot()
-              total += int(r.get('tests', 0))
-              failures += int(r.get('failures', 0))
-              errors += int(r.get('errors', 0))
-              skipped += int(r.get('skipped', 0))
-          print(f"tests={total} failures={failures} errors={errors} skipped={skipped}")
+              n = int(r.get('tests', 0))
+              if 'screenshot' in os.path.basename(f).lower():
+                  screenshot += n
+              else:
+                  functional[0] += n
+                  functional[1] += int(r.get('failures', 0))
+                  functional[2] += int(r.get('errors', 0))
+                  functional[3] += int(r.get('skipped', 0))
+
+          t, fa, er, sk = functional
+          print(f"tests={t} failures={fa} errors={er} skipped={sk}")
+          print(f"screenshots={screenshot} (baseline captures, compared separately)")
           with open('$GITHUB_STEP_SUMMARY', 'a') as s:
-              s.write(f"\n### JVM tests\n\ntests={total} failures={failures} errors={errors} skipped={skipped}\n")
+              s.write(f"\n### JVM tests\n\ntests={t} failures={fa} errors={er} skipped={sk}\n")
+              s.write(f"\nscreenshots={screenshot} baseline captures compared\n")
           PY

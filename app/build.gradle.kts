@@ -4,6 +4,10 @@ plugins {
     // plugin and still versioned with Kotlin.
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    // Screenshot baselines: `recordRoborazziDebug` / `verifyRoborazziDebug` /
+    // `compareRoborazziDebug`. The plugin only adds tasks; nothing is captured
+    // unless a test calls `captureRoboImage()`.
+    id("io.github.takahirom.roborazzi")
 }
 
 android {
@@ -67,6 +71,24 @@ android {
         val fakeHome = rootProject.layout.projectDirectory.dir(".toolchain/robolectric-home").asFile
         doFirst { fakeHome.mkdirs() }
         systemProperty("user.home", fakeHome.absolutePath)
+
+        // The screenshot class is a *baseline* test, not a functional one: it
+        // asserts nothing about behaviour, and its whole value is the image diff
+        // that `verifyRoborazziDebug` runs. Letting it into the functional suite
+        // would do two bad things at once — inflate the 1116-test count that
+        // every PR quotes as evidence, and turn a pixel diff into a red "unit
+        // test" with no image attached.
+        //
+        // It is switched on by a property rather than by `--tests`, because a
+        // Gradle test filter cannot re-include what another filter excluded: the
+        // `--tests 'uk.xa0.dsh.screenshot.*'` on the Roborazzi task was silently
+        // overruled by the exclusion below and failed with "No tests found for
+        // given includes". The gate passes -Pscreenshots instead; see verify.yml.
+        if (!project.hasProperty("screenshots")) {
+            filter {
+                excludeTestsMatching("uk.xa0.dsh.screenshot.*")
+            }
+        }
     }
 
     // No `composeOptions { kotlinCompilerExtensionVersion = ... }` here: since
@@ -170,6 +192,13 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    // Screenshot baselines. `roborazzi` records and compares PNGs from a unit
+    // test, `roborazzi-compose` adds the `SemanticsNodeInteraction.captureRoboImage()`
+    // overload that captures one composable rather than the whole window. Both are
+    // test-only: neither ships in the APK.
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.77.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.77.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
