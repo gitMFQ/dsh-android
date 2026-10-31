@@ -178,6 +178,23 @@ class CertTrust(
                 return
             } catch (e: CertificateException) {
                 e
+            } catch (e: RuntimeException) {
+                // An empty anchor set is the normal state of an install that has not
+                // accepted a certificate yet, and the platform's PKIX validator does
+                // not report that as a refusal: it throws
+                // `RuntimeException: ... InvalidAlgorithmParameterException: the
+                // trustAnchors parameter must be non-empty`. That is not noise to
+                // swallow — the chain is genuinely untrusted — but it is also not a
+                // `CertificateException`, so without this branch it escapes the trust
+                // manager entirely. OkHttp then reports a transport failure instead of
+                // a certificate question, and the app never offers the prompt that
+                // would let the user accept the host.
+                //
+                // The message is the app's own, not the JDK's: this string is shown in
+                // the prompt that asks the user to trust the certificate, and "the
+                // trustAnchors parameter must be non-empty" is not an answer to "why
+                // is my host unreachable". The original stays as the cause.
+                CertificateException(UNABLE_TO_VERIFY, e)
             }
             try {
                 systemTrust.checkServerTrusted(chain, authType)
@@ -185,6 +202,10 @@ class CertTrust(
             } catch (_: CertificateException) {
                 // Fall through: neither the user's anchors nor the system's vouched
                 // for this chain.
+            } catch (_: RuntimeException) {
+                // The system store can fail the same way — on this platform it throws
+                // an NPE on a chain it cannot even begin to validate, rather than a
+                // refusal. The meaning is unchanged: not trusted by this store either.
             }
             throw CertTrustException(
                 chain = chain.toList(),
@@ -218,5 +239,15 @@ class CertTrust(
          * self-signed" and "this host changed" is what the prompt has to say.
          */
         internal val systemTrust: X509TrustManager by lazy { trustManagerOver(null) }
+
+        /**
+         * What the prompt says when a store refused the chain without a usable reason.
+         *
+         * Deliberately not the platform's wording: an empty anchor set makes the PKIX
+         * validator complain about a `trustAnchors` parameter, which explains the
+         * mechanism to nobody and is shown to a person being asked to trust a
+         * certificate.
+         */
+        private const val UNABLE_TO_VERIFY = "The certificate could not be verified."
     }
 }

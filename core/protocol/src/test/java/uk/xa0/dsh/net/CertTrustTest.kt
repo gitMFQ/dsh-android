@@ -48,6 +48,19 @@ class CertTrustTest {
 
     @Test
     fun `a host with nothing accepted is refused and the chain comes back with the refusal`() {
+        // The state of a fresh install: the user's anchor store is empty. The
+        // platform's PKIX validator does not treat that as "refused" — it throws a
+        // RuntimeException ("the trustAnchors parameter must be non-empty"), which is
+        // not a CertificateException and so used to escape checkServerTrusted
+        // entirely. OkHttp then surfaced a transport failure and the app never asked
+        // the user to trust the host.
+        //
+        // This asserts the *type* of the refusal at the boundary OkHttp sees, because
+        // that type is what decides whether the setup screen is offered. It went
+        // unnoticed while this test lived in :app only because androidx.security put
+        // conscrypt and BouncyCastle on that test classpath, which changed what the
+        // validator did. Moving the test to :core:protocol removed those, and the
+        // plain-JDK answer — the one a device without them gets — came out.
         val trust = CertTrust()
         val failure = assertThrows(CertificateException::class.java) {
             trust.trustManager().checkServerTrusted(arrayOf(leaf(), localCa()), "ECDHE_ECDSA")
