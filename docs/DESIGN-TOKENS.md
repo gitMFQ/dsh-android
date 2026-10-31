@@ -18,27 +18,21 @@
 | 卡片圆角 | 12 / 16 / 20 dp 三档（Sheet 28dp） | 分段列表 + 卡片 |
 | 阴影/模糊 | 底栏 blur 4dp + 高光描边 alpha 0.75（暗色）/ 阴影 alpha 0.1–0.2 | FloatingBottomBar.kt:307-333 |
 
-## 2. `KsuTokens`（新建，原创）
+## 2. `KsuTokens`（**已于 1.4b 落地**，见 `design/src/main/java/uk/xa0/dsh/design/KsuTokens.kt`）
 
-```kotlin
-object KsuTokens {
-    object Space  { val xs = 4.dp;  val s = 8.dp;  val m = 12.dp; val l = 16.dp; val xl = 20.dp; val xxl = 24.dp }
-    object Radius { val card = 16.dp; val cardLarge = 20.dp; val sheet = 28.dp; val pill = 100.dp }
-    object Size   { val rowHeight = 56.dp; val barHeight = 60.dp; val icon = 24.dp; val touchTarget = 48.dp }
-    object Type {
-        val caption   = TextStyle(fontSize = 11.sp, lineHeight = 14.sp)
-        val body      = TextStyle(fontSize = 15.sp, lineHeight = 24.sp)
-        val bodyLarge = TextStyle(fontSize = 17.sp, lineHeight = 26.sp, fontWeight = FontWeight.Medium)
-        val title     = TextStyle(fontSize = 22.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold)
-        val display   = TextStyle(fontSize = 35.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold)
-    }
-    object Motion {
-        val pageSpring = spring<Float>(dampingRatio = 0.75f, stiffness = 400f)
-        val dialogIn   = tween<Float>(180, easing = FastOutSlowInEasing)
-        val streamFade = tween<Float>(120)
-    }
-}
-```
+> ⚠️ **本节原有一段示意代码，与 §1.1 的实测刻度冲突**（示意里 `s=8/m=12/l=16/xl=20`，实测是 `6/8/12/16`；`Radius.card` 示意 16、实测三档是 12/16/20）。
+> **以 §1.1 与已提交的实现为准**，示意代码已删除 —— 两份互相矛盾的刻度表比没有更糟：阶段 2 会照着错的那份写。
+>
+> 实现与 §1.1 的对应（`KsuTokens.kt` 的注释里也有）：
+>
+> | 类别 | `KsuTokens` | 来源 |
+> |---|---|---|
+> | `Space` | `xs 4 / sm 6 / md 8 / lg 12 / xl 16 / xxl 20 / xxxl 24` | §1.1「4/6/8/12/16/20/24」逐项 |
+> | `Radius` | `card 12 / cardLarge 16 / panel 20 / sheet 28 / pill 100` | §1.1「12/16/20 三档 + Sheet 28」 |
+> | `Size` | `rowHeight 56 / barHeight 60 / icon 24 / touchTarget 48` | §1.1 行高与底栏 |
+> | `Type` | `caption 11/14 · body 15/24 · bodyLarge 17/26 · title 22/30 · display 35/42` | §1.1 字号五档 |
+> | `Motion` | `pageSpring(damping 0.75)` / `dialogIn 180ms` / `streamFade 120ms` | 本文件 §3 行为规格 |
+
 
 ## 3. 底栏行为规格（重写依据，不抄代码）
 
@@ -53,17 +47,53 @@ object KsuTokens {
 
 > **必须提供降级路径**：API 31+ 用 `Modifier.blur()` / RenderEffect；API < 31 退回纯色 + 描边，否则 Android 8–11 会出问题。
 
-## 4. 外观档位（7 档）落地
+## 4. 外观档位（7 档）—— **已于 1.4b 交付**
 
-| 档位 | 实现 | 与 fork 的对接 |
+| 档位 | 状态 | 实现（`DshTheme.kt`） |
 |---|---|---|
-| 跟随系统 | `isSystemInDarkTheme()` | 已有 `themeMode` |
-| 亮 / 暗 | 固定 ColorScheme | 已有 |
-| AMOLED | 背景 #000000、卡片 #0A0A0A、描边 #1A1A1A | 新增 |
-| Monet 跟随 / 亮 / 暗 | `dynamicColorScheme`（API 31+），低版本回退到亮/暗 | 新增，需 `Build.VERSION` 判断 |
-| 主色选择 | 15 色 seed + material-kolor 生成 | 新增依赖 `material-kolor 5.0.1` |
+| 亮 / 暗 / 跟随系统 | ✅ 原有 | 原调色板，一色未改 |
+| **AMOLED** | ✅ 交付 | 暗色调色板 + `toAmoled()` 变换：表面压到 `#000`/`#0A0A0A`/`#141414`，**边框提亮**（纯黑上那根线是卡片唯一的边） |
+| **Monet 跟随 / 亮 / 暗** | ✅ 交付 | `toMonet()`：只取壁纸的主色族与底色，**语义色与语法色不动**；API < 31 返回原调色板 |
+| ~~主色选择（15 色 seed + material-kolor）~~ | ❌ **未做，且已从阶段 2 移出** | 见下 |
 
-**与 `DshColors` 的关系**：`DshColors` 是语义层（工具状态、审批红、连接绿等业务色），`KsuTheme` 是外观层（surface / container / outline）。渲染组件继续读 `DshTheme.colors`（244 处调用点**一处不改**），外壳读 `KsuTheme`，两者在 `AppTheme` 合并。
+### 4.1 「主色选择」为什么不在 7 档里
+
+原表把「主色选择」列在 7 档之中，但它**不是一种外观档位**，而是一套**额外的配色生成器**：
+
+- 它要引入新依赖 `material-kolor 5.0.1`（本仓目前一个没有的库），并生成整套 `ColorScheme`；
+- 7 档里的三种 Monet 已经覆盖「跟随壁纸」这个诉求，而主色选择解决的是「壁纸之外再给我 15 个候选」；
+- 它与阶段 2 的外壳换装**无依赖关系**，混在一起会让换皮 PR 多背一个依赖变更 —— 违反单变量。
+
+**结论：移出阶段 2，列为独立可选项（阶段 4 之后）**。要做得单独一个 PR，先论证依赖与 GPL/Apache 许可。
+
+**与 `DshColors` 的关系（已实现，留作说明）**：`DshColors` 是语义层（工具状态、审批红、连接绿），**外观档位也落在这一层** —— 因为 `toAmoled()` / `toMonet()` 变换的是 `DshColors` 本身，而不是另造一个 `KsuTheme` 类型。
+
+> **这推翻了原设计**：原文设想「外壳读 `KsuTheme`（新类型），渲染组件读 `DshTheme.colors`，两者在 `AppTheme` 合并」。
+> 实测后不采用，理由：`DshTheme.colors` 有 **245 处调用点**，引入第二个颜色类型意味着每个换皮文件都要判断「这个颜色该读哪一层」，而 `toAmoled`/`toMonet` 作为 `DshColors → DshColors` 的变换**不需要第二个类型就达到了同样效果**，调用点一处未改。
+> 第二个颜色类型的价值要等 miuix 真正接入（它的组件读 `MiuixTheme.colorScheme`）才出现，见 §8.3。
+
+### 4.2 ⚠️ 现存两套间距刻度，语义冲突（阶段 2 开工前必须决定）
+
+1.4b 引入了 `KsuTokens.Space`，而 `DshSpacing` 本来就存在。两者**同名档位取值不同**：
+
+| 档位 | `DshSpacing`（`DshTheme.kt`） | `KsuTokens.Space`（`KsuTokens.kt`） | 冲突 |
+|---|---|---|---|
+| xxs | 2 | — | 只有旧的 |
+| xs / sm / md / lg / xl | 4 / 6 / 8 / 12 / 16 | 4 / 6 / 8 / 12 / 16 | ✅ 一致 |
+| **xxl** | **24** | **20** | ❌ |
+| **xxxl** | **32** | **24** | ❌ |
+
+**当前无害**（`KsuTokens` 还没有调用点），但阶段 2 一开始就会出事：`ui/ChatScreen.kt:xxl` 读旧值 24、新写的代码读新值 20，同一屏两个间距，**而且不会报错**。
+
+**三条路，必须选一条并写进 PR**：
+
+| 方案 | 做法 | 代价 |
+|---|---|---|
+| A（推荐） | **废掉 `KsuTokens.Space`，只用 `DshSpacing`** | 零改动；`DshSpacing` 已是 §1.1 的超集（多了 2/32，少的只是 20→用 24 或 16 顶替） |
+| B | 保留两者但**改名**（`KsuTokens.Space` → `.Shell`） | 要在所有新代码里区分，且解释成本长期存在 |
+| C | 统一到 `KsuTokens` 并迁移 39 处 `DshSpacing` 调用点 | 纯搬运 PR，但会改像素（20≠24），基线全变 |
+
+> **推荐 A**：`DshSpacing` 的八档覆盖了 §1.1 的七档且更宽，"20" 这个值在 4/6/8/12/16/24 的体系里本来就是异类。**这是我 1.4b 引入的债，越早还越便宜 —— 最好作为阶段 2 的第 0 个 PR，一行删掉即可，零像素影响。**
 
 ## 5. 许可安全的资产清单
 

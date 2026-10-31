@@ -40,7 +40,9 @@
 
 **基线只手动录**。若改成 push 自动录，基线会跟着代码走，比对就变成「自己和自己比」，门禁等于没有。
 
-**两个数字别合并**：`tests=1116`（功能测试，每个 PR 的证据）与 `screenshots=4`（像素基线）。CI 分开打印，合并成 1120 会让「少跑一个测试」和「多一张基线」长得一模一样。
+**两个数字别合并**：`tests=1123`（功能测试，每个 PR 的证据）与 `screenshots=4`（像素基线）。CI 分开打印，合并成一个数会让「少跑一个测试」和「多一张基线」长得一模一样。
+>
+> **`tests` 从 1116 涨到 1123 是 1.4b 有意为之**（+7 个 `ThemeMode` 测试）。1116 那条不变量只约束**纯搬运 PR**；功能 PR 的判据是「原有测试一个不少 + 新增测试有理由」。
 
 ## 3. 关键约束（踩过的坑，别再踩）
 
@@ -83,7 +85,7 @@
 
 | 工作流 | 触发 | 作用 |
 |---|---|---|
-| `verify.yml` | push main/master + PR | `tests=1116 failures=0` + `screenshots=4` 像素比对 |
+| `verify.yml` | push main/master + PR | `tests=1123 failures=0` + `screenshots=4` 像素比对 |
 | `build.yml` | 同上 | 出 debug APK（约 20 MB） |
 | `release.yml` | tag `v*` | 出 release APK 挂 Release |
 | `screenshots.yml` | **手动** `workflow_dispatch` | 在 CI 录基线并上传 artifact（本机录不了） |
@@ -96,7 +98,8 @@
 
 | 想知道 | 读 |
 |---|---|
-| 下一步做什么 | [ROADMAP.md](ROADMAP.md) —— 阶段 1 起 |
+| 下一步做什么 | [ROADMAP.md](ROADMAP.md) —— 阶段总表 |
+| **阶段 2 怎么做** | **[PHASE-2-PLAN.md](PHASE-2-PLAN.md)** —— 可执行的 PR 序列、每步验收、开工检查清单 |
 | 版本为什么是这些 | [research/10-version-lock.md](research/10-version-lock.md) |
 | 构建/CI/本机限制 | [BUILD-AND-CI.md](BUILD-AND-CI.md) |
 | 设计规范 | [DESIGN-TOKENS.md](DESIGN-TOKENS.md) |
@@ -130,7 +133,7 @@
 > 1. `verify.yml` 的汇总 glob：`app/build/test-results/**` → `**/build/test-results/**`；
 > 2. **新模块的测试任务要在 `verify.yml` 和 `build.yml` 里显式写名字**（`bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest`）。**依赖一个模块不会跑它的测试** —— 这一条比 glob 更容易漏，因为 CI 完全绿。
 >
-> 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。第 2 条每加一个模块都要再写一遍（1.2 起还要加 `:core:term:test`，1.2b 起还要加 `:core:config:testDebugUnitTest`）。
+> 汇总现在还会打印分模块数字，单个总数已经不足以证明每半都跑了。第 2 条每加一个模块都要再写一遍（1.2 起还要加 `:core:term:test`，1.2b 起还要加 `:core:config:testDebugUnitTest`）。
 
 > **1.2b 的一个反例，别把「测试数没涨」当漏搬**：`:core:config` 搬的是**源码**，`CertTrustTest`（12 个 `@Test`）留在 `:app` —— 它同时用 `CertTrust`（M3 才走），现在搬进去就编不过。**模块建好了、测试数没变，是正确结果。** 但任务名仍要写进两个 workflow：现在跑 0 个，M3 搬进来的才会真的跑。
 
@@ -151,9 +154,17 @@
 > 「源码纯」是必要条件，不是充分条件。
 
 
-### 7.2 阶段 2：外壳换装（1.5 周，对应 DESIGN-TOKENS 的 D2–D5）
+### 7.2 阶段 2：外壳换装 —— **详细计划见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md)**
 
-浮动底栏 + 4 目的地 pager / TopBar 折叠 / 抽屉换装 / 设置页换装 / Sheet 统一。
+一句话：浮动底栏 + pager / TopBar 折叠 / 抽屉换装 / 设置页换装 / Sheet 统一。
+
+**但不要照 ROADMAP 那六行直接开工**，那六行没提四件会立刻踩到的事：
+1. **基线只有 4 张**，而阶段 2 要动的屏大多没覆盖 → 第 2 个 PR 应是补基线，不是换皮；
+2. **当前导航是抽屉 + 顶部 `ViewTabs`**，`ChatView` 有 **5** 个值（`ROUTER` 还是条件性的），不是 ROADMAP 写的「4 目的地」；
+3. **miuix 依赖已在但零使用**，能不能与现有主题同栈共存尚未验证 → 需要一个实验 PR 当闸门；
+4. 窗口底色 `#0B0F14` 与 `bgBase` `#151517` 不一致，7 档外观下冷启动会闪 → 独立先修。
+
+PHASE-2-PLAN 里给了 2.0–2.9 的完整序列和每步验收。
 
 ## 8. 给新会话的提醒
 

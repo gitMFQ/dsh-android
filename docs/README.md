@@ -6,9 +6,11 @@
 
 | 顺序 | 文档 | 内容 |
 |---|---|---|
-| 1 | ★ [ROADMAP.md](ROADMAP.md) | 任务板：阶段 0.5（工具链）→ 1 → 2 → 3 → 3.5（i18n）→ 4 |
-| 2 | ★ [research/10-version-lock.md](research/10-version-lock.md) | 版本锁：AGP 9.3.1 / Gradle 9.5.0 / Kotlin 2.4.21 / SDK 37 / miuix 0.9.4 |
-| 3 | [PLAN.md](PLAN.md) | 总纲：fork 决策、协议事实、里程碑、风险 |
+| 1 | ★ [HANDOFF-NEXT.md](HANDOFF-NEXT.md) | **新会话先读这个**：一句话现状、已完成、约束、下一步 |
+| 2 | ★ [ROADMAP.md](ROADMAP.md) | 任务板：阶段 0.5（工具链）→ 1 → 2 → 3 → 3.5（i18n）→ 4 |
+| 3 | ★ [PHASE-2-PLAN.md](PHASE-2-PLAN.md) | **阶段 2 可执行计划**：2.0–2.9 的 PR 序列、每步验收、开工检查清单 |
+| 4 | ★ [research/10-version-lock.md](research/10-version-lock.md) | 版本锁：AGP 9.3.1 / Gradle 9.5.0 / Kotlin 2.4.21 / SDK 37 / miuix 0.9.4 |
+| 5 | [PLAN.md](PLAN.md) | 总纲：fork 决策、协议事实、里程碑、风险 |
 
 ## 设计与实现
 
