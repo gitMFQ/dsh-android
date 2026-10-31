@@ -150,6 +150,32 @@ Kotlin 的 `internal` 是**模块级**可见性。文件一搬进新模块，原
 
 **选 A**。理由是这条路径上**唯一需要动的是 `build.gradle.kts` 和目录位置**，源码零改动 —— 符合本仓「单变量、CI 可验证」的方法论。
 
+#### 2.3.1 那什么时候才改包名？（2026-10-31 决策，M1 之后实测）
+
+**结论：现在不改，而且很可能永远不需要改。** 如果将来要改，**等到 1.2–1.4 全部抽完之后，单独一个 PR 一次改干净**。
+
+改名的真实成本（M1 之后实测）：
+
+| 项目 | 数量 |
+|---|---|
+| `package` 声明行（`core/model` 内） | 50 |
+| 全仓 `import uk.xa0.dsh.model.` | 481 |
+| 代码体内全限定引用 | 28 |
+| 受影响文件 | **165** |
+
+对比 M1 本身：98 个文件、143 行插入、19 行删除，**93 个 rename 全是 100% 相似度**。改名会把这层「纯搬运」的性质彻底破坏 —— `git mv` 之后每个文件都变成大改动，review 里看不出任何东西，回滚也没有清晰边界。
+
+**三个具体风险**：
+
+1. **会撞上 split package。** `app/src/test/java/uk/xa0/dsh/model/` 里留下的 4 个测试，`package` 也是 `uk.xa0.dsh.model`。`:core:model` 一旦改成 `uk.xa0.dsh.core.model`，就是「同一个包名横跨两个模块」。现在无害（那 4 个测试不用任何 `internal`，已核），但会变成定时炸弹：将来有人把测试移回去、或往 `:core:model` 加一个 `internal`，编译会莫名其妙地失败。
+2. **收益是零。** 运行时完全不依赖包名：没有 `Class.forName`、没有 `kotlinx.serialization`、没有 Parcelize、没有 Gson/Moshi，`proguard-rules.pro` 是空的（`isMinifyEnabled = false`）。改与不改，APK 行为完全一样。
+3. **真正的「身份」是 `applicationId`，不是模块包名。** `uk.xa0.dsh` / `uk.xa0.dsh.debug` 决定安装、升级、签名连续性，**这个绝对不能动**，与模块内部包名无关。
+
+**唯一的改名理由**是「模块的 Kotlin 包名和别人撞了，导致无法 import」。本项目 `uk.xa0.dsh.model` 只有一个来源，不会撞。
+
+> **例外**：如果只是觉得 `namespace`（`uk.xa0.dsh.core.model`）与 `package`（`uk.xa0.dsh.model`）看着不一致，改 `namespace` 是**零成本**的（一行、不生成任何类）。但现状其实更有用 —— 它明确表达「本模块不产出 R/BuildConfig」，改了反而丢掉这层信息。
+
+
 ### 2.4 测试迁移：47 + 8 个测试文件，4 个必须留下
 
 `app/src/test/java/uk/xa0/dsh/model/`（47 文件）与 `.../net/`（8 文件）里，有 3 个跑 Robolectric，**不能**跟着源码进 Android library 的 `test` 源集（那会要求 library 也配 Robolectric + Compose 测试依赖，把简单模块拖重）：
@@ -210,7 +236,7 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 |---|---|---|---|
 | **M0** ✅ | #4 `split-model-rows` | 5 个宿主行类移入 `model/`，`model → root` 边清零 | `tests=1116 failures=0` |
 | **M1** ✅ | #6 `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），`model/` 50 文件 + **43** 个纯 JVM 测试（413 个 `@Test`）搬进去；`:app` 加 `implementation(project(":core:model"))`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权（§2.2）；**4 处跨模块 smart cast 修复**（§2.5）；`verify.yml` + `build.yml` 显式加 `:core:model:testDebugUnitTest` 并把 glob 改成 `**/build/test-results/**` | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413` |
-| **M2** | `core-term-module` | 新建 `:core:term`，搬 `term/` 7 文件；它只依赖 `:core:model`，无环。**预期会遇到 §2.5 的 smart cast** | `tests=1116 failures=0` |
+| **M2** | `core-term-module` | 新建 `:core:term`，搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**。它只依赖 `:core:model`，无环。**实测可以做成纯 JVM 模块**，见下 | `tests=1116 failures=0` |
 | **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + okhttp；**此时 `DshConfig` 的引用仍在 `:app` 侧**（见下）。`hostOf` 在这里提权 | `tests=1116 failures=0` |
 | **M4** | `break-net-data-cycle` | 把 `DshConfig` 从 `data/ConfigStore.kt:21` 移到 `:core:protocol`（或新建 `:core:config`），消除 `net → data` 的环 | `tests=1116 failures=0` |
 
@@ -218,6 +244,25 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 > 1. 新模块的测试任务要在 `verify.yml` **和** `build.yml` 里**显式写名字**（依赖模块 ≠ 跑它的测试）；
 > 2. 先本机 `:app:compileDebugKotlin` 一遍，把 smart cast 一次收干净，别一轮 CI 才发现；
 > 3. 顺手把 `docs/research/13-module-extraction.md` 的实测差异就地更正。
+
+#### 3.1.1 M2（1.2）的实测前置事实（2026-10-31 采集）
+
+M1 之后重新查过 `term/`，比文档原先假设的干净得多：
+
+| 项目 | 实测 | 含义 |
+|---|---|---|
+| 源码文件 | 7 个 | 与文档一致 |
+| **能否纯 JVM** | **能** —— 零 `import android` / `androidx` | **用 `kotlin("jvm")`，不要 `com.android.library`**。编译更快，本机也能直接跑测试（不需要 aapt2） |
+| 外部依赖 | 只有 `uk.xa0.dsh.model.isRouterReadoutTerminal` | 依赖 `:core:model` 即可 |
+| `internal` 声明 | **0 个** | **不需要任何提权**（M1 改了 2 个，M2 是 0） |
+| 测试文件 | **10 个 / 186 个 `@Test`** | 全部可搬，**没有**需要留在 `:app` 的 |
+| 测试的 `:app` 依赖 | 无 | 唯一的 Robolectric 命中是 `TerminalCellSizeTest.kt:14` 的**注释** |
+
+**所以 M2 的预期是**：`tests=1116`（`:app` 703−186=517 + `model: 413` + `term: 186`），`screenshots=4`。
+**smart cast 风险**：`term/` 的类型被 UI 消费的程度远低于 `model/`，但仍需本机编译验证一遍再推 —— 不要假设为 0。
+
+> 纯 JVM 模块的写法：`plugins { kotlin("jvm") }` + `dependencies { api(project(":core:model")); testImplementation("junit:junit:4.13.2"); testImplementation("org.json:json:20240303") }`。注意 AGP 9 的「不要加 `org.jetbrains.kotlin.android`」只适用于 Android 模块；纯 JVM 模块本来就要显式用 Kotlin 插件。
+
 
 
 **M3 的临时妥协**：`net/DshClient.kt:25` 需要 `DshConfig`。M3 时 `DshConfig` 还在 `:app`，而 `:app` 依赖 `:core:protocol` —— 会成环。三个选项：

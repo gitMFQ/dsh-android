@@ -106,7 +106,7 @@
 |---|---|---|---|
 | 1.0 ✅ | 宿主行类移入 `model/` | `model → root` 边 14 → 0 | 1116 绿（PR #4） |
 | 1.1 ✅ | 抽 `:core:model`（`com.android.library`） | 50 文件 + 43 个纯 JVM 测试（413 个 `@Test`）；4 个测试留 `:app`；2 个 `internal` 提权；4 处跨模块 smart cast | 独立绿 + 全仓仍 1116（PR #6，`app: 703` / `model: 413`） |
-| 1.2 | 抽 `:core:term`（`term/` 只依赖 `:core:model`） | 7 文件 | 仍 1116 |
+| 1.2 | 抽 `:core:term`（`term/` 只依赖 `:core:model`） | 7 文件 + **10 个测试文件 / 186 个 `@Test`**（全部可搬，0 个留下）；**0 个 `internal`**；**可做成纯 JVM 模块**（零 android/androidx import） | 仍 1116（预期 `app: 517` / `model: 413` / `term: 186`） |
 | 1.2b | `AcceptedCert` + `DshConfig` 进 `:core:model` | 解 `net ⇄ data` 环 | 仍 1116 |
 | 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件 | 仍 1116 |
 | 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
@@ -115,7 +115,10 @@
 > 1. `verify.yml` 的汇总 glob：`app/build/test-results/**` → `**/build/test-results/**`；
 > 2. **新模块的测试任务要在 `verify.yml` 和 `build.yml` 里显式写名字**（`bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest`）。**依赖一个模块不会跑它的测试** —— 这一条比 glob 更容易漏，因为 CI 完全绿。
 >
-> 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。
+> 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。第 2 条每加一个模块都要再写一遍（1.2 起还要加 `:core:term:test`）。
+
+> **1.2 开工前先读** [research/13-module-extraction.md](research/13-module-extraction.md) **§3.1.1**：那里有刚采集的实测事实（纯 JVM 可行、0 个 internal、186 个测试全可搬）。**别照搬 1.1 的 `com.android.library` 模板** —— `term/` 不需要 Android。
+
 
 ### 7.2 阶段 2：外壳换装（1.5 周，对应 DESIGN-TOKENS 的 D2–D5）
 
