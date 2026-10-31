@@ -144,6 +144,11 @@ dependencies {
     // import in this module changed — only where the files live.
     implementation(project(":core:model"))
 
+    // The terminal's VT parser and its attachment/seat rules. Pure JVM, so its 186
+    // tests run without an SDK; :app only consumes the types. ROUTER_READOUT_TERMINAL_ID
+    // and isRouterReadoutTerminal live here too — see §2.6 of the extraction notes.
+    implementation(project(":core:term"))
+
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 

@@ -1,7 +1,5 @@
 package uk.xa0.dsh.term
 
-import uk.xa0.dsh.model.isRouterReadoutTerminal
-
 /**
  * The terminal RPC's own vocabulary, plus the attachment rules the web client
  * (`terminal-controller/src/client/model.ts`) enforces.
@@ -203,10 +201,36 @@ fun terminalReapList(retained: List<TerminalInfo>): List<TerminalInfo> =
 // ---------------------------------------------------------- the router readout's own terminal
 
 /**
+ * The reserved terminal id the readout is created under.
+ *
+ * One id, not a random one, so the readout is *found again* on the next visit
+ * instead of leaving a shell behind each time. It is also the id the Shell tab
+ * filters out — see [isRouterReadoutTerminal] — so the readout never appears in the
+ * terminal picker and is never adopted as the user's shell.
+ *
+ * This lives here rather than beside the readout's parsing code in `:core:model`
+ * because *recognising* the terminal is a terminal-rule question, and because
+ * `:core:term` is a pure JVM module that must not depend on `:core:model` — which is
+ * an Android library. See docs/research/13-module-extraction.md §2.6.
+ */
+const val ROUTER_READOUT_TERMINAL_ID: String = "dsh-router-readout"
+
+/**
+ * Whether a host terminal is this app's router readout rather than a shell the user
+ * opened.
+ *
+ * The Shell tab lists every terminal a session retains and adopts the first running
+ * one, so without this filter a hidden readout could take the seat the user's own
+ * shell should have. The reserved id is the whole test: the app never creates a
+ * user-visible terminal under it.
+ */
+fun isRouterReadoutTerminal(id: String): Boolean = id == ROUTER_READOUT_TERMINAL_ID
+
+/**
  * The reserved router-readout terminal a read may adopt, or null.
  *
  * The readout owns one terminal per session under a reserved id
- * (`uk.xa0.dsh.model.ROUTER_READOUT_TERMINAL_ID`), and this is how it finds it again
+ * ([ROUTER_READOUT_TERMINAL_ID]), and this is how it finds it again
  * instead of leaving a shell behind on every refresh. `RUNNING` only, for exactly the
  * reason [terminalToAdopt] gives: the host answers a `follow` on a stopped shell with a
  * snapshot of its last screen, which would read as a live readout.

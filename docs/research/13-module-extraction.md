@@ -45,6 +45,8 @@
 
 `term/` 的全部外部依赖只有一行：`term/TerminalProtocol.kt:3` `import uk.xa0.dsh.model.isRouterReadoutTerminal`（定义在 `model/RouterReadout.kt:82`）。也就是说 **`term/` 只依赖 `model/`**，是第二个可以抽出的包。
 
+> **M2 已改变这一点（2026-10-31）**：那个 import 正是把 `:core:term` 钉成 Android 库的原因，已连同 `ROUTER_READOUT_TERMINAL_ID` 一起移入 `:core:term`，`term → model` 这条边现在是 **0**。见 §2.6。
+
 `data/` 同时 import `net`、`term`、`model`（`data/ConfigStore.kt:7-12`），是**最上层**，应留在 `:app`。
 
 ### 1.3 文件清单
@@ -219,6 +221,51 @@ M1 里正好 **4 处**踩到，全是 `:app` 的 UI 代码：
 - 后续抽 `:core:term` / `:core:protocol` 时**必然还会有**，因为 UI 大量消费 `term.*` 与 `net.*` 的类型。提前有预期，别当成设计问题。
 - 静态预判不可靠（可空属性名太泛），**直接编译一遍最快**。本机现在可以 `:app:compileDebugKotlin`（见 §6）。
 
+### 2.6 纯 JVM 模块不能消费 Android library：M2 实测出的第六个坑（**新**）
+
+§3.1.1 原判断「`term/` 源码零 `android`/`androidx` import，所以可以用 `kotlin("jvm")`」**只对了一半**：源码是纯的，但**依赖不是**。`term/` 唯一的外部依赖 `model.isRouterReadoutTerminal` 住在 `:core:model`，而后者是 `com.android.library`。
+
+在 AGP 9.3.1 + Gradle 9.5.0 上实测，纯 JVM 消费者引入 `implementation(project(":core:model"))` 会死在变体匹配：
+
+```
+Could not resolve all dependencies for configuration ':probe:compileClasspath'.
+> ... Variant 'debugApiElements' ... Unmatched attributes:
+      - Doesn't say anything about org.jetbrains.kotlin.platform.type (required 'jvm')
+      - Provides attribute 'com.android.build.api.attributes.AgpVersionAttr' with value '9.3.1'
+        but the consumer didn't ask for it
+```
+
+三个层次的修法都试过，**全部无效**：
+
+| 尝试 | 结果 |
+|---|---|
+| 直接依赖 | 变体歧义（debug/release 都匹配不上） |
+| 强制 `KotlinPlatformType.androidJvm`（正确类型的 attribute） | 仍歧义 |
+| 逐配置补 `AgpVersionAttr` + `BuildTypeAttr` + `VariantAttr` + `androidJvm` | 仍是歧义，且出现 `artifactType 'r-class-jar' but the consumer didn't ask for it` |
+
+**另一条独立的地雷**（同为实测）：AGP 9 把 Kotlin 放上了 build classpath，所以模块里写
+
+```kotlin
+plugins { kotlin("jvm") version "2.4.21" }
+```
+
+会直接失败：`Error resolving plugin ... The plugin is already on the classpath with an unknown version`。
+**版本要声明在根 `build.gradle.kts`（`apply false`），模块只用无版本的 `kotlin("jvm")`。**
+
+> 顺带确认一件**成立**的事：`kotlin("jvm")` 模块可以正常用 `androidx.compose.runtime`（`@Immutable` 编译通过），
+> 因为那是普通 JVM artifact。所以阻碍不是 Compose，而是 `:core:model` 的 **Android 库形态**。
+
+**M2 的选择**：把 `ROUTER_READOUT_TERMINAL_ID` 与 `isRouterReadoutTerminal` 从 `:core:model` 移到 `:core:term`。
+
+理由：识别「这是不是 readout 的终端」本来就是**终端规则**，而不是模型解析规则。移过去之后：
+
+- `:core:term` 变成真正的纯 JVM 模块，**186 个测试可以在本机直接跑**（`bash build.sh :core:term:test`，实测 `tests=186 failures=0`，不需要 SDK/aapt2）。这是本仓第一次能在本地验证功能测试。
+- `:core:term` 不再依赖任何模块，`term → model` 这条边被**消除**（不是保留）。
+- 代价：`:app` 里 3 处 import 改指向 `uk.xa0.dsh.term.*`（`DshViewModel`、`RouterReadoutTransport`、`RouterReadoutTest`），全是纯改名。
+
+> 判据记下来：**「源码是纯 JVM」不等于「能做成纯 JVM 模块」**。真正的判据是
+> 「它的依赖闭包里有没有 Android 模块」。抽 `:core:protocol` 时还会再遇到。
+
 
 ## 3. 建议的 PR 序列（单变量，每步一个 CI 门）
 
@@ -236,7 +283,7 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 |---|---|---|---|
 | **M0** ✅ | #4 `split-model-rows` | 5 个宿主行类移入 `model/`，`model → root` 边清零 | `tests=1116 failures=0` |
 | **M1** ✅ | #6 `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），`model/` 50 文件 + **43** 个纯 JVM 测试（413 个 `@Test`）搬进去；`:app` 加 `implementation(project(":core:model"))`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权（§2.2）；**4 处跨模块 smart cast 修复**（§2.5）；`verify.yml` + `build.yml` 显式加 `:core:model:testDebugUnitTest` 并把 glob 改成 `**/build/test-results/**` | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413` |
-| **M2** | `core-term-module` | 新建 `:core:term`，搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**。它只依赖 `:core:model`，无环。**实测可以做成纯 JVM 模块**，见下 | `tests=1116 failures=0` |
+| **M2** | `core-term-module` | 新建 `:core:term`（**纯 JVM**，`kotlin("jvm")`，版本声明在根 build），搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入（§2.6），`term → model` 边清零；`:app` 3 处 import 改指向 | `tests=1116 failures=0`（预期 `app: 517` / `model: 413` / `term: 186`）+ `screenshots=4` |
 | **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + okhttp；**此时 `DshConfig` 的引用仍在 `:app` 侧**（见下）。`hostOf` 在这里提权 | `tests=1116 failures=0` |
 | **M4** | `break-net-data-cycle` | 把 `DshConfig` 从 `data/ConfigStore.kt:21` 移到 `:core:protocol`（或新建 `:core:config`），消除 `net → data` 的环 | `tests=1116 failures=0` |
 
@@ -252,8 +299,8 @@ M1 之后重新查过 `term/`，比文档原先假设的干净得多：
 | 项目 | 实测 | 含义 |
 |---|---|---|
 | 源码文件 | 7 个 | 与文档一致 |
-| **能否纯 JVM** | **能** —— 零 `import android` / `androidx` | **用 `kotlin("jvm")`，不要 `com.android.library`**。编译更快，本机也能直接跑测试（不需要 aapt2） |
-| 外部依赖 | 只有 `uk.xa0.dsh.model.isRouterReadoutTerminal` | 依赖 `:core:model` 即可 |
+| **能否纯 JVM** | **源码能** —— 零 `import android` / `androidx` | 见下方⚠️：**但依赖不行** |
+| 外部依赖 | 只有 `uk.xa0.dsh.model.isRouterReadoutTerminal` | **这一条就是纯 JVM 方案的致命伤**，见 §2.6 |
 | `internal` 声明 | **0 个** | **不需要任何提权**（M1 改了 2 个，M2 是 0） |
 | 测试文件 | **10 个 / 186 个 `@Test`** | 全部可搬，**没有**需要留在 `:app` 的 |
 | 测试的 `:app` 依赖 | 无 | 唯一的 Robolectric 命中是 `TerminalCellSizeTest.kt:14` 的**注释** |
@@ -261,7 +308,16 @@ M1 之后重新查过 `term/`，比文档原先假设的干净得多：
 **所以 M2 的预期是**：`tests=1116`（`:app` 703−186=517 + `model: 413` + `term: 186`），`screenshots=4`。
 **smart cast 风险**：`term/` 的类型被 UI 消费的程度远低于 `model/`，但仍需本机编译验证一遍再推 —— 不要假设为 0。
 
-> 纯 JVM 模块的写法：`plugins { kotlin("jvm") }` + `dependencies { api(project(":core:model")); testImplementation("junit:junit:4.13.2"); testImplementation("org.json:json:20240303") }`。注意 AGP 9 的「不要加 `org.jetbrains.kotlin.android`」只适用于 Android 模块；纯 JVM 模块本来就要显式用 Kotlin 插件。
+> **实测更正（M2，2026-10-31）**：上面「用 `kotlin("jvm")`」和「依赖 `:core:model` 即可」两条**同时成立不了**。
+> `:core:model` 是 `com.android.library`，纯 JVM 消费者会卡在 Gradle 变体匹配上
+> （`Doesn't say anything about org.jetbrains.kotlin.platform.type (required 'jvm')`），
+> 加成 `androidJvm` 又撞 `r-class-jar`，补满 AGP 属性也无解。详见 §2.6。
+>
+> 另：`plugins { kotlin("jvm") version "2.4.21" }` 在 AGP 9 构建里会直接失败
+> （`already on the classpath with an unknown version`）。**版本必须声明在根 `build.gradle.kts`**，
+> 模块里只写 `kotlin("jvm")`。
+>
+> M2 实际做法见 §3.1.2。
 
 
 
@@ -272,6 +328,33 @@ M1 之后重新查过 `term/`，比文档原先假设的干净得多：
 3. 在 `:core:protocol` 里定义一个最小接口 `DshConfigSource`，`DshClient` 只依赖接口，实现留在 `:app`。**不推荐**：这是为拆分而拆分的行为改动。
 
 > **建议把序列改成 M1 → M2 → **M2.5**（`AcceptedCert` + `DshConfig` 进 `:core:model`）→ M3 → M4（`data/` 改为依赖新模块，环自然消失）**。这样每一步都没有临时妥协。
+
+#### 3.1.2 M2 实际怎么做的（2026-10-31）
+
+纯 JVM 之所以能成立，靠的是**先把那条依赖边拆掉**，而不是给它加 Android 插件：
+
+| 动作 | 文件 | 说明 |
+|---|---|---|
+| 符号搬移 | `model/RouterReadout.kt` → `term/TerminalProtocol.kt` | `ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 移到用它们的地方 |
+| 保留 | `model/RouterReadout.kt` | `ROUTER_READOUT_TITLE` 留在原地（无人引用，但属于 readout 的文案） |
+| 改 import | `DshViewModel.kt`、`net/RouterReadoutTransport.kt`、`test/RouterReadoutTest.kt` | 指向 `uk.xa0.dsh.term.*`，纯改名 |
+| `git mv` | 7 源文件 + 10 测试文件 | 包名不变，`git status` 全是 `R`（rename），源码零改动 |
+| 新 build | `core/term/build.gradle.kts` | `kotlin("jvm")` + `junit` 两项，无 Android、无 `org.json` |
+
+**根 `build.gradle.kts` 加了一行** `id("org.jetbrains.kotlin.jvm") version "2.4.21" apply false` —— 这是纯 JVM 模块能存在的前提，见 §2.6。
+
+**本机实测（这是本仓第一次能在本地验证功能测试）**：
+
+```sh
+bash build.sh :core:term:test
+# files=10 tests=186 failures=0 errors=0     ← 4 分 30 秒，不需要 SDK/aapt2
+```
+
+**`:app:compileDebugKotlin` 实测照常通过，0 处跨模块 smart cast 错误。**
+这比 §2.5 的预期好：`term/` 的类型被 UI 消费得浅，`when (action) { is TerminalFrameAction.X -> }` 这类写法不触发
+（`is` 分支收窄的是 `val` 参数而不是跨模块属性）。**但 M3 抽 `net/` 时不要据此假设为 0** —— 那时消费面大得多。
+
+**M3 之前请先读 §2.6**：`net/` 的依赖闭包里有 `data.DshConfig`，同样是「源码纯不纯」之外的第二个判据。
 
 ### 3.2 每一步的测试数怎么算
 

@@ -7,7 +7,7 @@
 
 仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1116 个功能测试全绿 + 4 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
 
-**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**第一个模块也已经抽出来了**（`:core:model`，PR #6，413 个测试搬出 `:app`）。下一步是 1.2 抽 `:core:term`。
+**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**两个模块已经抽出来了**（`:core:model`，PR #6，413 个测试；`:core:term`，PR #7，186 个测试，**纯 JVM 模块 —— 本仓第一次能在本机跑功能测试**）。下一步是 1.2b（`AcceptedCert` + `DshConfig` 进 `:core:model`）后抽 `:core:protocol`。
 
 ## 2. 已完成（L1–L4，全部合入 master）
 
@@ -20,6 +20,7 @@
 | **1.0** | 5 个宿主行类（`SessionItem`/`WorkspaceItem`/`JobItem`/`QueueAttachment`/`QueuedMessage`）从 `DshViewModel.kt` 移入 `model/`；`model → 根包` 的 import **14 → 0** | 1116 绿（PR #4） |
 | **1.5** | Roborazzi **1.77.0** + 4 张基线（About / Startup / 抽屉 / 抽屉空态），411×891 | `tests=1116` + `screenshots=4`（PR #5） |
 | **1.1** | 抽 `:core:model`（`com.android.library`）：50 个源文件 + 43 个测试文件搬出 `:app`；包名不变所以**全仓零 import 改动**；2 个 `internal` 提权；4 处跨模块 smart cast 修复 | `app: 703` + `model: 413` = `tests=1116` + `screenshots=4`（PR #6） |
+| **1.2** | 抽 `:core:term`（**纯 JVM**）：7 源文件 + 10 测试文件（186 个 `@Test`）搬出 `:app`；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入以切断依赖边；`term → model` 边清零 | `app: 517` + `model: 413` + `term: 186` = `tests=1116` + `screenshots=4`（PR #7） |
 
 每个 PR 都是**单一变量**，失败时能立刻定位。这个方法论请延续。
 
@@ -47,6 +48,9 @@
 | **Compose 1.11 的 Password 语义 bug** | `CoreTextFieldSemanticsModifier.updateNodeSemantics` 从不写回 `this.isPassword`，`BasicTextField(value=)` 路径的 Password 语义无法变化。测试已改为断言可见文本。 |
 | **跨模块 smart cast 编不过** | Kotlin 不能对「声明在另一个模块里的属性」做 smart cast（`val` 也不行，编译器无法证明别的模块不会改）。抽模块后 UI 里所有 `x.prop is T && x.prop.y` / `x.prop != null && x.prop.z` 都会报 `Smart cast ... is impossible ... declared in different module`。**修法：先把属性读进局部变量再判断**，不要改成 `var`、不要加 `!!`。1.1 一次踩了 4 处。 |
 | **本机可以编译 Kotlin 了**（1.1 起） | `:app:compileDebugKotlin` 只需 build-tools 能解析，**不依赖 aapt2**。本机需临时把 `platforms/android-37/source.properties` 的 `ApiLevel` 从 `37.0` 改成 `37`，并把两处 `buildToolsVersion` 临时改 `36.0.0`（**验证完还原**）。改 UI/抽模块时先在本机把编译错误收干净，别用 CI 的 7 分钟试错。详见 [BUILD-AND-CI.md](BUILD-AND-CI.md) §0.0b。 |
+| **本机可以跑 `:core:term` 的 186 个测试了**（1.2 起） | 纯 JVM 模块不碰 aapt2，**不需要任何本机 hack**：`bash build.sh :core:term:test` 直接出 `tests=186 failures=0`（约 4 分半）。`:core:model` 的 413 个仍跑不了（它是 Android library，`processDebugUnitTestResources` 挂在 aapt2）。这是往纯 JVM 拆的真收益，不只是模块漂亮。 |
+| **纯 JVM 模块不能依赖 Android library**（1.2 踩到） | 变体匹配直接失败，补 attribute 也救不回来。要么把依赖边拆掉（1.2 的做法），要么该模块就用 `com.android.library`。**判据是依赖闭包，不是源码里有没有 `import android`**。详见 research/13 §2.6。 |
+| **`kotlin("jvm")` 的版本只能写在根 build** | AGP 9 已把 Kotlin 放上 build classpath，模块里写版本会报 `already on the classpath with an unknown version`。根 `build.gradle.kts` 加 `apply false`，模块只写 `kotlin("jvm")`。 |
 
 ## 4. 仓库结构
 
@@ -54,11 +58,12 @@
 /root/dsh-android
   app/                     # 主模块，143 个 .kt / 5.8 万行（fork 自 bqv/dsh-android v0.6.6）
     src/main/java/uk/xa0/dsh/
-      net/                 # 协议层（~4000 行，纯 Kotlin，可单测）
+      net/                 # 协议层（~4000 行；下一步抽 :core:protocol）
       ui/                  # 界面 54 文件 / 27k 行
-      data/ widget/ diag/ term/
-    src/test/              # 703 个功能 @Test + 4 张截图基线 + 4 个依赖 :app 的 model 测试
-  core/model/              # 已抽出：领域模型 50 文件 + 43 个测试文件（413 个 @Test）
+      data/ widget/ diag/
+    src/test/              # 517 个功能 @Test + 4 张截图基线 + 4 个依赖 :app 的 model 测试
+  core/model/              # 已抽出：领域模型 50 文件 + 43 个测试文件（413 个 @Test），com.android.library
+  core/term/               # 已抽出：终端 7 文件 + 10 个测试文件（186 个 @Test），纯 kotlin("jvm")
   docs/                    # 规划文档（见 §6）
   .github/workflows/       # build.yml（出 APK）/ verify.yml（测试+截图门禁）/ release.yml / screenshots.yml（手动录基线）
   build.sh                 # 唯一构建入口，找 .toolchain/gradle-9.5.0
@@ -106,7 +111,7 @@
 |---|---|---|---|
 | 1.0 ✅ | 宿主行类移入 `model/` | `model → root` 边 14 → 0 | 1116 绿（PR #4） |
 | 1.1 ✅ | 抽 `:core:model`（`com.android.library`） | 50 文件 + 43 个纯 JVM 测试（413 个 `@Test`）；4 个测试留 `:app`；2 个 `internal` 提权；4 处跨模块 smart cast | 独立绿 + 全仓仍 1116（PR #6，`app: 703` / `model: 413`） |
-| 1.2 | 抽 `:core:term`（`term/` 只依赖 `:core:model`） | 7 文件 + **10 个测试文件 / 186 个 `@Test`**（全部可搬，0 个留下）；**0 个 `internal`**；**可做成纯 JVM 模块**（零 android/androidx import） | 仍 1116（预期 `app: 517` / `model: 413` / `term: 186`） |
+| 1.2 ✅ | 抽 `:core:term`（**纯 JVM**，`kotlin("jvm")`） | 7 文件 + 10 个测试文件 / 186 个 `@Test`；0 个 `internal`；readout 的 id + 谓词从 `:core:model` 移入以切断依赖边 | 仍 1116（PR #7，`app: 517` / `model: 413` / `term: 186`） |
 | 1.2b | `AcceptedCert` + `DshConfig` 进 `:core:model` | 解 `net ⇄ data` 环 | 仍 1116 |
 | 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件 | 仍 1116 |
 | 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
@@ -117,7 +122,7 @@
 >
 > 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。第 2 条每加一个模块都要再写一遍（1.2 起还要加 `:core:term:test`）。
 
-> **1.2 开工前先读** [research/13-module-extraction.md](research/13-module-extraction.md) **§3.1.1**：那里有刚采集的实测事实（纯 JVM 可行、0 个 internal、186 个测试全可搬）。**别照搬 1.1 的 `com.android.library` 模板** —— `term/` 不需要 Android。
+> **1.2b 之前先读** [research/13-module-extraction.md](research/13-module-extraction.md) **§2.6**：那里有 1.2 踩到的新坑 —— 「源码是纯 JVM」**不等于**「能做成纯 JVM 模块」，判据是**依赖闭包里有没有 Android 模块**。`net/` 的闭包里有 `data.DshConfig`，所以 `:core:protocol` 这一步同样要先拆边。
 
 
 ### 7.2 阶段 2：外壳换装（1.5 周，对应 DESIGN-TOKENS 的 D2–D5）
@@ -131,6 +136,7 @@
 - **单变量原则**：一次只改一个版本/一件事，CI 绿了再进下一步。
 - **新增的 `workflow_dispatch` 工作流在合并到默认分支前无法手动触发**：GitHub 只在默认分支上发现该工作流。要第一次跑起来，得先把文件合进 master，或临时加一个 `push:` 触发（PR #5 用了后者，随后删掉）。
 - **别用 `--tests` 去「打开」被 `excludeTestsMatching` 排除的测试类**：Gradle 的 filter 不能再包含已被另一个 filter 排除的东西，会报 `No tests found for given includes`。用 `-Pscreenshots` 这类 property 切换（PR #5 踩过）。
-- **本机能跑 Gradle 配置阶段，1.1 起还能跑 `:app:compileDebugKotlin`**（`.toolchain/gradle-9.5.0` 已就位）。改 build 脚本可先本地验语法；改 Kotlin 代码可先本地编译。两个前提见 §3「本机可以编译 Kotlin 了」与 [BUILD-AND-CI.md](BUILD-AND-CI.md) §0.0b，**临时改动验证完必须还原**。测试与资源打包仍只能走 CI（`processDebugUnitTestResources` 挂在 x86_64 aapt2）。
+- **本机能跑 Gradle 配置阶段；1.1 起能跑 `:app:compileDebugKotlin`；1.2 起能直接跑 `:core:term:test`**（纯 JVM，无需 hack）。（`.toolchain/gradle-9.5.0` 已就位）。改 build 脚本可先本地验语法；改 Kotlin 代码可先本地编译。两个前提见 §3「本机可以编译 Kotlin 了」与 [BUILD-AND-CI.md](BUILD-AND-CI.md) §0.0b，**临时改动验证完必须还原**。测试与资源打包仍只能走 CI（`processDebugUnitTestResources` 挂在 x86_64 aapt2）。
+- **`:core:term` 的测试任务是 `:test`，不是 `testDebugUnitTest`** —— 它是纯 JVM 模块，没有 `debug` 变体。写错任务名 Gradle 会报 `Task not found`，比静默跳过好，但仍要注意。
 - **「能不能跑通」的最终判断仍由 CI 回答**：本机能编译不代表能跑测试，更不代表像素门禁通过。
 - **权限**：仓库是私有的，`gh` 已登录 `gitMFQ`。要公开需先处理 MPL-2.0 源码公开义务（转公开正好满足）。

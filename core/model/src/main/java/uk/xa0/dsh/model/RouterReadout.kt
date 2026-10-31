@@ -58,28 +58,15 @@ import org.json.JSONObject
  */
 
 /**
- * The reserved terminal id the readout is created under.
+ * The title the host stores for it; the panel would show this if it ever listed it.
  *
- * One id, not a random one, so the readout is *found again* on the next visit
- * instead of leaving a shell behind each time. It is also the id the Shell tab
- * filters out — see [isRouterReadoutTerminal] — so the readout never appears in the
- * terminal picker and is never adopted as the user's shell.
+ * The reserved terminal id itself is *not* here: it lives in `:core:term` beside
+ * [uk.xa0.dsh.term.readoutTerminalToAdopt], because that is the module that has to
+ * recognise it. Keeping it here would drag the whole model into every consumer of
+ * the terminal rules — and `:core:term` is a pure JVM module, which cannot depend on
+ * this (Android library) one. See docs/research/13-module-extraction.md §2.6.
  */
-const val ROUTER_READOUT_TERMINAL_ID: String = "dsh-router-readout"
-
-/** The title the host stores for it; the panel would show this if it ever listed it. */
 const val ROUTER_READOUT_TITLE: String = "Router readout"
-
-/**
- * Whether a host terminal is this app's router readout rather than a shell the user
- * opened.
- *
- * The Shell tab lists every terminal a session retains and adopts the first running
- * one, so without this filter a hidden readout could take the seat the user's own
- * shell should have. The reserved id is the whole test: the app never creates a
- * user-visible terminal under it.
- */
-fun isRouterReadoutTerminal(id: String): Boolean = id == ROUTER_READOUT_TERMINAL_ID
 
 /** The markers the readout's shell lines print. Plain text, delimiter-shaped. */
 object RouterReadoutMarkers {
