@@ -71,6 +71,19 @@ android {
         val fakeHome = rootProject.layout.projectDirectory.dir(".toolchain/robolectric-home").asFile
         doFirst { fakeHome.mkdirs() }
         systemProperty("user.home", fakeHome.absolutePath)
+
+        // The screenshot class is a *baseline* test, not a functional one: it
+        // asserts nothing about behaviour, and its whole value is the image diff
+        // that `verifyRoborazziDebug` runs. Letting it into `testDebugUnitTest`
+        // would do two bad things at once — inflate the 1116 functional-test
+        // count that every PR quotes as evidence, and turn a pixel diff into a
+        // red "unit test" with no image attached.
+        //
+        // `--tests` on the Roborazzi task re-includes it, so the gate still runs
+        // it; see verify.yml.
+        filter {
+            excludeTestsMatching("uk.xa0.dsh.screenshot.*")
+        }
     }
 
     // No `composeOptions { kotlinCompilerExtensionVersion = ... }` here: since

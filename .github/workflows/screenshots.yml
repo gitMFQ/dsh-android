@@ -11,12 +11,6 @@ name: Screenshots
 # aarch64 with no usable aapt2, so `recordRoborazziDebug` cannot run there. See
 # docs/BUILD-AND-CI.md §0.
 on:
-  # TEMPORARY bootstrap trigger: `workflow_dispatch` is only offered for
-  # workflows that already exist on the default branch, so the first recording
-  # (and every recording until this file is merged) has to be reachable another
-  # way. Removed in the commit that wires the compare gate into verify.yml.
-  push:
-    branches: [roborazzi-harness]
   workflow_dispatch:
     inputs:
       branch:
