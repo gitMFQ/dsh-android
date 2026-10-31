@@ -43,7 +43,7 @@
 | 1.2 | 抽 `:core:term`（`term/`，只依赖 `:core:model`） | 模块 | 全仓仍 1116 | 1.1 |
 | **1.2b** ✅ 完成 2026-10-31 | 新建 **`:core:config`**：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 okhttp 的 `pinner()`）+ 证书编解码（解 `net ⇄ data` 环）。**原计划「进 `:core:model`」已实测证伪**，见 [research/13](research/13-module-extraction.md) §2.7–§2.9 | 已提交（PR #8） | **CI `tests=1116` + `screenshots=4`**，`app: 517` / `model: 413` / `term: 186`（`config: 0` 是预期） | 1.2 |
 | **1.3** ✅ 完成 2026-10-31 | 抽 `:core:protocol`（`net/` **14** 文件，含 `CertPinning.kt`；`com.android.library`）。依赖 `:core:model` + `:core:term` + **`:core:config`**（`api`）+ okhttp。提权 `hostOf` + `CertProbe.systemTrusts` 两个 `internal`。**`net → data` 环已被 1.2b 解掉，本步不再被 M4 阻塞**，详见 [research/13](research/13-module-extraction.md) §2.10 | 已提交（PR #9，CI 全绿待合并） | **CI `tests=1116` + `screenshots=4`**（`app: 444` / `protocol: 73`）；**并修掉空信任锚集合的生产缺陷**，见 [research/13](research/13-module-extraction.md) §2.11 | 1.2b |
-| 1.4 | 新建 `:design`：`KsuTokens` + `KsuTheme`（7 档外观） | 模块 | 设置页可切并持久化 | 1.1 |
+| **1.4** ✅ 完成 2026-10-31 | 新建 `:design`（= `:design` 模块，PR #10）：`KsuTokens` + **7 档外观**（Light / Dark / System / AMOLED / Monet ×3）。外观做成**变换**而非 7 份调色板；顺带修掉「host 外观值覆盖本机外观」的冲突（`themeMode` / `hostThemeMode` 分离） | 已合入 `master`（PR #10） | 设置页可切并持久化；**CI `tests=1123`**（+7）+ `screenshots=4`（基线未漂移） | 1.1 |
 | **1.5** ✅ 完成 2026-10-31 | Roborazzi 截图测试接入：4 张基线（About / Startup / 抽屉 / 抽屉空态），411×891，`en-rUS-w411dp-h891dp` | 已合入 `master`（PR #5） | **CI `tests=1116` + `screenshots=4` 比对通过（连跑两轮一致）** | 1.0 |
 
 > **1.5 提前做了**：原计划排在 `:design` 之后，但它其实只依赖「界面能无头渲染」，与模块拆分无关。放在拆分之前，是因为阶段 2 的换皮风险才是它要拦的东西 —— 拆模块不改变像素。

@@ -6,9 +6,11 @@
 
 ## 1. 一句话现状
 
-仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1116 个功能测试全绿 + 4 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
+仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1123 个功能测试全绿 + 4 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
 
-**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**四个模块已经抽出来了**：`:core:model`（PR #6，413 个测试）、`:core:term`（PR #7，186 个测试，**纯 JVM —— 本仓第一次能在本机跑功能测试**）、`:core:config`（PR #8，0 个测试是预期）、`:core:protocol`（PR #9，73 个测试 —— **并抓出第一个生产缺陷**，见 research/13 §2.11）。阶段 1 的结构拆分基本完成，剩下 1.4（`:design`）。
+**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**五个模块已经抽出来了**：`:core:model`（PR #6，413 个测试）、`:core:term`（PR #7，186 个测试，**纯 JVM —— 本仓第一次能在本机跑功能测试**）、`:core:config`（PR #8）、`:core:protocol`（PR #9，73 个测试 —— **并抓出第一个生产缺陷**，见 research/13 §2.11）、`:design`（PR #10，7 个测试）。
+
+**阶段 1 已完成**。`:design` 顺带交付了 **7 档外观**（Light / Dark / System / AMOLED / Monet ×3），测试总数 **1116 → 1123**。下一步是阶段 2（外壳换装）。
 
 ## 2. 已完成（L1–L4，全部合入 master）
 
@@ -24,7 +26,8 @@
 | **1.2** ✅ | 抽 `:core:term`（**纯 JVM**）：7 源文件 + 10 测试文件（186 个 `@Test`）搬出 `:app`；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入以切断依赖边；`term → model` 边清零 | `app: 517` + `model: 413` + `term: 186` = `tests=1116` + `screenshots=4`（PR #7） |
 | **1.2b** ✅ | 抽 `:core:config`（`com.android.library`，`api` 依赖 model + term）：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（**除 okhttp 的 `pinner()`**）+ 证书编解码（`CertTrust.encode/decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`）。`pinner()` 变 `:app` 的**扩展函数**，调用点零改动 | `tests=1116` + `screenshots=4`（PR #8；`app: 517` / `model: 413` / `term: 186`，`config: 0` 是预期，见 research/13 §2.9） |
 | **1.3** ✅ | 抽 `:core:protocol`（`com.android.library`，`api` 依赖 model + term + config + okhttp）：`net/` **14** 文件 + **7** 个测试文件（73 个 `@Test`）；`DshClientResetTest` 留 `:app`；`hostOf` + `CertProbe.systemTrusts` 提权；`multipart-real.bin` 随测试走。**顺带修掉一个生产缺陷**：空信任锚集合时 PKIX 抛 `RuntimeException`，被 `catch (CertificateException)` 漏掉，导致全新安装永远拿不到接受证书的入口 | `tests=1116` + `screenshots=4`（PR #9；`app: 444` / `protocol: 73`） |
-
+| **1.4a** ✅ | 抽 `:design`（`com.android.library` + **Compose 编译器插件**）：`ui/theme/DshTheme.kt` 搬入；`:app` 零 import 改动 | `tests=1116` + `screenshots=4`（PR #10） |
+| **1.4b** ✅ | 7 档外观 + `KsuTokens`。外观做成**变换**而非 7 份调色板（AMOLED 取暗色调色板把表面压黑；Monet 只取壁纸的主色族与底色，语义色不动）。**顺带修掉一个真冲突**：host 的外观枚举只有 light/dark/system，而 `adoptHostSetting` 会把它写回本地 —— 接上 host 的会话会把 AMOLED/Monet 静默重置。拆成 `themeMode`（本机）与 `hostThemeMode`（镜像）两个字段 | `tests=1123`（`config: 7`）+ `screenshots=4`（PR #10） |
 每个 PR 都是**单一变量**，失败时能立刻定位。这个方法论请延续。
 
 ### 2.1 截图基线怎么用（新增，重要）
@@ -70,6 +73,7 @@
   core/term/               # 已抽出：终端 7 文件 + 10 个测试文件（186 个 @Test），纯 kotlin("jvm")
   core/config/             # 已抽出：DshConfig + ThemeMode + BusyEnter + AcceptedCert + CertPins(JDK 部分)，com.android.library，0 测试
   core/protocol/           # 已抽出：net/ 14 文件 + 7 个测试文件（73 个 @Test），com.android.library
+  design/                  # 已抽出：DshTheme.kt（主题 + 7 档外观）+ KsuTokens.kt，com.android.library，7 个测试
   docs/                    # 规划文档（见 §6）
   .github/workflows/       # build.yml（出 APK）/ verify.yml（测试+截图门禁）/ release.yml / screenshots.yml（手动录基线）
   build.sh                 # 唯一构建入口，找 .toolchain/gradle-9.5.0
@@ -120,7 +124,7 @@
 | 1.2 ✅ | 抽 `:core:term`（**纯 JVM**，`kotlin("jvm")`，PR #7） | 7 文件 + 10 个测试文件 / 186 个 `@Test`；0 个 `internal`；readout 的 id + 谓词从 `:core:model` 移入以切断依赖边 | 仍 1116（PR #7，`app: 517` / `model: 413` / `term: 186`） |
 | 1.2b ✅ | 抽 **`:core:config`**（`com.android.library`，PR #8） | ⚠️ **原计划「进 `:core:model`」已证伪**（`DshConfig` 闭包横跨 model+term；`AcceptedCert → CertPins → okhttp`）。独立模块：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ 编解码。`pinner()` 成 `:app` 扩展函数，调用点零改动。详见 research/13 **§2.7 / §2.8 / §2.9** | 仍 1116（PR #8，`config: 0` 是预期：源码搬、测试留） |
 | 1.3 ✅ | 抽 `:core:protocol`（`net/`，PR #9） | **14** 文件；`com.android.library`；提权 **2** 个（`hostOf` + `CertProbe.systemTrusts`）；**环已解，不需要 M4** | 仍 1116（`app: 444` / `protocol: 73`）。**并抓到空信任锚集合的生产缺陷**（详见 research/13 **§2.11**） |
-| 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
+| 1.4 ✅ | 建 `:design` 模块：`KsuTokens` + 主题 **7 档外观**（PR #10） | 设置页可切外观并持久化 —— **已交付**，`tests=1123` |
 
 > **抽模块时必改两处**（1.1 实证，两处都会让 CI「绿着丢测试」）：
 > 1. `verify.yml` 的汇总 glob：`app/build/test-results/**` → `**/build/test-results/**`；
