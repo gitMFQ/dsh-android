@@ -5,7 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uk.xa0.dsh.SessionItem
+import uk.xa0.dsh.model.SessionItem
 
 /**
  * The whole-family token and cost reading behind the usage panel.

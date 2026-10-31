@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.WorkspaceItem
 
 /**
  * Reordering the Workspaces themselves — which is not the drawer's `Order: Manual /

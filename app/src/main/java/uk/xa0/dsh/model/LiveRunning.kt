@@ -1,7 +1,6 @@
 package uk.xa0.dsh.model
 
 import org.json.JSONObject
-import uk.xa0.dsh.SessionItem
 
 /**
  * One live `api-session/status` frame: what it claimed, and the roster read it raced.

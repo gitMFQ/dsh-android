@@ -6,7 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uk.xa0.dsh.JobItem
+import uk.xa0.dsh.model.JobItem
 
 /**
  * The background-job wire rules, pinned against frames the live host actually sent.

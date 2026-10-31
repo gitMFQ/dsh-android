@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uk.xa0.dsh.WorkspaceItem
+import uk.xa0.dsh.model.WorkspaceItem
 
 /**
  * The Workspace Tree's shape.

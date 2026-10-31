@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uk.xa0.dsh.SessionItem
+import uk.xa0.dsh.model.SessionItem
 
 /**
  * The way up from a subagent, against the roster shapes that actually occur.

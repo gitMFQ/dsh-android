@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.SessionItem
 
 /**
  * Which Workspaces the sidebar draws, and — the part that is easy to get wrong —

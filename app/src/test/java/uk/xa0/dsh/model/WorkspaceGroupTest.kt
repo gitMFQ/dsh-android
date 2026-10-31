@@ -5,7 +5,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import uk.xa0.dsh.SessionItem
+import uk.xa0.dsh.model.SessionItem
 
 /**
  * What the sidebar's Workspace groups are allowed to say.

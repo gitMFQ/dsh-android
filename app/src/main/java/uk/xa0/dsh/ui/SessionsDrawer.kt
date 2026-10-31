@@ -95,8 +95,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.PendingKind
-import uk.xa0.dsh.SessionItem
-import uk.xa0.dsh.WorkspaceItem
+import uk.xa0.dsh.model.SessionItem
+import uk.xa0.dsh.model.WorkspaceItem
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.WorkspaceTreeNode
 import uk.xa0.dsh.model.applySiblingOrder

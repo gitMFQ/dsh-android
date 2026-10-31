@@ -39,8 +39,8 @@ import uk.xa0.dsh.diag.diagDrag
 import uk.xa0.dsh.AgentPresetOption
 import uk.xa0.dsh.ModelOption
 import uk.xa0.dsh.PermissionOption
-import uk.xa0.dsh.SessionItem
-import uk.xa0.dsh.WorkspaceItem
+import uk.xa0.dsh.model.SessionItem
+import uk.xa0.dsh.model.WorkspaceItem
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.model.GeneralSettings

@@ -2,8 +2,6 @@ package uk.xa0.dsh.model
 
 import org.json.JSONArray
 import org.json.JSONObject
-import uk.xa0.dsh.QueueAttachment
-import uk.xa0.dsh.QueuedMessage
 
 /**
  * The web client's queue-preview cap (`QUEUE_PREVIEW_CHARS` in

@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.SessionItem
 
 /**
  * A session's whole subagent family — itself, its subagents, and theirs, however deep —

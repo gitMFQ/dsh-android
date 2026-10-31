@@ -43,7 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import uk.xa0.dsh.JobItem
+import uk.xa0.dsh.model.JobItem
 import uk.xa0.dsh.model.JobObservation
 import uk.xa0.dsh.model.JobsWire
 import uk.xa0.dsh.diag.DiagLazyList

@@ -30,8 +30,8 @@ import uk.xa0.dsh.data.DshConfig
 import uk.xa0.dsh.data.DraftStore
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.model.AccountBalance
-import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.ApprovalAnswer
+import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.ConnectionRestart
@@ -151,6 +151,11 @@ import uk.xa0.dsh.model.subagentInterruptArgs
 import uk.xa0.dsh.model.subagentPromptRequest
 import uk.xa0.dsh.model.subagentTargetOf
 import uk.xa0.dsh.model.upsertSession
+import uk.xa0.dsh.model.JobItem
+import uk.xa0.dsh.model.QueueAttachment
+import uk.xa0.dsh.model.QueuedMessage
+import uk.xa0.dsh.model.SessionItem
+import uk.xa0.dsh.model.WorkspaceItem
 import uk.xa0.dsh.net.BalanceFailure
 import uk.xa0.dsh.net.DeepSeekAccount
 import uk.xa0.dsh.net.AcceptedCert
@@ -224,71 +229,6 @@ data class HostCommand(
     val description: String,
     val takesInput: Boolean,
     val inputHint: String?,
-)
-
-data class SessionItem(
-    val id: String,
-    val title: String,
-    val cwd: String?,
-    val updatedAt: Long,
-    /**
-     * Whether this session's agent is working now.
-     *
-     * Derived, never sampled: it is `RunningBook.running(id)` and nothing else, folded
-     * in by `withRunning` at the two places a row is built or repainted. Nothing may
-     * OR a live frame into it at a display site — that is what let the drawer, the
-     * header chip and the lineage sheet each answer the same question differently.
-     */
-    val running: Boolean,
-    val isSubagent: Boolean,
-    /** A provisional session with nothing in it yet; the host sends `title: null`. */
-    val blank: Boolean = false,
-    /**
-     * How many **active** scheduled tasks deliver into this session.
-     *
-     * The host's `schedule/catalog` answer, folded per session; zero covers both "no
-     * task" and "the catalog read has never settled". A host running without the
-     * Schedule bundle answers that call with an error and every row stays at zero,
-     * which is exactly how the app rendered before automations existed.
-     *
-     * A session with a task is an ordinary session — it keeps its Workspace and its
-     * row — so this is a *mark*, not a classification. The rules that read it are the
-     * landing preference (see [uk.xa0.dsh.model.landingSessionId]) and the
-     * idle-notification mute (see [uk.xa0.dsh.model.warrantsIdleAlert]); the drawer
-     * draws it as the web's clock mark.
-     */
-    val scheduledTaskCount: Int = 0,
-    /** Set on subagent sessions, which nest under their parent in the tree. */
-    val parentSessionId: String? = null,
-    /** The real subagent title, from the parent's `subagentCatalog` projection. */
-    val subagentLabel: String? = null,
-    /** `one-shot` | `continuable`; required by the subagent address form. */
-    val subagentMode: String? = null,
-    /**
-     * This session's own `sessionStats` / `tokenUsage` projections, when the row carried
-     * them. Null covers both "the payload had neither key" and "the fold has not been
-     * materialized for this session yet" — a member whose usage the host has not given,
-     * which [uk.xa0.dsh.model.FamilyUsage] reports rather than spending as a zero.
-     */
-    val usage: SessionStats? = null,
-    /**
-     * The route this session's last turn actually ran (`modelSelection.lastUsed`), which
-     * is what a family cost prices its tokens at. Not the same fact as the model chip's
-     * `next`, which is what the *next* turn will run.
-     */
-    val lastUsedModel: ModelRef? = null,
-)
-
-/**
- * One registered Workspace (a directory the host groups sessions under), with its
- * manual session order. Sourced from the `workspace/follow` stream rather than
- * derived from `cwd`, because a session's membership and order are host state.
- */
-data class WorkspaceItem(
-    val id: String,
-    val path: String,
-    val title: String,
-    val sessionIds: List<String>,
 )
 
 /**
@@ -460,35 +400,6 @@ data class GoalState(
     val visible: Boolean get() = phase != "complete" && objective.isNotBlank()
 }
 
-/**
- * One background job the host is running (or ran) for a session — a `JobView` off
- * the `job/list` stream.
- *
- * The roster used to arrive on the same control stream as the queue, as a `jobs`
- * block per session. The running 0.2.0-rc.2 host publishes no such block (probed:
- * its control baseline carries `projections` and nothing else), which is why jobs
- * had vanished from every session. They now come from `job/list` — one stream per
- * session — and a job that starts, stops or fails is still a push, not a poll.
- * See `model/Jobs.kt` for the wire rules and `docs/JOBS.md` for the probes.
- */
-data class JobItem(
-    val id: String,
-    val kind: String,
-    val label: String,
-    /** Owning session; absent for an unowned job, which every caller can see. */
-    val owner: String? = null,
-    val status: String,
-    /** The producer's live progress line, cleared at settlement. */
-    val progress: String? = null,
-    val detail: String? = null,
-    val startedAt: Long,
-    val finishedAt: Long? = null,
-    /** The output ring's coordinates, which decide whether a row can be expanded. */
-    val output: JobOutput = JobOutput(),
-) {
-    val running: Boolean get() = status == "running" || status == "stopping"
-}
-
 /** One file being uploaded for the next prompt. */
 data class PendingAttachment(
     val id: String,
@@ -587,47 +498,6 @@ private const val SESSION_CONFLICT = "session/conflict"
 
 /** The one intermediate step of staging an attachment, before it is on the UI. */
 private data class StagedAttachment(val data: String?, val receiptId: String?, val bytes: Int)
-
-/** One attachment block carried by a queued message, for its chip. */
-data class QueueAttachment(
-    val kind: String,
-    val name: String,
-    val bytes: Int,
-    /**
-     * Base64 bytes of a locally staged picture. A host row never has them (it
-     * carries a durable `attachmentId` instead); a local submission echo does,
-     * because there is nothing to read back yet.
-     */
-    val data: String? = null,
-)
-
-/**
- * One still-pending inbox occurrence, as the host projects it (`inbox` /
- * `session/control` queue frames).
- *
- * [preview] is the host client's own flattening: every non-attachment block
- * becomes its text (or `[type]`), whitespace collapsed, capped at 200 chars —
- * that is what the web row shows. [text] is non-null only when *every* block is
- * text, which is precisely when the web allows editing it inline.
- */
-data class QueuedMessage(
-    val id: String,
-    val placement: String,
-    val preview: String,
-    val text: String?,
-    val attachments: List<QueueAttachment>,
-    /**
-     * The `session/prompt` request id the host echoed onto this row. It is the
-     * only identity shared with a local submission echo, so it is what retires
-     * one: the web's `admitted` set is built exactly this way.
-     */
-    val rpcId: String? = null,
-    /**
-     * A client-side submission echo, not yet a host row. It has no host item id
-     * ([id] is the prompt request id), so its actions are disabled.
-     */
-    val pending: Boolean = false,
-)
 
 data class PendingApproval(
     val eventId: String,

@@ -3,7 +3,7 @@ package uk.xa0.dsh.model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
-import uk.xa0.dsh.SessionItem
+import uk.xa0.dsh.model.SessionItem
 
 /**
  * Where a fresh open lands.

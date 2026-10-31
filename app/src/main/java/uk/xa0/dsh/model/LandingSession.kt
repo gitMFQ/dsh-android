@@ -1,6 +1,5 @@
 package uk.xa0.dsh.model
 
-import uk.xa0.dsh.SessionItem
 
 /**
  * The row the auto-open should land on after a connect, or null when the roster
