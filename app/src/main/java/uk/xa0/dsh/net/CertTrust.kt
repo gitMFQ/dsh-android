@@ -1,38 +1,14 @@
 package uk.xa0.dsh.net
 
-import java.io.ByteArrayInputStream
 import java.security.KeyStore
 import java.security.cert.CertificateException
-import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
-import java.util.Base64
 import java.util.Locale
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
-
-/**
- * One certificate the app has been told to trust, for one host.
- *
- * The certificate itself is kept, not a hash of it, because it is used as a *trust
- * anchor*: a self-signed host is only usable at all if the platform's own path
- * validation has something to terminate at, and the certificate the user accepted
- * is exactly that something. The fingerprint is derived for display and for pinning.
- */
-data class AcceptedCert(
-    val host: String,
-    val acceptedAt: Long,
-    val certificate: X509Certificate,
-) {
-    /** SHA-256 over the certificate's public key — see [CertPins]. */
-    val pin: String get() = CertPins.pinOf(certificate)
-    val subject: String get() = certificate.subjectX500Principal.name
-    val issuer: String get() = certificate.issuerX500Principal.name
-    val notBefore: Long get() = certificate.notBefore.time
-    val notAfter: Long get() = certificate.notAfter.time
-}
 
 /**
  * The chain a host offered, carried out of the handshake that refused it.
@@ -67,9 +43,13 @@ class CertTrustException(
  *    alone cannot catch.
  *
  * The store outlives any one client: [uk.xa0.dsh.net.DshClient] reads the pins from
- * it when it builds its clients, the app persists [encode]d entries through
- * [uk.xa0.dsh.data.ConfigStore], and accepting or forgetting one swaps the trust
- * manager in place while the socket factory handed to OkHttp stays the same object.
+ * it when it builds its clients, the app persists entries through
+ * [uk.xa0.dsh.data.ConfigStore] using [uk.xa0.dsh.net.encodeAcceptedCerts], and
+ * accepting or forgetting one swaps the trust manager in place while the socket
+ * factory handed to OkHttp stays the same object.
+ *
+ * The entries and their codec live in `:core:config` (see [AcceptedCert]); this
+ * class consumes them and owns the keystore they are loaded into.
  */
 class CertTrust(
     entries: List<AcceptedCert> = emptyList(),
@@ -217,37 +197,6 @@ class CertTrust(
     }
 
     companion object {
-
-        /**
-         * `host<TAB>acceptedAt<TAB>base64(DER)` per line, in the same spirit as
-         * [uk.xa0.dsh.term.encodeHostShellSessions]: tab-separated text in the one
-         * place client-local state lives, with a malformed line dropped rather than
-         * thrown — a preference the app cannot read must not be able to stop it from
-         * starting.
-         */
-        fun encode(entries: List<AcceptedCert>): String = entries.joinToString("\n") { entry ->
-            val der = Base64.getEncoder().encodeToString(entry.certificate.encoded)
-            "${entry.host}\t${entry.acceptedAt}\t$der"
-        }
-
-        fun decode(raw: String?): List<AcceptedCert> {
-            if (raw.isNullOrEmpty()) return emptyList()
-            val factory = CertificateFactory.getInstance("X.509")
-            val out = ArrayList<AcceptedCert>()
-            for (line in raw.split('\n')) {
-                val parts = line.split('\t')
-                if (parts.size != 3) continue
-                val host = parts[0].trim()
-                val at = parts[1].trim().toLongOrNull() ?: continue
-                val der = runCatching { Base64.getDecoder().decode(parts[2].trim()) }.getOrNull()
-                    ?: continue
-                val certificate = runCatching {
-                    factory.generateCertificate(ByteArrayInputStream(der)) as? X509Certificate
-                }.getOrNull() ?: continue
-                if (host.isNotEmpty()) out += AcceptedCert(host.lowercase(Locale.ROOT), at, certificate)
-            }
-            return out
-        }
 
         /**
          * A trust manager over [store], or over the platform's own anchors when it is

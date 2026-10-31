@@ -114,9 +114,9 @@ class CertTrustTest {
             AcceptedCert("Self.Test.Example", 1_700_000_000_000L, selfSigned()),
             AcceptedCert("leaf.test.example", 1_700_000_001_000L, localCa()),
         )
-        val raw = CertTrust.encode(stored) + "\ngarbage\nno-tabs-here\nx\tnope\tAAAA"
+        val raw = encodeAcceptedCerts(stored) + "\ngarbage\nno-tabs-here\nx\tnope\tAAAA"
 
-        val decoded = CertTrust.decode(raw)
+        val decoded = decodeAcceptedCerts(raw)
         assertEquals(2, decoded.size)
         assertEquals("self.test.example", decoded[0].host)
         assertEquals(selfSigned(), decoded[0].certificate)

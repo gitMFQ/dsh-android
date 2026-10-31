@@ -91,7 +91,7 @@ term/  HostShell TerminalCellSize TerminalEmulator TerminalInput TerminalKeys
 >
 > **M2 已落地（PR #7，2026-10-31）**，实测 `app: 517` / `model: 413` / `term: 186` = `tests=1116`。
 > §2.6 是 M2 发现的第六个坑（纯 JVM 不能消费 Android 库）；§2.7 是对 M2.5 原计划的证伪，
-> §2.8 是替代方案。**§2.7/§2.8 在 M2.5 开工前必须先读。**
+> §2.8 是替代方案，§2.9 是落地结果。**§2.7/§2.8 在 M2.5 开工前必须先读。**
 
 ### 2.1 `:core:model` 必须是 `com.android.library`（`:core:term` 后来证明可以纯 JVM，见 §2.6）
 
@@ -371,9 +371,48 @@ data class AcceptedCert(
 > **判据复用（§2.6 的推广）**：判断一个类能不能进某模块，看的是**依赖闭包**，不是「它看起来属于这个概念」。
 > `DshConfig` 听名字像 model，实际闭包横跨 model + term + net。
 
-> **`:core:term` 零依赖是被保护的不变量**：任何一步如果让 `:core:model` / `:core:config` 反过来依赖 `:core:term`，就立刻违反这一条 —— 因为 `:core:term` 是纯 JVM 模块，只能被 `:app` 依赖，不能反过来依赖 Android 库。**
+> **`:core:term` 零出边是被保护的不变量**（2026-10-31 措辞修正，M2.5 实测）：它**不能**依赖任何 Android 库，否则纯 JVM 消费者立刻撞上 §2.6 的变体匹配失败。
+> 但「别的模块依赖 `:core:term`」是**允许且必要**的：`:core:config` 是 Android 库，消费纯 JVM 的 `:core:term` 完全合法，依赖方向就是 `config → term`（见上面 §2.8 的图）。
+> 上一版这句写成「`:core:config` 反过来依赖 `:core:term` 就违反」，与本节的图自相矛盾 —— 真正被禁的是 `term → 任何 Android 库`，不是 `config → term`。**
 
-> **建议的序列（已按实测修正）**：M1 ✅ → M2 ✅ → **M2.5 新建 `:core:config`**（不动 M3 的 `net/`）→ M3 抽 `:core:protocol`（`pinner()` 留在此层）→ M4 `data/` 改为依赖 `:core:config`。**每一步都不再有临时妥协。**
+> **建议的序列（已按实测修正）**：M1 ✅ → M2 ✅ → **M2.5 `:core:config` 已建成**（不动 M3 的 `net/`）→ M3 抽 `:core:protocol`（`pinner()` 留在此层）→ M4 `data/` 改为依赖 `:core:config`。**每一步都不再有临时妥协。**
+
+### 2.9 M2.5 落地：`:core:config` 建成后的实测（**新**）
+
+本节记录 §2.8 方案的实施结果。**目标仍是总测试数 1116 保持不变**（`app: 517` / `model: 413` / `term: 186`，`:core:config` 自身 0 个 —— 见下方「测试为什么一个都没搬」）。CI 实测数字在本 PR 跑完后回填。
+
+**模块形状**
+
+| 项 | 值 |
+|---|---|
+| 路径 | `core/config/` |
+| 插件 | `com.android.library`（**不是** `kotlin("jvm")`，理由见 §2.8：闭包含 `:core:model`） |
+| `namespace` | `uk.xa0.dsh.core.config`（**空 namespace**，不产出 `R`/`BuildConfig`，与 `:core:model` 同一做法） |
+| 依赖 | `api(project(":core:model"))` + `api(project(":core:term"))` |
+| 出边 | **okhttp：0**（见下方 `pinner()`） |
+
+两个依赖都用 `api` 而不是 `implementation`：`DshConfig` 的**构造参数**就是 `DrawerGrouping` 和 `TerminalCellSize` 类型的字段，消费者不看见这两个类型就无法调用它。这与 `:core:model` 用 `api` 带 `compose-runtime` 是同一个理由。
+
+**搬了什么（包名全部不变，所以 `:app` 侧只有 3 处 import 需要动）**
+
+| 内容 | 从 | 到 |
+|---|---|---|
+| `DshConfig` + `ThemeMode` + `BusyEnter` | `data/ConfigStore.kt:14-155`（同一个文件的三块） | `core/config/.../data/DshConfig.kt` |
+| `AcceptedCert` | `net/CertTrust.kt:16-35` | `core/config/.../net/AcceptedCert.kt` |
+| `CertPins`（除 `pinner()`） | `net/CertPins.kt` 整体 `git mv` | `core/config/.../net/CertPins.kt` |
+
+**`encode`/`decode` 的处置**：按 §2.8 的「选择 1」提到了顶层，但**没有沿用原名** —— 改为 `encodeAcceptedCerts` / `decodeAcceptedCerts`。
+原因：它们原来在 `CertTrust.companion object` 里，叫 `CertTrust.encode`；提成顶层后如果还叫 `encode`，`import uk.xa0.dsh.net.encode` 就是一个与任何类型都不挂钩的裸动词。加上主语后，`ConfigStore` 的两处调用点读起来仍然是「编码证书」，而且与 `:core:term` 已有的 `encodeHostShellSessions` / `decodeHostShellSessions` 命名一致。
+`CertTrust` 本体**没有**跟着搬（它是 KeyStore/TrustManager 的信任管理，M3 随 `net/` 走），所以 `CertTrust` 现在只消费 `AcceptedCert`，不再拥有它的持久化格式。
+
+**`pinner()` 的处置**：按 §2.8 的「推荐项 1」，但它**没有**留在 `:core:protocol`（那个模块还不存在），而是作为**扩展函数** `fun CertPins.pinner(...)` 放进 `:app` 的 `net/CertPinning.kt`。
+做成扩展函数是为了**调用点零改动**：`DshClient.kt:211` 与 `CertTrustTest.kt:136` 写的 `CertPins.pinner(...)` 原样可用，不需要 import 改动，也不需要改成 `CertPinning.pinner(...)`。`OKHTTP_PREFIX` 常量随函数一起搬过去，变成函数体内的字面量（它只被这一处用）。
+
+**测试为什么一个都没搬**：`CertTrustTest`（12 个 `@Test`）留在 `:app`。它同时用 `CertPins`（已进 config）和 `CertTrust`（还在 app），而 `CertTrust` 要到 M3 才动 —— 现在搬进 `:core:config` 会立刻编不过。**这是 M2.5 与 M1/M2 的一个真实差别：这次搬的是源码不是测试，测试数不变是正确结果，不是漏搬。**
+`:core:config:testDebugUnitTest` 仍然写进了 `verify.yml` 和 `build.yml` 的任务列表：它现在跑 0 个测试，但任务名必须在，否则 M3 搬进来的测试会**静默不跑**（§3.2 那个坑）。
+
+**实测（2026-10-31）**：本机 `:core:config:compileDebugKotlin` 与 `:app:compileDebugKotlin` 均通过，**0 处跨模块 smart cast 错误**。
+这与 §2.5 的预期相反，值得记下来：`DshConfig` 虽然被 UI 大量消费，但消费方式全是 `.copy(...)` 和直接读**值类型**字段（`String` / `Boolean` / `Float`），没有一处是「先判 `is`/`!= null` 再从属性上取值」。§2.5 的 4 处错误全部出自 **`ChatEntry` 这类 sealed 层级**，而 config 里没有 sealed 类型。**判据：smart cast 错误来自「对跨模块属性做类型收窄」，不是「类型跨了模块」。**
 
 ## 3. 建议的 PR 序列（单变量，每步一个 CI 门）
 
@@ -392,7 +431,7 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 | **M0** ✅ | #4 `split-model-rows` | 5 个宿主行类移入 `model/`，`model → root` 边清零 | `tests=1116 failures=0` |
 | **M1** ✅ | #6 `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），`model/` 50 文件 + **43** 个纯 JVM 测试（413 个 `@Test`）搬进去；`:app` 加 `implementation(project(":core:model"))`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权（§2.2）；**4 处跨模块 smart cast 修复**（§2.5）；`verify.yml` + `build.yml` 显式加 `:core:model:testDebugUnitTest` 并把 glob 改成 `**/build/test-results/**` | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413` |
 | **M2** ✅ | #7 `core-term-module` | 新建 `:core:term`（**纯 JVM**，`kotlin("jvm")`，版本声明在根 build），搬 `term/` 7 文件 + **10 个测试文件（186 个 `@Test`）**；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入（§2.6），`term → model` 边清零；`:app` 3 处 import 改指向 | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 517` / `model: 413` / `term: 186` |
-| **M2.5** | `core-config-module` | 新建 **`:core:config`**（**`com.android.library`**，理由见 §2.8：闭包含 `:core:model`，做不了纯 JVM），搬 `DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ `encode`/`decode`（提到顶层）。**不动 `net/`、不动 `data/` 的存储层**。解 `net ⇄ data` 环 | `tests=1116 failures=0` |
+| **M2.5** 🔄 | `core-config-module` | 新建 **`:core:config`**（**`com.android.library`**，理由见 §2.8：闭包含 `:core:model`，做不了纯 JVM），搬 `DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ `encode`/`decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`（§2.9）。`pinner()` 成 `:app` 的扩展函数，调用点零改动。**不动 `net/`、不动 `data/` 的存储层**。解 `net ⇄ data` 环 | 本机 `:core:config` + `:app` 编译通过；**CI 数字待本 PR 跑完回填**（测试未搬，`config: 0` 是预期，见 §2.9） |
 | **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + **`:core:config`** + okhttp。`CertPins.pinner()` 留在此层（调用点仅 `DshClient.kt:211`）。`hostOf` 在这里提权 | `tests=1116 failures=0` |
 | **M4** | `data-depends-on-config` | `data/` 的 `ConfigStore` 改为 import `:core:config` 的类型；`net → data` 环彻底消失 | `tests=1116 failures=0` |
 

@@ -1,13 +1,14 @@
 # 交接文档（给新会话）
 
-> 写于 2026-10-31（当日第二版）。第一版交接了「接管 + 工具链全量升级」；本版追加了结构拆分的第一步与截图基线。
+> 写于 2026-10-31（当日第三版）。第一版交接「接管 + 工具链全量升级」，第二版追加结构拆分的开头与截图基线；
+> 本版追加 **1.2b（`:core:config`）**。
 > **新会话请先读本文件，再按需查其它文档。**
 
 ## 1. 一句话现状
 
 仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1116 个功能测试全绿 + 4 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
 
-**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**两个模块已经抽出来了**（`:core:model`，PR #6，413 个测试；`:core:term`，PR #7，186 个测试，**纯 JVM 模块 —— 本仓第一次能在本机跑功能测试**）。下一步是 1.2b（`AcceptedCert` + `DshConfig` 进 `:core:model`）后抽 `:core:protocol`。
+**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**三个模块已经抽出来了**：`:core:model`（PR #6，413 个测试）、`:core:term`（PR #7，186 个测试，**纯 JVM 模块 —— 本仓第一次能在本机跑功能测试**）、`:core:config`（1.2b，本次，0 个测试是预期）。下一步是抽 `:core:protocol`（`net/`）。
 
 ## 2. 已完成（L1–L4，全部合入 master）
 
@@ -21,6 +22,7 @@
 | **1.5** | Roborazzi **1.77.0** + 4 张基线（About / Startup / 抽屉 / 抽屉空态），411×891 | `tests=1116` + `screenshots=4`（PR #5） |
 | **1.1** | 抽 `:core:model`（`com.android.library`）：50 个源文件 + 43 个测试文件搬出 `:app`；包名不变所以**全仓零 import 改动**；2 个 `internal` 提权；4 处跨模块 smart cast 修复 | `app: 703` + `model: 413` = `tests=1116` + `screenshots=4`（PR #6） |
 | **1.2** | 抽 `:core:term`（**纯 JVM**）：7 源文件 + 10 测试文件（186 个 `@Test`）搬出 `:app`；`ROUTER_READOUT_TERMINAL_ID` + `isRouterReadoutTerminal` 从 `:core:model` 移入以切断依赖边；`term → model` 边清零 | `app: 517` + `model: 413` + `term: 186` = `tests=1116` + `screenshots=4`（PR #7） |
+| **1.2b** | 抽 `:core:config`（`com.android.library`，`api` 依赖 model + term）：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（**除 okhttp 的 `pinner()`**）+ 证书编解码（`CertTrust.encode/decode` → 顶层 `encodeAcceptedCerts`/`decodeAcceptedCerts`）。`pinner()` 变 `:app` 的**扩展函数**，调用点零改动 | 目标 `tests=1116`（`config: 0`，源码搬测试未搬，见 research/13 §2.9） |
 
 每个 PR 都是**单一变量**，失败时能立刻定位。这个方法论请延续。
 
@@ -51,13 +53,13 @@
 | **本机可以跑 `:core:term` 的 186 个测试了**（1.2 起） | 纯 JVM 模块不碰 aapt2，**不需要任何本机 hack**：`bash build.sh :core:term:test` 直接出 `tests=186 failures=0`（约 4 分半）。`:core:model` 的 413 个仍跑不了（它是 Android library，`processDebugUnitTestResources` 挂在 aapt2）。这是往纯 JVM 拆的真收益，不只是模块漂亮。 |
 | **纯 JVM 模块不能依赖 Android library**（1.2 踩到） | 变体匹配直接失败，补 attribute 也救不回来。要么把依赖边拆掉（1.2 的做法），要么该模块就用 `com.android.library`。**判据是依赖闭包，不是源码里有没有 `import android`**。详见 research/13 §2.6。 |
 | **`kotlin("jvm")` 的版本只能写在根 build** | AGP 9 已把 Kotlin 放上 build classpath，模块里写版本会报 `already on the classpath with an unknown version`。根 `build.gradle.kts` 加 `apply false`，模块只写 `kotlin("jvm")`。 |
-| **`:core:term` 必须保持零依赖**（不变量） | 它是唯一能在本机跑完整测试的模块，前提是**纯 JVM + 依赖闭包里没有 Android 库**。任何让 `:core:model` / `:core:config` **反向**依赖 `:core:term` 的方案都会立刻破坏这条（1.2b 的「`DshConfig` 进 model」就是这种方案）。**方向只能是 term ← 别人，永远不是 term → 别人。** |
+| **`:core:term` 必须保持零出边**（不变量） | 它是唯一能在本机跑完整测试的模块，前提是**纯 JVM + 它自己不依赖任何 Android 库**。1.2b 的「`DshConfig` 进 `:core:model`」之所以被否，是那样会让 **`:core:model` → `:core:term`**，而 `DshConfig` 真正需要的是 `TerminalCellSize`，不是反过来。**别人依赖 term 是对的**（`:core:config` 现在就是 `api(project(":core:term"))`，合法）；**term 依赖别人是错的**。方向永远是 **term ← 别人**。 |
 
 ## 4. 仓库结构
 
 ```
 /root/dsh-android
-  app/                     # 主模块，143 个 .kt / 5.8 万行（fork 自 bqv/dsh-android v0.6.6）
+  app/                     # 主模块（fork 自 bqv/dsh-android v0.6.6），抽走三个模块后仍是测试主体
     src/main/java/uk/xa0/dsh/
       net/                 # 协议层（~4000 行；下一步抽 :core:protocol）
       ui/                  # 界面 54 文件 / 27k 行
@@ -65,6 +67,7 @@
     src/test/              # 517 个功能 @Test + 4 张截图基线 + 4 个依赖 :app 的 model 测试
   core/model/              # 已抽出：领域模型 50 文件 + 43 个测试文件（413 个 @Test），com.android.library
   core/term/               # 已抽出：终端 7 文件 + 10 个测试文件（186 个 @Test），纯 kotlin("jvm")
+  core/config/             # 已抽出：DshConfig + ThemeMode + BusyEnter + AcceptedCert + CertPins(JDK 部分)，com.android.library，0 测试
   docs/                    # 规划文档（见 §6）
   .github/workflows/       # build.yml（出 APK）/ verify.yml（测试+截图门禁）/ release.yml / screenshots.yml（手动录基线）
   build.sh                 # 唯一构建入口，找 .toolchain/gradle-9.5.0
@@ -113,17 +116,19 @@
 | 1.0 ✅ | 宿主行类移入 `model/` | `model → root` 边 14 → 0 | 1116 绿（PR #4） |
 | 1.1 ✅ | 抽 `:core:model`（`com.android.library`） | 50 文件 + 43 个纯 JVM 测试（413 个 `@Test`）；4 个测试留 `:app`；2 个 `internal` 提权；4 处跨模块 smart cast | 独立绿 + 全仓仍 1116（PR #6，`app: 703` / `model: 413`） |
 | 1.2 ✅ | 抽 `:core:term`（**纯 JVM**，`kotlin("jvm")`，PR #7） | 7 文件 + 10 个测试文件 / 186 个 `@Test`；0 个 `internal`；readout 的 id + 谓词从 `:core:model` 移入以切断依赖边 | 仍 1116（PR #7，`app: 517` / `model: 413` / `term: 186`） |
-| 1.2b | 新建 **`:core:config`**（`com.android.library`） | ⚠️ **原计划「进 `:core:model`」已证伪**（`DshConfig` 闭包横跨 model+term+net，且会逼 `:core:model` 反向依赖纯 JVM 的 `:core:term`）。正解是独立模块：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`(除 `pinner()`) + `encode`/`decode`。详见 research/13 **§2.7 / §2.8** | 仍 1116 |
-| 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件 | 仍 1116 |
+| 1.2b ✅ | 抽 **`:core:config`**（`com.android.library`） | ⚠️ **原计划「进 `:core:model`」已证伪**（`DshConfig` 闭包横跨 model+term；`AcceptedCert → CertPins → okhttp`）。独立模块：`DshConfig` + `ThemeMode` + `BusyEnter` + `AcceptedCert` + `CertPins`（除 `pinner()`）+ 编解码。`pinner()` 成 `:app` 扩展函数，调用点零改动。详见 research/13 **§2.7 / §2.8 / §2.9** | `config: 0` 测试是预期（源码搬、测试留），总目标仍 1116 |
+| 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件；`CertTrust` 带着 `pinner()` 一起进 | 仍 1116 |
 | 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
 
 > **抽模块时必改两处**（1.1 实证，两处都会让 CI「绿着丢测试」）：
 > 1. `verify.yml` 的汇总 glob：`app/build/test-results/**` → `**/build/test-results/**`；
 > 2. **新模块的测试任务要在 `verify.yml` 和 `build.yml` 里显式写名字**（`bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest`）。**依赖一个模块不会跑它的测试** —— 这一条比 glob 更容易漏，因为 CI 完全绿。
 >
-> 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。第 2 条每加一个模块都要再写一遍（1.2 起还要加 `:core:term:test`）。
+> 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。第 2 条每加一个模块都要再写一遍（1.2 起还要加 `:core:term:test`，1.2b 起还要加 `:core:config:testDebugUnitTest`）。
 
-> **1.2b 之前必读** [research/13-module-extraction.md](research/13-module-extraction.md) **§2.7 + §2.8**：
+> **1.2b 的一个反例，别把「测试数没涨」当漏搬**：`:core:config` 搬的是**源码**，`CertTrustTest`（12 个 `@Test`）留在 `:app` —— 它同时用 `CertTrust`（M3 才走），现在搬进去就编不过。**模块建好了、测试数没变，是正确结果。** 但任务名仍要写进两个 workflow：现在跑 0 个，M3 搬进来的才会真的跑。
+
+> **1.2b 为什么不是「塞进 `:core:model`」**（复盘，[research/13](research/13-module-extraction.md) **§2.7 + §2.8**）：
 > 原文推荐的「`AcceptedCert` + `DshConfig` 进 `:core:model`」**已实测证伪**。三条阻塞：
 > `AcceptedCert` 的属性依赖 `CertPins` → okhttp；`DshConfig` 依赖 `:core:term`（会逼 model 反向依赖纯 JVM 模块）；
 > `encode`/`decode` 卡在 `CertTrust.companion object` 里。**正解是独立 `:core:config`。**

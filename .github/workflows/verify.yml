@@ -48,13 +48,17 @@ jobs:
       # L1 gate: the whole 1116-test suite on Kotlin 2.4.21. This is the step that
       # proves the compiler migration did not break anything, before any of the
       # AGP / Compose / miuix upgrades land on top of it.
-      # Three test tasks, every one named. Depending on a module does not run its
+      # Four test tasks, every one named. Depending on a module does not run its
       # tests, so `:app:testDebugUnitTest` alone would quietly run only the 517 that
       # still live in :app and report a green check over a 599-test-smaller suite.
-      # All three are required; together they are the 1116 this gate quotes.
+      # All four are required; together they are the 1116 this gate quotes.
       # :core:term is a plain JVM module, hence `:test` rather than `testDebugUnitTest`.
+      # :core:config is an Android library like :core:model, hence testDebugUnitTest.
+      # It currently holds no tests of its own (the certificate and config tests still
+      # live in :app, where the code that exercises them does), but naming it here is
+      # what makes a test that moves in later actually run instead of silently not.
       - name: Unit tests
-        run: bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest :core:term:test
+        run: bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest :core:term:test :core:config:testDebugUnitTest
 
       # The visual gate. Phase 2 rewrites the shell, and ChatScreen.kt alone is
       # 3200 lines; this is what turns "the re-skin moved something" from
