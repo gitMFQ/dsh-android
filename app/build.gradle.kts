@@ -149,6 +149,14 @@ dependencies {
     // and isRouterReadoutTerminal live here too — see §2.6 of the extraction notes.
     implementation(project(":core:term"))
 
+    // What the client remembers about a host: DshConfig, and the certificates it has
+    // been told to trust. A module of its own rather than part of :core:model because
+    // its closure spans model and term both (§2.7/§2.8) — putting it in the innermost
+    // module would have made :core:model depend on :core:term, the direction :core:term
+    // was extracted to keep free. The Kotlin packages are unchanged, so no import here
+    // was rewritten.
+    implementation(project(":core:config"))
+
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 

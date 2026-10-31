@@ -1,6 +1,5 @@
 package uk.xa0.dsh.net
 
-import okhttp3.CertificatePinner
 import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.cert.X509Certificate
@@ -27,7 +26,7 @@ import java.util.Locale
  * outlives every leaf it signs.
  *
  * The pin is SHA-256 over a certificate's SubjectPublicKeyInfo: the same value
- * HPKP, `network_security_config` and OkHttp's [CertificatePinner] all use, so a
+ * HPKP, `network_security_config` and OkHttp's `CertificatePinner` all use, so a
  * fingerprint computed on the host with
  *
  * ```
@@ -49,14 +48,13 @@ import java.util.Locale
  * stay as they are: a pin is consulted *after* the chain validates, so a private
  * CA has to remain trusted for its pins to mean anything. The pin, not the anchor
  * list, is what refuses an impostor.
+ *
+ * **Everything here is JDK.** Turning these fingerprints into something OkHttp
+ * enforces is `uk.xa0.dsh.net.pinner`, an extension function in `:app`, because that
+ * is the only member of this scheme that needs the protocol stack and this module is
+ * configuration. The `sha256/` prefix that OkHttp and HPKP want is applied there.
  */
 object CertPins {
-
-    /**
-     * OkHttp and HPKP spell a pin `sha256/<base64>`; what this app stores and shows
-     * is the bare base64 digest, because that is what `openssl | base64` prints.
-     */
-    private const val OKHTTP_PREFIX = "sha256/"
 
     /** The pin of a certificate's public key — the value a pin stores. */
     fun pinOf(publicKey: PublicKey): String = pinOf(publicKey.encoded)
@@ -91,26 +89,6 @@ object CertPins {
      * cannot read must not be able to take it down.
      */
     fun isWellFormed(raw: String): Boolean = decodeOrNull(raw)?.size == 32
-
-    /**
-     * The pin set as an OkHttp [CertificatePinner].
-     *
-     * OkHttp checks this while the connection is being established, before a single
-     * byte of the request is written — which is why pinning belongs here and not in
-     * an interceptor: an interceptor sees the response only after the request (with
-     * its credentials) has already been sent to whoever answered the handshake.
-     *
-     * An entry whose pin is malformed is skipped rather than thrown over: the call
-     * then behaves as if that host were unpinned, which is what it is.
-     */
-    fun pinner(pins: Map<String, String>): CertificatePinner {
-        val builder = CertificatePinner.Builder()
-        for ((host, pin) in pins) {
-            if (host.isBlank() || !isWellFormed(pin)) continue
-            builder.add(host, OKHTTP_PREFIX + pin.trim())
-        }
-        return builder.build()
-    }
 
     /**
      * True when a failure is the pinner's refusal rather than anything about the network.
