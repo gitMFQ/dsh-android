@@ -64,4 +64,7 @@ dependencies {
     api("androidx.compose.ui:ui-text")
     // The scheme the theme maps onto, for components that paint themselves from it.
     api("androidx.compose.material3:material3")
+    // `KsuTokens.Motion` names spring/tween specs, whose types appear in the public
+    // API, so this is `api` for the same reason as the rest.
+    api("androidx.compose.animation:animation-core")
 }
