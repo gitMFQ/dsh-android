@@ -4,6 +4,10 @@ plugins {
     // plugin and still versioned with Kotlin.
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    // Screenshot baselines: `recordRoborazziDebug` / `verifyRoborazziDebug` /
+    // `compareRoborazziDebug`. The plugin only adds tasks; nothing is captured
+    // unless a test calls `captureRoboImage()`.
+    id("io.github.takahirom.roborazzi")
 }
 
 android {
@@ -170,6 +174,13 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    // Screenshot baselines. `roborazzi` records and compares PNGs from a unit
+    // test, `roborazzi-compose` adds the `SemanticsNodeInteraction.captureRoboImage()`
+    // overload that captures one composable rather than the whole window. Both are
+    // test-only: neither ships in the APK.
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.77.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.77.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
