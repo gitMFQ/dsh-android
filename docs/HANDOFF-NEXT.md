@@ -6,11 +6,13 @@
 
 ## 1. 一句话现状
 
-仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1123 个功能测试全绿 + 4 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
+仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1136 个功能测试全绿 + 8 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
 
 **换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**五个模块已经抽出来了**：`:core:model`（PR #6，413 个测试）、`:core:term`（PR #7，186 个测试，**纯 JVM —— 本仓第一次能在本机跑功能测试**）、`:core:config`（PR #8）、`:core:protocol`（PR #9，73 个测试 —— **并抓出第一个生产缺陷**，见 research/13 §2.11）、`:design`（PR #10，7 个测试）。
 
-**阶段 1 已完成**。`:design` 顺带交付了 **7 档外观**（Light / Dark / System / AMOLED / Monet ×3），测试总数 **1116 → 1123**。下一步是阶段 2（外壳换装）。
+**阶段 1 已完成**。`:design` 顺带交付了 **7 档外观**（Light / Dark / System / AMOLED / Monet ×3），测试总数 **1116 → 1123**。
+
+**阶段 2 已开工（2026-11-01）**：2.0（窗口底色跟随外观）、2.1（删 `KsuTokens.Space`）、2.2a/b/c（基线 4 → 8 张 + 抽 `TerminalPanel`）全部合入。当前 **`tests=1136` + `screenshots=8`**。下一个决定点是 **2.3（miuix 实验闸门）**，见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2。
 
 ## 2. 已完成（L1–L4，全部合入 master）
 
@@ -30,19 +32,38 @@
 | **1.4b** ✅ | 7 档外观 + `KsuTokens`。外观做成**变换**而非 7 份调色板（AMOLED 取暗色调色板把表面压黑；Monet 只取壁纸的主色族与底色，语义色不动）。**顺带修掉一个真冲突**：host 的外观枚举只有 light/dark/system，而 `adoptHostSetting` 会把它写回本地 —— 接上 host 的会话会把 AMOLED/Monet 静默重置。拆成 `themeMode`（本机）与 `hostThemeMode`（镜像）两个字段 | `tests=1123`（`config: 7`）+ `screenshots=4`（PR #10） |
 每个 PR 都是**单一变量**，失败时能立刻定位。这个方法论请延续。
 
+### 2.0 阶段 2 进展（2026-11-01，六个 PR）
+
+| # | PR | 内容 | CI 证据 | PR |
+|---|---|---|---|---|
+| 2.0 | `fix/window-background` | 窗口底色跟随 7 档外观 | `tests=1136` / `screenshots=4` | #11 |
+| 2.1 | `refactor/drop-ksu-spacing` | 删 `KsuTokens.Space` | 均不变 | #12 |
+| 2.2a | `test/baseline-expand` | 补 Composer / Files / Permission 三张 | `screenshots=7` | #13 |
+| 2.2b | `refactor/terminal-stateless` | 抽 `TerminalPanel`，纯搬运 | 7 张逐字节不变 | #14 |
+| 2.2c | `test/baseline-terminal` | 补 `terminal.png` | `screenshots=8` | #15 |
+
+**三个值得记住的结论**：
+
+1. **2.0 的原计划写错了**：「`MainActivity` 在 Compose 之前就持有 `ui.themeMode`」只在 `setContent` **之内**成立。真实做法是把调色板决议提成纯函数 `dshPalette()`，让 `ConfigStore` 记住外观，在 `onCreate` 里先画 `decorView`。**「窗口」和「Compose」是两棵树，基线看不到窗口** —— 这也解释了为什么 2.0 需要新增测试（+13）而基线一张不动。
+2. **基线之间可以互相验证**：2.2b 是纯搬运，判据不是「我看了 diff 觉得是搬运」，而是 **2.2c 录制时另外 7 张 sha256 逐字节相同**。先 refactor 再 baseline、且分成两个 PR，才有这条证据。
+3. **能补的基线已经补完了**。剩聊天主界面 / Trajectory / Router 抓不到，因为**入口就是 view model**（`ChatScreen(vm)`）；要给它们录基线必须先拆无状态屏，那是独立重构 PR，不能塞进「只加截图」的 PR。
+
 ### 2.1 截图基线怎么用（新增，重要）
 
 | 想知道 | 做法 |
 |---|---|
 | 换皮后有没有动到别的界面 | `verify.yml` 的 `Screenshot gate` 步骤会红；下载 `roborazzi-comparison` artifact 看 `*_compare.png` |
-| 基线该更新了 | 手动跑 `Screenshots` workflow（`workflow_dispatch`），下载 `roborazzi-baselines`，覆盖 `app/src/test/screenshots/` 后提交 |
+| 基线该更新了 | 手动跑 `Screenshots` workflow（`workflow_dispatch`），下载 `roborazzi-baselines`，覆盖 `app/src/test/screenshots/` 后提交。**可以直接录某个分支**：`gh workflow run screenshots.yml --ref master -f branch=<分支名>` —— 在默认分支上派发（工作流只在默认分支上可触发），checkout 的却是目标分支。2.2a / 2.2c 都是这么录的，比 PR #5 当年「临时加 `push:` 触发再删掉」干净 |
+| 新基线怎么加 | 在 `ScreenBaselineTest` 加一个 `@Test` → 走上面的录制流程 → 从 artifact 里取出 PNG 提交。**本机录不了**（aarch64 无可用 aapt2） |
 | 为什么不能在本机录 | aarch64 + 无可用 aapt2，`recordRoborazziDebug` 跑不了（§3 第一条） |
 
 **基线只手动录**。若改成 push 自动录，基线会跟着代码走，比对就变成「自己和自己比」，门禁等于没有。
 
-**两个数字别合并**：`tests=1123`（功能测试，每个 PR 的证据）与 `screenshots=4`（像素基线）。CI 分开打印，合并成一个数会让「少跑一个测试」和「多一张基线」长得一模一样。
+**两个数字别合并**：`tests=1136`（功能测试，每个 PR 的证据）与 `screenshots=8`（像素基线）。CI 分开打印，合并成一个数会让「少跑一个测试」和「多一张基线」长得一模一样。
 >
 > **`tests` 从 1116 涨到 1123 是 1.4b 有意为之**（+7 个 `ThemeMode` 测试）。1116 那条不变量只约束**纯搬运 PR**；功能 PR 的判据是「原有测试一个不少 + 新增测试有理由」。
+>
+> **再涨到 1136 是 2.0 有意为之**（+8 `DshPaletteTest` / +5 `WindowBackgroundTest`）。理由很具体：那一步改的是**窗口**，而截图基线抓的是 **Compose 树**，结构上永远看不到窗口 —— 没有这两组测试，2.0 就是一个**零证据**的 PR。`screenshots` 同期从 4 涨到 8（2.2a 三张 + 2.2c 一张）。
 
 ## 3. 关键约束（踩过的坑，别再踩）
 
@@ -85,7 +106,7 @@
 
 | 工作流 | 触发 | 作用 |
 |---|---|---|
-| `verify.yml` | push main/master + PR | `tests=1123 failures=0` + `screenshots=4` 像素比对 |
+| `verify.yml` | push main/master + PR | `tests=1136 failures=0` + `screenshots=8` 像素比对 |
 | `build.yml` | 同上 | 出 debug APK（约 20 MB） |
 | `release.yml` | tag `v*` | 出 release APK 挂 Release |
 | `screenshots.yml` | **手动** `workflow_dispatch` | 在 CI 录基线并上传 artifact（本机录不了） |

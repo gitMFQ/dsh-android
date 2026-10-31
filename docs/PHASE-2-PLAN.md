@@ -23,15 +23,23 @@
 
 ### 1.2 基线现在只覆盖 4 屏，阶段 2 要动的屏大多没覆盖
 
+> **2026-11-01 更新：这一段已过时，见 §2 的 2.2a / 2.2c。** 现在有 **8 张**基线：原 4 张 + `composer.png` / `files.png` / `permission.png` / `terminal.png`。
+
 | 已有基线 | 阶段 2 会动它吗 |
 |---|---|
 | `about.png` | 会（设置/关于换装） |
 | `startup.png` | 会（启动页视觉） |
 | `drawer.png` / `drawer-empty.png` | 会（抽屉换装） |
+| `composer.png`（2.2a） | 会（底栏/pager 会挪它） |
+| `files.png`（2.2a） | 会（容器换装） |
+| `permission.png`（2.2a） | 会（2.9 Sheet 统一） |
+| `terminal.png`（2.2c） | 会（2.4/2.5 外壳换装会挪它） |
 
-**没有基线覆盖**的：聊天主界面、Composer、Sheet（11 个）、Files 面板、Shell/终端、Trajectory、Router。
+**仍然没有基线覆盖**的：**聊天主界面**（`ChatScreen`，见 §2 修正第 3 条：需要一次独立重构才抓得到）、Trajectory、Router，以及 11 个 Sheet 里的另外 10 个。
 
 > **所以阶段 2 的第 1 个任务不是换皮，是补基线**。没有基线保护就换皮 = 改坏了没人知道。
+>
+> 补充（2026-11-01）：补基线这件事已经做到「**能抓的都抓了**」。剩下的三个屏不是没来得及，而是**当前入口就是 view model**，抓它们要先把屏拆成无状态部分 —— 那是生产代码变更，不能混进一个验收标准为「只增加截图」的 PR。聊天主界面尤其值得单独排期：它是读者停留最久的屏，也是 2.4/2.5/2.6 改动最大的屏。
 
 ### 1.3 当前导航结构不是「底栏 + 4 目的地」
 
@@ -82,9 +90,11 @@ private enum class ChatView(val label: String) {
 
 | # | PR | 内容 | 验收 | 风险 |
 |---|---|---|---|---|
-| **2.0** | `fix/window-background` | 窗口底色跟随外观。**已验证可行**：`MainActivity` 在 Compose 之前就已经持有 `ui.themeMode`（`MainActivity.kt:119` 把它传给 `DshTheme`），所以可以在 Activity 里按解析出的外观**编程设置** `window.setBackgroundDrawable` 或用 `Theme.applyStyle`。默认值也从 `#0B0F14` 统一到与 `bgBase` 一致 | 现有 4 张基线**不变**（Compose 内渲染，不含窗口底色）；真机冷启动不再闪 | 低 |
-| **2.1** | `refactor/drop-ksu-spacing` | 删掉 `KsuTokens.Space`，阶段 2 一律用 `DshSpacing`（DESIGN-TOKENS §4.2 方案 A） | 基线不变（零调用点）；编译通过 | 极低 |
-| **2.2** | `test/baseline-expand` | **补基线**：聊天主界面、Composer、一个 Sheet、Files 面板、Shell。只增加，不改现有 4 张 | CI `screenshots=N`（N>4），原有 4 张不变 | 低（纯测试） |
+| **2.0** ✅ | `fix/window-background` | **已交付（PR #11）**。窗口底色跟随外观。原计划的「`MainActivity` 已持有 `ui.themeMode`」只在 `setContent` 之内成立 —— 那时窗口已经按静态资源画过一遍，等于**没修**。实际做法：把 `DshTheme` 里的 `when` 提成纯函数 `dshPalette(themeMode, systemDark, monet)`，`toMonet` 去掉 `@Composable`（它只需要 `Context`）；`WindowBackground.apply` 在 `onCreate` 里、`setContent` 之前画 `decorView`；`ConfigStore` 记住上一次读到/写入的外观，避免在冷启动关键路径上开 `EncryptedSharedPreferences`。静态资源 `#0B0F14 → #151517`（对齐 `bgBase`） | 4 张基线**不变**（实测）；`tests=1136`（+8 `DshPaletteTest` / +5 `WindowBackgroundTest`） | 低 |
+| **2.1** ✅ | `refactor/drop-ksu-spacing` | **已交付（PR #12）**。删掉 `KsuTokens.Space`（调用点 = 0），间距统一到 `DshSpacing`；理由写进 `KsuTokens` 类注释 + DESIGN-TOKENS §4.2 | `tests=1136` / `screenshots=4` 均不变（实测） | 极低 |
+| **2.2a** ✅ | `test/baseline-expand` | **已交付（PR #13）**。补基线 **Composer / Files / Permission sheet** 三张。**聊天主界面没做**：`ChatScreen(vm)` 单文件 100+ 处 `ui.` 读取 + `LaunchedEffect` 里发网络 + 1 秒走时器，要抓它得先拆「无状态屏」，属改生产代码 | `screenshots=7`（实测），原有 4 张 sha256 逐字节相同 | 低（纯测试） |
+| **2.2b** ✅ | `refactor/terminal-stateless` | **已交付（PR #14）**。`TerminalScreen` 的树抽成 `internal fun TerminalPanel(state, emulator, …)`，8 处 `vm::x` 换成参数；`TerminalScreen` 保留 `StateFlow`/RPC/离场 hook，成为唯一调用方。**纯搬运**，不加测试 | `tests=1136` / `screenshots=7` 均不变（实测 = 搬运没改树） | 低 |
+| **2.2c** ✅ | `test/baseline-terminal` | **已交付（PR #15）**。给 `TerminalPanel` 录 `terminal.png`（80×24、running、十几行输出） | `screenshots=8`（实测）；原有 7 张 sha256 逐字节相同 | 低（纯测试） |
 | **2.3** | `spike/miuix-adoption` | **实验 PR，可丢弃**：在一个 Settings 行里用 miuix `SwitchPreference`，套 `MiuixTheme`，跑一遍基线看是否崩、颜色是否可用 | 编译 + 基线可生成 | **中**（决定 2.5 走哪条路） |
 | **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs` | 底栏 4 项；基线新增底栏屏 | 中 |
 | **2.5** | `feat/pager-navigation` | 4 目的地 pager + 弹簧切页；宽屏切 `NavigationRail` | 切页流畅；旋转保持 | 中 |
@@ -94,6 +104,15 @@ private enum class ChatView(val label: String) {
 | **2.9** | `feat/sheet-unify` | Sheet/Dialog 统一（11 个）；危险操作红卡 + 二次确认 | 审批走 Sheet + 二次确认 | 中 |
 
 > **2.3 是一道闸门**：如果 miuix 实验失败，2.5 / 2.7 / 2.8 / 2.9 全部改为**自绘**（工期 +1 周，但零依赖风险）。这个判断必须在 2.4 之前做完。
+
+### 2.1 执行中修正的四件事（2026-11-01）
+
+1. **2.0 的原方案不成立，已改**：原文说「`MainActivity` 在 Compose 之前就持有 `ui.themeMode`，所以可以据此设窗口底色」。实际 `ui.themeMode` 来自 `setContent` 里的 view model —— 拿到它时窗口早已按静态资源画完。**真实做法是让 `ConfigStore` 记住外观，在 `onCreate` 里先画**。计划里这句话没有导致返工（方案是朝「更早拿数据」的方向修正的），但**下一个人别再照着原文写**。
+2. **2.2 拆成三个 PR，不是两个**：原计划只写了「补基线」，但 Shell 那一屏不可能只加测试（它要读 view model）。于是拆成 **2.2a 补三张** / **2.2b 抽 `TerminalPanel`** / **2.2c 补 Shell**。顺序不能反：先 refactor 再 baseline，且分开发，才有「纯搬运不动像素」这条证据。
+3. **聊天主界面没有基线，且这一步不做**。它的障碍不是「没有 fixture」而是「`ChatScreen` 的入口就是 9055 行的 view model」。要给它录基线必须先做一次大重构（把 `ChatScreen` 拆成「无状态屏 + 有状态外壳」），那是**独立的一个 PR，不是 2.2 的一部分**。现阶段聊天界面的保护来自 `tests=1136` 里那批 Compose 语义测试，不是像素。
+4. **测试数不是常量了**：`tests` 从 1123 涨到 **1136**（2.0 的 +8 / +5）。判据从「数字不变」改为「**原有测试一个不少 + 新增有理由**」—— 与 HANDOFF-NEXT §2.1 对功能 PR 的写法一致。`screenshots` 从 4 涨到 **8**，同步更新。
+
+> 一个反复出现的判据：**「纯搬运 PR」和「纯测试 PR」的验收是「数字不变」；功能 PR 的验收是「原数字不减 + 新数字有理由」**。2.0 / 2.2a / 2.2c 属于前者（不动界面或不改生产代码），2.2b 也属于前者（搬运），只有 2.0 是功能 PR。
 
 ## 3. 工作量分布（实测，用于排期）
 
@@ -134,10 +153,10 @@ private enum class ChatView(val label: String) {
 git log --oneline -1
 #    模块数应是 6（:app + 5 个）
 grep -c '^include' settings.gradle.kts
-#    源码里的 @Test 总数是 **1127**，但 CI 报的 tests=1123 —— 差 4 是截图测试，
-#    verify.yml 按文件名把 screenshot/ 那一类单独算成 screenshots=4。
-#    **别把 1127 当功能测试数**，对不上会以为丢测试了。
-grep -rc '@Test' --include=*.kt app/src/test core/*/src/test | awk -F: '{s+=$2} END {print "src @Test (incl. screenshots):", s}'
+#    源码里的 @Test 总数是 **1144**（2026-11-01），CI 报 tests=1136 —— 差 8 是截图测试，
+#    verify.yml 按文件名把 screenshot/ 那一类单独算成 screenshots=8。
+#    **别把 1144 当功能测试数**，对不上会以为丢测试了。
+grep -rc '@Test' --include=*.kt app/src/test core/*/src/test design/src/test | awk -F: '{s+=$2} END {print "src @Test (incl. screenshots):", s}'
 ls app/src/test/screenshots/ | wc -l
 
 # 2. 本机能不能编译（临时改 buildToolsVersion，验完还原）
