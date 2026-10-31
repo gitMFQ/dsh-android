@@ -38,6 +38,7 @@ import uk.xa0.dsh.term.TerminalInfo
 import uk.xa0.dsh.term.TerminalSeat
 import uk.xa0.dsh.term.TerminalState
 import uk.xa0.dsh.ui.AboutContent
+import uk.xa0.dsh.ui.MiuixProbe
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.PermissionSheet
 import uk.xa0.dsh.ui.SessionsDrawer
@@ -420,6 +421,29 @@ class ScreenBaselineTest {
                 onWrite = {},
                 onResize = { _, _ -> },
             )
+        }
+    }
+
+    /**
+     * **The 2.3 gate.** One miuix preference row drawn inside this app's theme.
+     *
+     * This capture exists to answer one question — `docs/PHASE-2-PLAN.md` §1.4 — and
+     * it is the only evidence that can. miuix has been on the classpath since 1.4
+     * with zero call sites, so nothing had proved that `MiuixTheme` composes inside
+     * `DshTheme` without throwing, that a real miuix component draws at all under the
+     * JVM harness, or that its colours can be driven from the app's palette.
+     *
+     * A **crash** here is a clean "no" and the answer 2.4 needs; a **picture** is a
+     * "yes". Either outcome is the deliverable, which is why this is a spike that can
+     * be thrown away whole.
+     *
+     * If the answer is yes, this test and `MiuixProbe` are deleted by the PR that
+     * starts actually using miuix: the probe is reachable from nowhere else.
+     */
+    @Test
+    fun miuixProbe() {
+        capture("miuix-probe") {
+            MiuixProbe()
         }
     }
 
