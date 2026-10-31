@@ -139,6 +139,11 @@ kotlin {
 }
 
 dependencies {
+    // The domain model, extracted so its 413 tests no longer need this module's
+    // 58k lines to compile. The Kotlin package is still `uk.xa0.dsh.model`, so no
+    // import in this module changed — only where the files live.
+    implementation(project(":core:model"))
+
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 

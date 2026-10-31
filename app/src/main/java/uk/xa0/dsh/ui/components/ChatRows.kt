@@ -156,9 +156,13 @@ fun UserMessageRow(
                 .padding(horizontal = DshSpacing.xl, vertical = 10.dp),
         ) {
             Column {
-                if (entry.fromPlugin && entry.summary != null) {
+                // Bound to a local first: `entry.summary` is a public API property
+                // from :core:model, and Kotlin will not smart-cast across a module
+                // boundary. Same condition, same value.
+                val pluginSummary = entry.summary
+                if (entry.fromPlugin && pluginSummary != null) {
                     Text(
-                        text = entry.summary,
+                        text = pluginSummary,
                         style = DshType.micro,
                         color = colors.labelTertiary,
                         maxLines = 2,

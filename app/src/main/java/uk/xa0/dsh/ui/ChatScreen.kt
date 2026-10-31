@@ -1333,17 +1333,24 @@ fun ChatScreen(vm: DshViewModel) {
                                 // process summary that now stands in for that prose.
                                 // Through-seq is the closing message's own seq, which is
                                 // the web's `producedForClosing(data, owner.seq)`.
+                                // The closing entry is bound to a local first. This used
+                                // to test `row.entry is AssistantMessage` inline and
+                                // rely on the smart cast, which stopped working when
+                                // `ChatEntry` moved to :core:model: Kotlin will not
+                                // smart-cast a public API property across a module
+                                // boundary, because it cannot prove another module's
+                                // `val` never changes. One binding is the same test.
+                                val closing =
+                                    (row as? DisplayRow.Single)?.entry as? ChatEntry.AssistantMessage
                                 val delivered = when {
                                     row is DisplayRow.TurnProcess ->
                                         deliverableCache.getOrPut(row.key) {
                                             SessionFiles.deliverablesFor(entries, row.turn)
                                         }
 
-                                    row is DisplayRow.Single &&
-                                        row.entry is ChatEntry.AssistantMessage &&
-                                        row.entry.seq in closingSeqs ->
+                                    closing != null && closing.seq in closingSeqs ->
                                         deliverableCache.getOrPut(row.key) {
-                                            SessionFiles.deliverablesFor(entries, row.entry.turn, row.entry.seq)
+                                            SessionFiles.deliverablesFor(entries, closing.turn, closing.seq)
                                         }
 
                                     else -> null

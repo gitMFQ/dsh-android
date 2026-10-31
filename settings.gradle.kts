@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DSH"
 include(":app")
+include(":core:model")
