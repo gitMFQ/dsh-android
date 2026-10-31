@@ -163,6 +163,11 @@ dependencies {
     // cycle. Kotlin packages are unchanged, so no import in this module changed.
     implementation(project(":core:protocol"))
 
+    // The palette, type scale and `DshTheme` — everything the re-skin in phase 2
+    // touches. Extracted so a palette change and a screen change cannot be the same
+    // commit. Kotlin package unchanged, so no import in this module changed.
+    implementation(project(":design"))
+
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 
