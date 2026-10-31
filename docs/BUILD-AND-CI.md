@@ -31,6 +31,30 @@
 
 **当前状态**：本地能编译 Kotlin、能跑 Gradle 配置，**不能**完整构建。**验证仍走 CI**（约 7 分钟一轮）。若以后换 x86_64 机器或拿到 aarch64 原生 aapt2（≥ 对应 AGP 版本），本地构建即可用。。
 
+### 0.0b 2026-10-31 更新：`:app:compileDebugKotlin` 本机**可以**跑了
+
+`model/` 拆成 `:core:model`（PR #6）时需要一次把跨模块 smart cast 全找出来，为此试通了本机的 Kotlin 编译。**结论：Kotlin 编译这一步不依赖 aapt2，只要 build-tools 能解析就能跑。**
+
+两个前提（都是本机环境问题，与仓库无关）：
+
+| 问题 | 现象 | 本机临时绕过 |
+|---|---|---|
+| `platforms/android-37/source.properties` 里 `AndroidVersion.ApiLevel=37.0` 是小数 | `Failed to find target with hash string 'android-37.0'` | 改成 `37`（**仅本机**，勿提交） |
+| `build-tools 37.0.0` 未安装，且无 `sdkmanager` | `Failed to find Build Tools revision 37.0.0` | 两处 `buildToolsVersion` 临时改 `36.0.0`（**验证完必须还原**） |
+
+改完后：
+
+```sh
+bash build.sh :app:compileDebugKotlin    # ✅ 约 13 分钟（3 GB 内存，无并行余地）
+bash build.sh :core:model:testDebugUnitTest
+# ❌ processDebugUnitTestResources 仍挂在 aapt2：
+#    AAPT2 ... 1: Syntax error: word unexpected (expecting ")")
+```
+
+**意义**：抽模块 / 改 UI 时，**编译错误可以在本机一轮内收干净**，不必用 CI 的 7 分钟去试。测试与资源打包仍只能走 CI。
+
+> `build.sh` 里是 `--no-daemon`，13 分钟是冷启动。同样的验证在 CI 上是 7 分钟全流程，所以**只在本机能省下往返时才用**（例如要迭代编译器报错）。
+
 ### 0.1 网络坑（重要，CI 不需要但本机会）
 
 - `dl.google.com` / `repo.maven.apache.org` 单文件可达（curl 200），但 **Gradle 并行解析器会卡死**（10+ 分钟零进展、缓存不增长）。

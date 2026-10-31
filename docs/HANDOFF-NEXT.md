@@ -7,7 +7,7 @@
 
 仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1116 个功能测试全绿 + 4 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入但**尚未使用**。
 
-**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4）。下一步是阶段 1 的模块抽取。
+**换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**第一个模块也已经抽出来了**（`:core:model`，PR #6，413 个测试搬出 `:app`）。下一步是 1.2 抽 `:core:term`。
 
 ## 2. 已完成（L1–L4，全部合入 master）
 
@@ -19,6 +19,7 @@
 | **L4** | 接入 miuix **0.9.4**（ui / preference / icons / squircle，**不含 blur**） | 1116 绿 + APK |
 | **1.0** | 5 个宿主行类（`SessionItem`/`WorkspaceItem`/`JobItem`/`QueueAttachment`/`QueuedMessage`）从 `DshViewModel.kt` 移入 `model/`；`model → 根包` 的 import **14 → 0** | 1116 绿（PR #4） |
 | **1.5** | Roborazzi **1.77.0** + 4 张基线（About / Startup / 抽屉 / 抽屉空态），411×891 | `tests=1116` + `screenshots=4`（PR #5） |
+| **1.1** | 抽 `:core:model`（`com.android.library`）：50 个源文件 + 43 个测试文件搬出 `:app`；包名不变所以**全仓零 import 改动**；2 个 `internal` 提权；4 处跨模块 smart cast 修复 | `app: 703` + `model: 413` = `tests=1116` + `screenshots=4`（PR #6） |
 
 每个 PR 都是**单一变量**，失败时能立刻定位。这个方法论请延续。
 
@@ -44,18 +45,20 @@
 | **不引 `miuix-blur`** | 模块 `minSdk = 33`，我们 26。玻璃效果自写（`Modifier.blur` API31+ + 降级）。 |
 | **不引 `miuix-nav`** | 要求所有路由改成 `@Serializable NavKey`，收益不抵成本。 |
 | **Compose 1.11 的 Password 语义 bug** | `CoreTextFieldSemanticsModifier.updateNodeSemantics` 从不写回 `this.isPassword`，`BasicTextField(value=)` 路径的 Password 语义无法变化。测试已改为断言可见文本。 |
+| **跨模块 smart cast 编不过** | Kotlin 不能对「声明在另一个模块里的属性」做 smart cast（`val` 也不行，编译器无法证明别的模块不会改）。抽模块后 UI 里所有 `x.prop is T && x.prop.y` / `x.prop != null && x.prop.z` 都会报 `Smart cast ... is impossible ... declared in different module`。**修法：先把属性读进局部变量再判断**，不要改成 `var`、不要加 `!!`。1.1 一次踩了 4 处。 |
+| **本机可以编译 Kotlin 了**（1.1 起） | `:app:compileDebugKotlin` 只需 build-tools 能解析，**不依赖 aapt2**。本机需临时把 `platforms/android-37/source.properties` 的 `ApiLevel` 从 `37.0` 改成 `37`，并把两处 `buildToolsVersion` 临时改 `36.0.0`（**验证完还原**）。改 UI/抽模块时先在本机把编译错误收干净，别用 CI 的 7 分钟试错。详见 [BUILD-AND-CI.md](BUILD-AND-CI.md) §0.0b。 |
 
 ## 4. 仓库结构
 
 ```
 /root/dsh-android
-  app/                     # 单模块，143 个 .kt / 5.8 万行（fork 自 bqv/dsh-android v0.6.6）
+  app/                     # 主模块，143 个 .kt / 5.8 万行（fork 自 bqv/dsh-android v0.6.6）
     src/main/java/uk/xa0/dsh/
       net/                 # 协议层（~4000 行，纯 Kotlin，可单测）
-      model/               # 领域模型 50 文件（47 个单测）
       ui/                  # 界面 54 文件 / 27k 行
       data/ widget/ diag/ term/
-    src/test/              # 128 文件 / 1116 个功能 @Test + 4 张截图基线
+    src/test/              # 703 个功能 @Test + 4 张截图基线 + 4 个依赖 :app 的 model 测试
+  core/model/              # 已抽出：领域模型 50 文件 + 43 个测试文件（413 个 @Test）
   docs/                    # 规划文档（见 §6）
   .github/workflows/       # build.yml（出 APK）/ verify.yml（测试+截图门禁）/ release.yml / screenshots.yml（手动录基线）
   build.sh                 # 唯一构建入口，找 .toolchain/gradle-9.5.0
@@ -102,13 +105,17 @@
 | # | 任务 | 内容 | 验收 |
 |---|---|---|---|
 | 1.0 ✅ | 宿主行类移入 `model/` | `model → root` 边 14 → 0 | 1116 绿（PR #4） |
-| 1.1 | 抽 `:core:model`（**必须 `com.android.library`**） | 50 文件 + 45 个纯 JVM 测试；3 个 Robolectric 测试留 `:app`；3 个 `internal` 提权 | 独立绿 + 全仓仍 1116 |
+| 1.1 ✅ | 抽 `:core:model`（`com.android.library`） | 50 文件 + 43 个纯 JVM 测试（413 个 `@Test`）；4 个测试留 `:app`；2 个 `internal` 提权；4 处跨模块 smart cast | 独立绿 + 全仓仍 1116（PR #6，`app: 703` / `model: 413`） |
 | 1.2 | 抽 `:core:term`（`term/` 只依赖 `:core:model`） | 7 文件 | 仍 1116 |
 | 1.2b | `AcceptedCert` + `DshConfig` 进 `:core:model` | 解 `net ⇄ data` 环 | 仍 1116 |
 | 1.3 | 抽 `:core:protocol`（`net/`） | 14 文件 | 仍 1116 |
 | 1.4 | 建 `:design` 模块：`KsuTokens` + 主题 7 档外观 | 设置页可切外观并持久化 |
 
-> **抽模块时必改一处**：`verify.yml` 的汇总只扫 `app/build/test-results/**`，测试搬进新模块就会**从统计里消失而 CI 照样绿**。同一 PR 里把 glob 改成 `**/test-results/**`，并贴出前后数字。
+> **抽模块时必改两处**（1.1 实证，两处都会让 CI「绿着丢测试」）：
+> 1. `verify.yml` 的汇总 glob：`app/build/test-results/**` → `**/build/test-results/**`；
+> 2. **新模块的测试任务要在 `verify.yml` 和 `build.yml` 里显式写名字**（`bash build.sh :app:testDebugUnitTest :core:model:testDebugUnitTest`）。**依赖一个模块不会跑它的测试** —— 这一条比 glob 更容易漏，因为 CI 完全绿。
+>
+> 汇总现在还会打印分模块数字，单个 `tests=1116` 已经不足以证明两半都跑了。
 
 ### 7.2 阶段 2：外壳换装（1.5 周，对应 DESIGN-TOKENS 的 D2–D5）
 
@@ -121,6 +128,6 @@
 - **单变量原则**：一次只改一个版本/一件事，CI 绿了再进下一步。
 - **新增的 `workflow_dispatch` 工作流在合并到默认分支前无法手动触发**：GitHub 只在默认分支上发现该工作流。要第一次跑起来，得先把文件合进 master，或临时加一个 `push:` 触发（PR #5 用了后者，随后删掉）。
 - **别用 `--tests` 去「打开」被 `excludeTestsMatching` 排除的测试类**：Gradle 的 filter 不能再包含已被另一个 filter 排除的东西，会报 `No tests found for given includes`。用 `-Pscreenshots` 这类 property 切换（PR #5 踩过）。
-- **本机现在能跑 Gradle 配置阶段**（`.toolchain/gradle-9.5.0` 已就位，`gradle :app:tasks` 约 1–2 分钟），改 build 脚本后可先本地验语法再花 CI 一轮。`local.properties` 指向 `/opt/android-sdk`。但 `compileDebugUnitTestKotlin` 仍因 `android-37.0` 的 SDK 元数据问题失败，**编译与测试仍只能走 CI**。
-- **本机只做静态分析**：任何「能不能跑」的判断都必须由 CI 回答（配置阶段例外，见上一条）。
+- **本机能跑 Gradle 配置阶段，1.1 起还能跑 `:app:compileDebugKotlin`**（`.toolchain/gradle-9.5.0` 已就位）。改 build 脚本可先本地验语法；改 Kotlin 代码可先本地编译。两个前提见 §3「本机可以编译 Kotlin 了」与 [BUILD-AND-CI.md](BUILD-AND-CI.md) §0.0b，**临时改动验证完必须还原**。测试与资源打包仍只能走 CI（`processDebugUnitTestResources` 挂在 x86_64 aapt2）。
+- **「能不能跑通」的最终判断仍由 CI 回答**：本机能编译不代表能跑测试，更不代表像素门禁通过。
 - **权限**：仓库是私有的，`gh` 已登录 `gitMFQ`。要公开需先处理 MPL-2.0 源码公开义务（转公开正好满足）。

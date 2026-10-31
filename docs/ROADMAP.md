@@ -39,7 +39,7 @@
 | # | 任务 | 产出 | 验收 | 依赖 |
 |---|---|---|---|---|
 | **1.0** ✅ 完成 2026-10-31 | 5 个宿主行类移出根包（`SessionItem`/`WorkspaceItem`/`JobItem`/`QueueAttachment`/`QueuedMessage` → `model/`），`model → root` 边 **14 → 0** | 已合入 `master`（PR #4） | **CI `tests=1116 failures=0`** | 0.5 |
-| 1.1 | 抽 `:core:model`（`model/` 50 文件 + 45 个纯 JVM 测试；3 个 Robolectric 测试留在 `:app`；3 个 `internal` 提权） | 模块 | `:core:model:test` 独立绿 + 全仓仍 1116 | 1.0 |
+| **1.1** ✅ 完成 2026-10-31 | 抽 `:core:model`（`model/` 50 文件 + **43** 个纯 JVM 测试 / 413 个 `@Test`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权；4 处跨模块 smart cast 修复） | 已合入 `master`（PR #6） | **CI `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413`** | 1.0 |
 | 1.2 | 抽 `:core:term`（`term/`，只依赖 `:core:model`） | 模块 | 全仓仍 1116 | 1.1 |
 | 1.2b | `AcceptedCert` + `DshConfig` 进 `:core:model`（解 `net ⇄ data` 环） | 模块 | 全仓仍 1116 | 1.2 |
 | 1.3 | 抽 `:core:protocol`（`net/`，依赖 `:core:model` + `:core:term` + okhttp） | 模块 | 全仓仍 1116 | 1.2b |
@@ -52,7 +52,7 @@
 >
 > 两个数字分开报，别合并：`tests=1116`（功能测试，每个 PR 的证据）与 `screenshots=4`（像素基线）。合成 1120 会让「少跑了一个测试」和「多了一个基线」看起来一样。
 
-> **验收里「仍 1116」不是形式**：`verify.yml` 现在只扫 `app/build/test-results/**`，测试一搬进新模块就会**从统计里消失而 CI 照样绿**。抽模块的 PR 必须把 glob 同步改成 `**/test-results/**`，并贴出前后数字。
+> **验收里「仍 1116」不是形式**：`verify.yml` 原先只扫 `app/build/test-results/**`，测试一搬进新模块就会**从统计里消失而 CI 照样绿**。**1.1 已修**（PR #6）：glob 改成 `**/build/test-results/**`，并且**新模块的测试任务必须在 `verify.yml` 和 `build.yml` 里显式写名字** —— 依赖一个模块并不会跑它的测试，这一条比 glob 更容易漏。汇总现在还打印分模块数字（`app: 703` / `model: 413`），单个总数已经无法证明两半都跑了。
 
 ## 阶段 2 · 外壳换装（1.5 周）
 

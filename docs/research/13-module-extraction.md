@@ -78,7 +78,11 @@ term/  HostShell TerminalCellSize TerminalEmulator TerminalInput TerminalKeys
        TerminalModel TerminalProtocol
 ```
 
-## 2. 四个真正的坑
+## 2. 五个真正的坑
+
+> **M1 已落地（PR #6，2026-10-31）**，实测数字：`tests=1116 failures=0`、
+> `screenshots=4`、`:app` 703 + `:core:model` 413。下文 §2.1–§2.4 的判断全部成立，
+> 但有 3 处与实测不符，已在正文就地更正；§2.5 是本次**新发现**的第五个坑。
 
 ### 2.1 两个模块都得是 `com.android.library`
 
@@ -129,9 +133,11 @@ Kotlin 的 `internal` 是**模块级**可见性。文件一搬进新模块，原
 | `shellQuote` / `percentEncodeQuery` | `model/RouterReadout.kt:430,440` | `app/src/test/.../RouterReadoutTest.kt:143` 仅注释提及 | 不动 |
 | `fileNameOf` | `model/SessionFiles.kt:561` | 无 | 不动 |
 
-**只有 3 个 `internal` 需要变成 `public`**（上表前三行）。这三处恰好都是「UI 层要读的纯函数/常量」，提权是合理的，而且**不需要改动任何调用点**（`public` 是 `internal` 的超集）。
+**只有 2 个 `internal` 需要变成 `public`**（上表第 2、3 行）。这两处恰好都是「UI 层要读的纯函数/常量」，提权是合理的，而且**不需要改动任何调用点**（`public` 是 `internal` 的超集）。
 
-> 注意：如果为了省事把整个 `model` 的 `internal` 全改成 `public`，会丢掉这 7 个声明的封装，后续没人知道哪些是内部实现。**只改需要的 3 个。**
+> **实测更正（M1）**：`hostOf` 属于 `net/`，是 **M3（1.3）** 的事，不在 M1 范围内。M1 只提权了 `PERMISSION_PRESET_LABELS` 与 `displayPresetName` 两个，其余 4 个 `model/` 的 `internal`（`choiceLabel` / `shellQuote` / `percentEncodeQuery` / `fileNameOf`）实测**确实没有跨包调用点**，原样保留。
+
+> 注意：如果为了省事把整个 `model` 的 `internal` 全改成 `public`，会丢掉这些声明的封装，后续没人知道哪些是内部实现。**只改需要的。**
 
 ### 2.3 包名与模块边界的取舍
 
@@ -144,7 +150,7 @@ Kotlin 的 `internal` 是**模块级**可见性。文件一搬进新模块，原
 
 **选 A**。理由是这条路径上**唯一需要动的是 `build.gradle.kts` 和目录位置**，源码零改动 —— 符合本仓「单变量、CI 可验证」的方法论。
 
-### 2.4 测试迁移：47 + 8 个测试文件，3 个必须留下
+### 2.4 测试迁移：47 + 8 个测试文件，4 个必须留下
 
 `app/src/test/java/uk/xa0/dsh/model/`（47 文件）与 `.../net/`（8 文件）里，有 3 个跑 Robolectric，**不能**跟着源码进 Android library 的 `test` 源集（那会要求 library 也配 Robolectric + Compose 测试依赖，把简单模块拖重）：
 
@@ -154,11 +160,39 @@ Kotlin 的 `internal` 是**模块级**可见性。文件一搬进新模块，原
 | `model/ShellRowExpansionTest.kt` | 同上 | 同上 |
 | `net/DshClientResetTest.kt` | 同上 | 同上 |
 
-其余 **52 个**是纯 JVM 测试（`model/` 45 个 + `net/` 7 个，JUnit + `org.json`），随源码一起搬到新模块的 `src/test/`。
+> **实测更正（M1）**：`model/` 里要留下的是 **4 个**，不是 3 个。除了上面两个 Robolectric，`DurableRunningTest` 与 `SessionRosterTest` 都 `import uk.xa0.dsh.ui.indexSubagentRollups`，而那个函数定义在 `ui/SubagentRollup.kt`（留在 `:app`）。这两个不是 Robolectric，纯粹是**依赖了 `:app` 的代码**，搬走就编不过。判据应该是「是否依赖 `:app` 的任何包」，而不只是「是否跑 Robolectric」。
 
-**关键细节**：`HarnessApplication` 声明在 `app/src/test/java/uk/xa0/dsh/scroll/ScrollHarnessTest.kt:41`（测试源集里的一个 `.kt` 文件，不是独立类文件）。这 3 个测试留在 `:app` 就自然还能用；一旦有人把它们搬走，就必须先把 `HarnessApplication` 提到一个共享测试模块（`buildSrc` 或 `:testing`），**否则编译失败**。
+其余 **43 个**是纯 JVM 测试（`model/` 43 个 / **413 个 `@Test`**），随源码一起搬到新模块的 `src/test/`。`net/` 的 7 个属于 M3。
+
+**关键细节**：`HarnessApplication` 声明在 `app/src/test/java/uk/xa0/dsh/scroll/ScrollHarnessTest.kt:41`（测试源集里的一个 `.kt` 文件，不是独立类文件）。这几个测试留在 `:app` 就自然还能用；一旦有人把它们搬走，就必须先把 `HarnessApplication` 提到一个共享测试模块（`buildSrc` 或 `:testing`），**否则编译失败**。
 
 **`org.json` 的坑**（已有前例，见 `app/build.gradle.kts` 的注释）：单测 classpath 上的 `android.jar` 是**桩实现**，`JSONObject(...)` 会抛 `Stub!`。新模块的 `testImplementation` 必须显式加 `org.json:json:20240303`，否则所有解析测试会因为与解析无关的原因红掉。
+
+### 2.5 跨模块 smart cast：M1 实测出的第五个坑（**新**）
+
+Kotlin 的 smart cast 依赖**能看见属性的幕后字段**。属性一旦声明在另一个模块里，`val` 不再足够 —— 编译器无法证明别的模块的属性永不变化，于是拒绝从 `is` / `!= null` 判断里收窄类型：
+
+```
+Smart cast to 'ChatEntry.AssistantMessage' is impossible, because 'entry' is a
+public API property declared in different module
+```
+
+M1 里正好 **4 处**踩到，全是 `:app` 的 UI 代码：
+
+| 文件:行 | 属性 | 修法 |
+|---|---|---|
+| `ui/ChatScreen.kt:1346` | `row.entry`（`DisplayRow.Single.entry`） | 先 `val closing = (row as? Single)?.entry as? AssistantMessage` |
+| `ui/RouterTab.kt:118` | `target.model?.name` | 先 `val declaredName = target.model?.name` |
+| `ui/components/ChatRows.kt:161` | `entry.summary` | 先 `val pluginSummary = entry.summary` |
+| `ui/components/FilesPanel.kt:626` | `entry.size` | 先 `val entrySize = entry.size` |
+
+**特征与对策**：
+
+- 这是**编译错误**，不是静默行为变化 —— 属于良性失败，不会漏进产物。
+- 修法机械：把属性读进局部变量，条件与取值都不变。**不要**为此把 `val` 改成 `var`，也不要加 `!!`。
+- 后续抽 `:core:term` / `:core:protocol` 时**必然还会有**，因为 UI 大量消费 `term.*` 与 `net.*` 的类型。提前有预期，别当成设计问题。
+- 静态预判不可靠（可空属性名太泛），**直接编译一遍最快**。本机现在可以 `:app:compileDebugKotlin`（见 §6）。
+
 
 ## 3. 建议的 PR 序列（单变量，每步一个 CI 门）
 
@@ -175,10 +209,16 @@ model  →  term  →  protocol(net)  →  (data/ui 留在 :app)
 | # | PR | 内容 | 验收（CI） |
 |---|---|---|---|
 | **M0** ✅ | #4 `split-model-rows` | 5 个宿主行类移入 `model/`，`model → root` 边清零 | `tests=1116 failures=0` |
-| **M1** | `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），把 `model/` 50 文件与 45 个纯 JVM 测试搬进去；`:app` 加 `implementation(project(":core:model"))`；3 个 Robolectric 测试留在 `:app`；3 个 `internal` 提权（§2.2） | `:core:model:test` 独立绿 + 全仓 `tests=1116 failures=0` |
-| **M2** | `core-term-module` | 新建 `:core:term`，搬 `term/` 7 文件；它只依赖 `:core:model`，无环 | `tests=1116 failures=0` |
-| **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + okhttp；**此时 `DshConfig` 的引用仍在 `:app` 侧**（见下） | `tests=1116 failures=0` |
+| **M1** ✅ | #6 `core-model-module` | 新建 `:core:model`（`com.android.library`，**保留包名**，§2.3 方案 A），`model/` 50 文件 + **43** 个纯 JVM 测试（413 个 `@Test`）搬进去；`:app` 加 `implementation(project(":core:model"))`；**4** 个测试留在 `:app`；**2** 个 `internal` 提权（§2.2）；**4 处跨模块 smart cast 修复**（§2.5）；`verify.yml` + `build.yml` 显式加 `:core:model:testDebugUnitTest` 并把 glob 改成 `**/build/test-results/**` | ✅ 实测 `tests=1116 failures=0` + `screenshots=4`，分模块 `app: 703` / `model: 413` |
+| **M2** | `core-term-module` | 新建 `:core:term`，搬 `term/` 7 文件；它只依赖 `:core:model`，无环。**预期会遇到 §2.5 的 smart cast** | `tests=1116 failures=0` |
+| **M3** | `core-protocol-module` | 新建 `:core:protocol`，搬 `net/` 14 文件；依赖 `:core:model` + `:core:term` + okhttp；**此时 `DshConfig` 的引用仍在 `:app` 侧**（见下）。`hostOf` 在这里提权 | `tests=1116 failures=0` |
 | **M4** | `break-net-data-cycle` | 把 `DshConfig` 从 `data/ConfigStore.kt:21` 移到 `:core:protocol`（或新建 `:core:config`），消除 `net → data` 的环 | `tests=1116 failures=0` |
+
+> **M2 起每步必做的三件事**（M1 实证）：
+> 1. 新模块的测试任务要在 `verify.yml` **和** `build.yml` 里**显式写名字**（依赖模块 ≠ 跑它的测试）；
+> 2. 先本机 `:app:compileDebugKotlin` 一遍，把 smart cast 一次收干净，别一轮 CI 才发现；
+> 3. 顺手把 `docs/research/13-module-extraction.md` 的实测差异就地更正。
+
 
 **M3 的临时妥协**：`net/DshClient.kt:25` 需要 `DshConfig`。M3 时 `DshConfig` 还在 `:app`，而 `:app` 依赖 `:core:protocol` —— 会成环。三个选项：
 
