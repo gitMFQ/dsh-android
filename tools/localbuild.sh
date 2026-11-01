@@ -50,6 +50,12 @@ export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export ANDROID_USER_HOME="$ROOT/.toolchain/android-home"
 export XDG_DATA_HOME="$ROOT/.toolchain/xdg-data"
 export GRADLE_USER_HOME="$ROOT/.toolchain/gradle-home"
+# This box cannot reach dl.google.com / repo.maven.apache.org reliably, so on *this*
+# machine the Aliyun mirrors go first. CI does not set this and therefore walks the
+# canonical repositories first — see the long note in settings.gradle.kts for why the
+# default has to be that way (a mirror that answers 5xx disables itself for the whole
+# build, which is a red run for a reason unrelated to the commit).
+export DSH_LOCAL_MIRRORS=1
 mkdir -p "$ANDROID_USER_HOME" "$XDG_DATA_HOME"
 echo "sdk.dir=$ANDROID_HOME" > "$WT/local.properties"
 
