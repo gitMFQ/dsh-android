@@ -145,11 +145,17 @@ fun Modifier.diagDrag(surface: String, offset: () -> Int = { 0 }): Modifier = co
  */
 @Composable
 fun DiagFrames(surface: String = "app") {
+    // Gated on the sink actually being attached. A frame loop never lets a
+    // composition go idle, which is invisible on a device and fatal in a Compose
+    // test — `waitForIdle` waits for quiescence, and this is a permanent request for
+    // the next frame. The screenshot fixture for the conversation screen (2.5b) is
+    // what surfaced it; see [ScrollDiag.sampling].
+    if (!ScrollDiag.sampling) return
     LaunchedEffect(Unit) {
         var last = 0L
         var windowStart = 0L
         val deltas = ArrayList<Long>(256)
-        while (true) {
+        while (ScrollDiag.sampling) {
             val now = withFrameNanos { it }
             if (last != 0L) {
                 val ms = (now - last) / 1_000_000

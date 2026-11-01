@@ -77,7 +77,19 @@ fun TailFollow(
         // scrolling an empty list.
         val count = snapshotFlow { state.layoutInfo.totalItemsCount }.filter { it > 0 }.first()
         onMove("tail-rearm")
-        state.scrollToItem(count - 1)
+        // **Requested, not applied.** `scrollToItem` performs the scroll immediately,
+        // and when this effect runs during the composition that is doing the first
+        // measure it calls `measureAndLayout` from inside `measureAndLayout` — Compose
+        // throws `performMeasureAndLayout called during measure layout` and the screen
+        // never appears. It reproduced the first time the conversation screen was
+        // photographed (2.5b): a cold list with rows already in it, which is the
+        // ordinary shape of opening a session.
+        //
+        // `requestScrollToItem` is the API for exactly this case: it sets the position
+        // that the *next* measure will use instead of measuring now. The observable
+        // result is the same — the list opens at its newest row — and the crash cannot
+        // happen, because nothing here touches layout.
+        state.requestScrollToItem(count - 1)
     }
 
     // A deliberate drag is the reader taking over, whoever else agrees. Letting go

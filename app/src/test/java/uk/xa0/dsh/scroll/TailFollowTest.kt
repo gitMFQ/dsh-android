@@ -301,6 +301,54 @@ class TailFollowTest {
         )
     }
 
+    /**
+     * The list the conversation screen actually builds: **already at its end on the
+     * first frame**, with rows in it.
+     *
+     * This is not a contrived arrangement. `ChatPanel` remembers its `LazyListState`
+     * across sessions on purpose — the list must not be rebuilt per session — and
+     * starts it past the end (`initialFirstVisibleItemIndex = Int.MAX_VALUE`) so the
+     * first frame draws the newest row instead of the oldest. Opening a session then
+     * changes the session key, the rearm runs, and it runs **during the composition
+     * that is performing the first measure**.
+     *
+     * That used to throw: `scrollToItem` measures immediately, and measuring from
+     * inside `measureAndLayout` is `IllegalArgumentException: performMeasureAndLayout
+     * called during measure layout`. The screen did not appear at all. It survived on
+     * the device because the ordinary path has the list already laid out by then —
+     * which is exactly why it took a screenshot fixture (2.5b) to surface it: a fixture
+     * builds the same tree cold, and cold is the case the phone never happened to hit.
+     */
+    @Test
+    fun `a list that starts past its end survives the first rearm`() {
+        val scene = Scene()
+        rule.setContent {
+            Box(Modifier.size(width = 300.dp, height = viewportDp.dp)) {
+                // Past the end, clamped by the list itself on the first measure.
+                val state = rememberLazyListState(initialFirstVisibleItemIndex = Int.MAX_VALUE)
+                scene.state = state
+
+                TailFollow(state = state, holding = { scene.holding })
+
+                LazyColumn(
+                    state = state,
+                    modifier = Modifier.fillMaxWidth().height(viewportDp.dp).testTag("list"),
+                ) {
+                    items(scene.count, key = { it }) { index ->
+                        val height = if (index == scene.count - 1) scene.tailDp.dp else rowDp.dp
+                        Box(Modifier.fillMaxWidth().height(height).testTag("row-$index"))
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+
+        assertTrue(
+            "the list should open at its newest row, bottom=" + bottomOf(19),
+            bottomOf(19) <= viewportDp + 1f,
+        )
+    }
+
     /** Not a rule: the numbers the rules above are written against. */
     @Test
     fun `diagnostic - the geometry of the tail`() {
