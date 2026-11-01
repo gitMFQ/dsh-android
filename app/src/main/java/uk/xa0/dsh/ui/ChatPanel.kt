@@ -18,6 +18,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -95,6 +96,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -975,7 +977,23 @@ internal fun ChatPanel(
             }
         },
     ) {
-        Column(
+        // ## Wide screens get a rail instead of a bar (2.5d)
+        //
+        // The bar is a *thumb* affordance: it sits where a hand holds a phone. On a
+        // tablet the same hand is nowhere near the bottom edge, and a full-width bar
+        // stretches three 56dp seats across 1 200dp of nothing. A rail puts the same
+        // three destinations in a column beside the content, which is where a wide
+        // window's navigation belongs.
+        //
+        // **The breakpoint is measured here rather than asked of
+        // `material3-window-size-class`.** That library is already on the classpath
+        // twice — miuix pulls the JetBrains Compose build (org.jetbrains.compose) and
+        // the BOM provides the androidx one — and `docs/HANDOFF-NEXT.md` §7.3.2 names
+        // the duplicate-class risk as the one place this phase might need a new
+        // dependency. `BoxWithConstraints` answers the only question this screen
+        // actually asks ("is there room beside the content?") without adding a second
+        // answer to "which window size class is this".
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
                 .drawerDrag(drawerState, DRAWER_WIDTH)
@@ -984,6 +1002,22 @@ internal fun ChatPanel(
                 .navigationBarsPadding()
                 .imePadding(),
         ) {
+        val wide = maxWidth >= WIDE_LAYOUT
+        Row(Modifier.fillMaxSize()) {
+        // The rail leads the row, so it sits on the **leading** edge — the side a wide
+        // window's navigation belongs on, and the side the drawer opens from. Placing it
+        // after the content would put it on the trailing edge, which reads as a toolbar
+        // and puts it on the opposite side from every other navigation surface here.
+        if (!isHero && wide) {
+            NavigationRail(
+                items = BOTTOM_BAR_ITEMS,
+                selectedKey = view.name,
+                onSelect = { key ->
+                    ChatView.entries.firstOrNull { it.name == key }?.let(goTo)
+                },
+            )
+        }
+        Column(Modifier.weight(1f).fillMaxHeight()) {
             ChatHeader(
                 title = current?.title ?: "DSH",
                 cwd = current?.cwd ?: header?.cwd,
@@ -1730,7 +1764,12 @@ internal fun ChatPanel(
             //
             // `ChatView.entries` is passed whole and never filtered — the item count is a
             // constant. See the enum's own comment for why that is not negotiable.
-            if (!isHero) {
+            //
+            // **Exactly one of these is composed.** A bar on a wide window would be the
+            // same three destinations twice, one of them in the wrong place for the
+            // hand — so the choice is made once, here, and both branches read the same
+            // `view` and call the same `goTo`.
+            if (!isHero && !wide) {
                 FloatingBottomBar(
                     items = BOTTOM_BAR_ITEMS,
                     selectedKey = view.name,
@@ -1739,6 +1778,8 @@ internal fun ChatPanel(
                     },
                 )
             }
+        }
+        }
         }
     }
 
@@ -2044,6 +2085,110 @@ internal fun ChatPanel(
         )
     }
 }
+
+
+/**
+ * The bar's wide-window counterpart: the same three destinations, as a column beside
+ * the content.
+ *
+ * ## Why a rail at all (2.5d)
+ *
+ * The floating bar is a thumb affordance. On a phone the bottom edge is where the hand
+ * already is; on a tablet it is the far edge of a device being held by its side, and a
+ * bar spanning 1 200dp stretches three 56dp seats across a lot of nothing. A rail puts
+ * the same choice in a column where a wide window's navigation belongs.
+ *
+ * ## Why it is not `material3`'s `NavigationRail`
+ *
+ * Material's is a fixed 80dp column with its own item and label typography and its own
+ * selection pill, and adopting it would mean this screen obeying two type scales — the
+ * same problem `MiuixPalette` exists to prevent, one layer up. The three seats here are
+ * the *same composable* the bar uses ([BottomBarSeat] is private to the bar's file, so
+ * the shape is repeated rather than shared), reading the same `DshTheme` roles, which is
+ * what keeps a rail and a bar from looking like two different apps.
+ *
+ * ## The item count
+ *
+ * Unchanged, and it must stay unchanged: [items] is rendered exactly as given, exactly
+ * as the bar renders it. `docs/PHASE-2-PLAN.md` §2.4's rule is about a count that
+ * cannot move under the reader's thumb, and a rail is under the same rule.
+ */
+@Composable
+private fun NavigationRail(
+    items: List<BottomBarItem>,
+    selectedKey: String,
+    onSelect: (String) -> Unit,
+) {
+    val colors = DshTheme.colors
+    // A Row so the seam hairline can sit *beside* the rail rather than under it: the
+    // rail's own Column is fixed-width, and the hairline has to be a sibling of it for
+    // `fillMaxHeight` to mean the full window rather than the rail's padded box.
+    Row(Modifier.fillMaxHeight()) {
+    Column(
+        Modifier
+            .width(RAIL_SIDEBAR_WIDTH)
+            .fillMaxHeight()
+            // `sidebarFill` rather than `menu`: the rail is the sidebar's counterpart on
+            // a wide window, and the two should read as the same surface — `menu` is a
+            // floating layer's fill and at rail width it disappears into the transcript.
+            .background(colors.sidebarFill)
+            .padding(vertical = DshSpacing.md),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        items.forEach { item ->
+            val active = item.key == selectedKey
+            val tint = if (active) colors.link else colors.labelTertiary
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(DshRadius.md))
+                    .clickableNoRipple { onSelect(item.key) }
+                    .padding(vertical = DshSpacing.md)
+                    .semantics {
+                        contentDescription = item.label
+                        selected = active
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(Modifier.height(DshSpacing.xs))
+                Text(
+                    text = item.label,
+                    style = DshType.micro,
+                    color = tint,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+    // A hairline on the seam, because two surfaces meeting at a colour step reads as a
+    // seam only where the step is visible; on the AMOLED palette both are near-black.
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .width(0.5.dp)
+            .background(colors.borderL3),
+    )
+    }
+}
+
+/**
+ * The width at or above which the rail replaces the bar.
+ *
+ * 600dp is Material's `Medium` window boundary, and it is the point where a phone's
+ * bottom-edge reach stops being the right assumption. Named rather than inlined so the
+ * baseline test for the wide layout and the screen itself cannot disagree about it.
+ */
+internal val WIDE_LAYOUT = 600.dp
+
+/** The rail's own width. Narrower than Material's 80dp because the labels are short. */
+private val RAIL_SIDEBAR_WIDTH = 72.dp
 
 /**
  * The header's lineage seat: the descendant count plus the chevron that opens the
