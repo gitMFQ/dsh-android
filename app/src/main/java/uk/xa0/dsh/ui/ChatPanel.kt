@@ -1004,6 +1004,19 @@ internal fun ChatPanel(
         ) {
         val wide = maxWidth >= WIDE_LAYOUT
         Row(Modifier.fillMaxSize()) {
+        // The rail leads the row, so it sits on the **leading** edge — the side a wide
+        // window's navigation belongs on, and the side the drawer opens from. Placing it
+        // after the content would put it on the trailing edge, which reads as a toolbar
+        // and puts it on the opposite side from every other navigation surface here.
+        if (!isHero && wide) {
+            NavigationRail(
+                items = BOTTOM_BAR_ITEMS,
+                selectedKey = view.name,
+                onSelect = { key ->
+                    ChatView.entries.firstOrNull { it.name == key }?.let(goTo)
+                },
+            )
+        }
         Column(Modifier.weight(1f).fillMaxHeight()) {
             ChatHeader(
                 title = current?.title ?: "DSH",
@@ -1766,18 +1779,6 @@ internal fun ChatPanel(
                 )
             }
         }
-        // The rail, in the same place in the tree as the bar — beside the content
-        // rather than below it. Drawn only where the bar is not, and never on the hero,
-        // for the same reason the bar is not: there is nothing to navigate to.
-        if (!isHero && wide) {
-            NavigationRail(
-                items = BOTTOM_BAR_ITEMS,
-                selectedKey = view.name,
-                onSelect = { key ->
-                    ChatView.entries.firstOrNull { it.name == key }?.let(goTo)
-                },
-            )
-        }
         }
         }
     }
@@ -2119,11 +2120,18 @@ private fun NavigationRail(
     onSelect: (String) -> Unit,
 ) {
     val colors = DshTheme.colors
+    // A Row so the seam hairline can sit *beside* the rail rather than under it: the
+    // rail's own Column is fixed-width, and the hairline has to be a sibling of it for
+    // `fillMaxHeight` to mean the full window rather than the rail's padded box.
+    Row(Modifier.fillMaxHeight()) {
     Column(
         Modifier
             .width(RAIL_SIDEBAR_WIDTH)
             .fillMaxHeight()
-            .background(colors.menu)
+            // `sidebarFill` rather than `menu`: the rail is the sidebar's counterpart on
+            // a wide window, and the two should read as the same surface — `menu` is a
+            // floating layer's fill and at rail width it disappears into the transcript.
+            .background(colors.sidebarFill)
             .padding(vertical = DshSpacing.md),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -2158,6 +2166,15 @@ private fun NavigationRail(
                 )
             }
         }
+    }
+    // A hairline on the seam, because two surfaces meeting at a colour step reads as a
+    // seam only where the step is visible; on the AMOLED palette both are near-black.
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .width(0.5.dp)
+            .background(colors.borderL3),
+    )
     }
 }
 
