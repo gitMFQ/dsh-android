@@ -95,6 +95,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.boundsInParent
@@ -148,6 +149,7 @@ import uk.xa0.dsh.ui.components.ApprovalCard
 import uk.xa0.dsh.ui.components.AssistantMessageRow
 import uk.xa0.dsh.ui.glass.glassBarLayer
 import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
+import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.CommandEntry
 import uk.xa0.dsh.ui.components.CommandMenu
@@ -1037,7 +1039,15 @@ internal fun ChatPanel(
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .drawerDrag(drawerState, DRAWER_WIDTH)
+                // The edge claim reads the *pager's own state object*, not the `destination`
+                // value computed above: a lambda that closed over that val would answer with
+                // whatever page was showing when it was created, and the whole point is to
+                // answer at the moment the finger lands.
+                .drawerDrag(
+                    drawerState = drawerState,
+                    width = DRAWER_WIDTH,
+                    edgeClaim = { destinationState.currentPage == Destination.CHAT.ordinal },
+                )
                 .background(DshTheme.colors.bgBase)
                 .statusBarsPadding()
                 .navigationBarsPadding()
@@ -1125,26 +1135,33 @@ internal fun ChatPanel(
             // header, the banner and the bar are not pages: they are chrome around the
             // destinations, and only the body between them moves.
             //
-            // ## ⚠️ The drawer's edge swipe — **unverified**, check it on a device
+            // ## The drawer's edge swipe, and the race that was measured (3.7a)
             //
-            // `drawerDrag` listens in the left 96dp band and takes a horizontal drag
-            // only if no child consumed it; that is what keeps a sideways scroll inside
-            // a bash output block working. The pager is such a child, so the swipe that
-            // opens the drawer passes through it first.
+            // The pager is a horizontal scrollable and a child of `drawerDrag`, and this is
+            // the shape that caused a reported defect: **a rightward swipe from the left edge
+            // opened the drawer sometimes and slid the first page right the rest of the time.**
+            // A child gets the Main pass before its ancestors, so at page 0 the pager claimed a
+            // rightward drag while clamping — "nowhere to go" is not the same as "do not
+            // consume" — and `drawerDrag` then correctly stood down.
             //
-            // The expectation is that it still works **on CHAT**: page 0 is the leftmost
-            // page, so a rightward swipe has nowhere to go, and a scrollable that cannot
-            // move is expected to report no consumption rather than eat the gesture —
-            // which is the same rule that lets the drawer's own band win today. On the
-            // three other destinations the swipe goes back a page instead, which is what
-            // the reader asked for by being there, and the drawer stays reachable from
-            // the header's menu seat.
+            // The fix is in `drawerDrag` rather than here: it now decides this one case in the
+            // **Initial** pass, where an ancestor still wins, and only for a gesture that began
+            // inside `DRAWER_EDGE` on a page with nothing to its left. See its KDoc for the
+            // trade-off that buys. On the three other destinations nothing changed: a rightward
+            // swipe still goes back a page, which is what the reader asked for by being there,
+            // and the drawer stays reachable from the header's menu seat.
+            // The pager and the bar share one box, and the bar is *over* the pager rather than
+            // below it. Two reasons, both of them the difference between a floating surface and
+            // a row of chrome:
             //
-            // **That is an expectation, not a measurement.** This box cannot run
-            // `:app`'s Compose tests (aapt2), so it is written down here as the thing to
-            // check first on the device — if the drawer stops opening from the edge, the
-            // fix is to gate the pager's `userScrollEnabled` off inside `DRAWER_EDGE`,
-            // not to widen the drawer's band.
+            //  - **The glass needs something behind it.** In a flow column the bar sat on the
+            //    page's flat background, so "liquid glass" refracted nothing. Overlaying puts
+            //    whatever the page paints at its bottom edge behind the material.
+            //  - **A capsule must be centred by its container.** The vendored bar sizes itself
+            //    to its content (`width(IntrinsicSize.Min)`) and its own root aligns to the
+            //    start, so in a Column it sat hard against the left edge — which is exactly what
+            //    it looked like on the device.
+            Box(Modifier.weight(1f)) {
             HorizontalPager(
                 state = destinationState,
                 // Keyed per destination so each page keeps its own vertical scroll
@@ -1156,7 +1173,14 @@ internal fun ChatPanel(
                 // On the pager rather than on the Column because the *bar itself* must not
                 // be part of what the bar blurs: the pager is the content behind it, and
                 // nothing else in this column is.
-                modifier = Modifier.weight(1f).glassBarLayer(glassBackdrop),
+                // The pages stop above the bar. `BarHeight` is read from the bar itself rather
+                // than copied, so the reserved strip cannot drift away from what is drawn in
+                // it: the overlay takes the bottom of the page, and this is what keeps the
+                // composer, the pills and every other page's last row out from under it.
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = BAR_OVERLAY)
+                    .glassBarLayer(glassBackdrop),
                 // Deliberately no `beyondViewportPageCount`: a page off screen is not
                 // composed. Shell holds a live terminal canvas and Trajectory a full
                 // derivation of the transcript; paying for both while the reader looks
@@ -1834,9 +1858,7 @@ internal fun ChatPanel(
             }
         }
 
-            // The floating bar, at the very bottom of the screen's column and below the
-            // composer, because it is the *destination* selector: the composer is where
-            // the reader writes, the bar is where they go.
+            // The destination selector, floating over the content rather than below it.
             //
             // **No longer gated on the hero** (3.3). The old bar was withheld when the
             // session was empty, because two of its three items (Trajectory, Shell) would
@@ -1851,6 +1873,9 @@ internal fun ChatPanel(
             // same destinations twice, one of them in the wrong place for the hand — so
             // the choice is made once, here, and both branches read the same
             // `destination` and call the same `goToDestination`.
+            //
+            // `align(BottomCenter)` is what centres the capsule: the bar sizes itself to its
+            // content, and the box is the thing that decides where that content sits.
             if (!wide) {
                 FloatingBottomBar(
                     items = DESTINATION_ITEMS,
@@ -1859,7 +1884,11 @@ internal fun ChatPanel(
                         Destination.entries.firstOrNull { it.name == key }?.let(goToDestination)
                     },
                     backdrop = glassBackdrop,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = DshSpacing.md),
                 )
+            }
             }
         }
         }
@@ -3046,6 +3075,16 @@ private const val MAX_RAIL_TICKS = 22
 /** The web's rail frame is 28px wide; the ticks are right-aligned inside it. */
 private val RAIL_WIDTH = 22.dp
 
+/**
+ * How much of the screen bottom the floating bar owns.
+ *
+ * The bar's height comes from the bar (`:design`'s `BarHeight`) and the gap is the one the
+ * call site pads it by; together they are what the pager must leave clear. Stated once so
+ * the two cannot disagree — the failure mode is a composer sitting under the glass, which
+ * reads as a rendering bug rather than as a missing padding.
+ */
+private val BAR_OVERLAY = BarHeight + DshSpacing.md
+
 /** Sidebar width; `drawerDrag` needs it to know what a full travel is. */
 private val DRAWER_WIDTH = 300.dp
 
@@ -3080,9 +3119,47 @@ private val HEADER_SEAT_GAP = DshSpacing.xs
  * A closed drawer only listens near the left edge, so a horizontal drag inside
  * the transcript is not stolen. Material 1.2 exposes no finger-following
  * `dragTo`, so the panel animates the rest of the way once the swipe commits.
+ *
+ * ## Two passes, because "the child had it first" cannot decide this alone (3.7a)
+ *
+ * The gesture is read in the **Initial** pass and, when nothing claims it early,
+ * finished in the **Main** pass. That order is the whole fix for a measured defect:
+ *
+ * **Reported from a device**: a rightward swipe from the screen's left edge opened the
+ * drawer *sometimes* and the rest of the time slid the first page right instead. Both
+ * outcomes are one race. The pager is a horizontal scrollable and a child of this
+ * modifier, and a child gets the Main pass first; at page 0 a rightward drag has nowhere
+ * to go, but the pager still claims it while clamping, so by the time this node looked it
+ * saw a consumed change and stood down. Which way that race went depended on the timing
+ * of the slop being crossed — hence "sometimes".
+ *
+ * So the edge case is decided where an ancestor can still win: in the Initial pass, on a
+ * gesture that started inside the band, is rightward, and is on a page with nothing to the
+ * left. Consuming there means the pager never sees an unconsumed drag to claim. The
+ * predicate is passed in as [edgeClaim] rather than hard-coded, because "is there anything
+ * to the left of this page" is the caller's question, not the drawer's.
+ *
+ * The Main pass is not redundant. It is what keeps the original rule for every *other*
+ * gesture — a sideways scroll inside a bash output block that starts within the band still
+ * belongs to the block, and the check that makes that true is "did the child consume it",
+ * which is only answerable after the child has had its turn.
+ *
+ * The cost of the hard claim, stated so it is not a surprise later: on the first page a
+ * **rightward** drag starting within `DRAWER_EDGE` goes to the drawer even if it began on
+ * a horizontally scrollable code block. Leftward drags are untouched, which is the
+ * direction a reader is overwhelmingly more likely to want inside a code block.
  */
 @Composable
-private fun Modifier.drawerDrag(drawerState: DrawerState, width: Dp): Modifier {
+private fun Modifier.drawerDrag(
+    drawerState: DrawerState,
+    width: Dp,
+    /**
+     * Whether a rightward edge drag has somewhere else to go *right now* — the caller's
+     * "is there anything to the left of this page". Read at gesture time, so a page change
+     * between two swipes is seen immediately.
+     */
+    edgeClaim: () -> Boolean = { false },
+): Modifier {
     val density = LocalDensity.current
     val viewConfiguration = LocalViewConfiguration.current
     val scope = rememberCoroutineScope()
@@ -3093,10 +3170,16 @@ private fun Modifier.drawerDrag(drawerState: DrawerState, width: Dp): Modifier {
     // "travel" means; the commit threshold above is absolute.
     val widthPx = with(density) { width.toPx() }
 
+    // Keyed on the drawer and the width only. A new `edgeClaim` lambda each composition must
+    // NOT restart the gesture detector: it is read at use, not captured, so the running
+    // gesture keeps seeing the current page.
     return pointerInput(drawerState, widthPx) {
         awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            if (!drawerState.isOpen && down.position.x > edgePx) return@awaitEachGesture
+            // Read in the **Initial** pass: an ancestor sees the down before its children,
+            // which is what makes the hard claim below possible at all.
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val fromEdge = down.position.x <= edgePx
+            if (!drawerState.isOpen && !fromEdge) return@awaitEachGesture
 
             val tracker = VelocityTracker()
             tracker.addPosition(down.uptimeMillis, down.position)
@@ -3104,19 +3187,16 @@ private fun Modifier.drawerDrag(drawerState: DrawerState, width: Dp): Modifier {
             var totalY = 0f
             var last = down.position
             var dragging = false
+            // Set once this gesture has been taken ahead of the children. From then on the
+            // loop stays in the Initial pass and consumes every move, so the pager never gets
+            // an unconsumed drag to claim - which is the difference between "the drawer opens"
+            // and "sometimes it opens and sometimes the first page slides right".
+            var claimed = false
 
             while (true) {
-                val event = awaitPointerEvent()
+                val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                 if (!change.pressed) break
-                // Something below us already took this gesture - the obvious case is
-                // a horizontally scrollable bash output block, whose text starts
-                // about 46dp from the screen edge and so sits inside the drawer's
-                // 96dp band. In the Main pass the child has had its turn first, so a
-                // consumed change means "this drag belongs to the transcript", and
-                // claiming it anyway was why long lines could not be scrolled
-                // sideways.
-                if (change.isConsumed) return@awaitEachGesture
                 totalX += change.position.x - last.x
                 totalY += change.position.y - last.y
                 last = change.position
@@ -3129,7 +3209,28 @@ private fun Modifier.drawerDrag(drawerState: DrawerState, width: Dp): Modifier {
                         return@awaitEachGesture
                     }
                 }
-                if (dragging) change.consume()
+                if (!dragging) continue
+
+                // The hard case: a rightward drag from the edge, on a page with nothing to
+                // its left. `edgeClaim()` is asked here rather than once at the down, because
+                // it is the caller's answer about *this* gesture.
+                if (!claimed && !drawerState.isOpen && fromEdge && totalX > 0f && edgeClaim()) {
+                    claimed = true
+                }
+                if (claimed) {
+                    change.consume()
+                    continue
+                }
+
+                // The soft case, unchanged in spirit: give the child its turn and stand down
+                // if it took the gesture. The obvious child is a horizontally scrollable bash
+                // output block, whose text starts about 46dp from the screen edge and so sits
+                // inside the drawer's 96dp band; claiming it anyway was why long lines could
+                // not be scrolled sideways.
+                val afterChild = awaitPointerEvent(PointerEventPass.Main)
+                val childChange = afterChild.changes.firstOrNull { it.id == down.id }
+                if (childChange == null || childChange.isConsumed) return@awaitEachGesture
+                childChange.consume()
             }
 
             if (!dragging) return@awaitEachGesture

@@ -60,8 +60,12 @@ data class BottomBarItem(
  * The pressed pill is taller than the resting one (78/56, see [DampedDragAnimation]), which is
  * why the panel is 64 while the pill inside is 56: the difference is the room the squeeze needs
  * before it starts clipping.
+ *
+ * **Public on purpose**: a caller that floats the bar over its own content has to reserve room
+ * for it, and the honest way to do that is to read the number the bar actually draws rather
+ * than to copy `64.dp` into another module and let the two drift apart.
  */
-internal val BarHeight = 64.dp
+val BarHeight = 64.dp
 internal val PillHeight = 56.dp
 
 /** The pill's own inset from the panel edge, on each side. */
