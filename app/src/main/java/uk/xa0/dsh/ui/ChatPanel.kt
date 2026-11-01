@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -490,10 +492,37 @@ internal fun ChatPanel(
     // `schedule/catalog` call, so nothing here costs anything until it is asked for.
     var showAutomations by rememberSaveable { mutableStateOf(false) }
 
-    // The `conversation.view` strip. The host registers exactly two views — chat
-    // (order 0, and the hard-coded default in `view-selection.ts`) and trajectory
-    // (order 10) — and the web remembers the choice per session.
-    var view by rememberSaveable(ui.currentSessionId) { mutableStateOf(ChatView.CHAT) }
+    // The three destinations, as a pager.
+    //
+    // ## One writable state, not two (2.5c)
+    //
+    // `pagerState` is the only thing written. `view` is *derived* from the page the
+    // pager is on, so the bar's highlighted seat, the back handler and the "last shell
+    // closed" rule all read the same fact the reader is looking at — and a swipe updates
+    // all three for free. A separate `var view` beside `pagerState` would be two
+    // writable sources for one answer, which `docs/HANDOFF-NEXT.md` §7.3.4 names as the
+    // thing not to do: they drift the first time one is written without the other, and
+    // the symptom is a bar highlighting one destination while another is on screen.
+    //
+    // The session is the key, as it was: the web remembers the choice per session, and
+    // moving between sessions is not a reason to carry Shell open into the next one.
+    val pagerState = rememberPagerState(
+        initialPage = ChatView.CHAT.ordinal,
+        pageCount = { ChatView.entries.size },
+    )
+    val view = ChatView.entries[pagerState.currentPage]
+    // A tap on the bar is a *request* that takes a spring to arrive, so it goes through
+    // the pager rather than writing the destination.
+    val goTo: (ChatView) -> Unit = { target ->
+        scope.launch { pagerState.animateScrollToPage(target.ordinal) }
+    }
+    // A session switch returns to the conversation, which is what re-creating the old
+    // `rememberSaveable(ui.currentSessionId)` used to do.
+    LaunchedEffect(ui.currentSessionId) {
+        if (pagerState.currentPage != ChatView.CHAT.ordinal) {
+            pagerState.scrollToPage(ChatView.CHAT.ordinal)
+        }
+    }
 
     // Closing the last shell returns to the conversation.
     //
@@ -513,7 +542,9 @@ internal fun ChatPanel(
     LaunchedEffect(seats) {
         if (seats == 0 && hadShell && view == ChatView.TERMINAL) {
             android.util.Log.d("DshView", "last shell closed; returning to the conversation")
-            view = ChatView.CHAT
+            // No animation: the shell the reader was looking at is gone, so there is
+            // nothing to slide past — animating would show them two empty pages.
+            pagerState.scrollToPage(ChatView.CHAT.ordinal)
         }
         hadShell = seats > 0
     }
@@ -654,7 +685,7 @@ internal fun ChatPanel(
         when {
             showFiles -> showFiles = false
             showRouter -> showRouter = false
-            view != ChatView.CHAT -> view = ChatView.CHAT
+            view != ChatView.CHAT -> goTo(ChatView.CHAT)
             else -> subagentParent?.let { actions.openSession(it.sessionId) }
         }
     }
@@ -1042,595 +1073,650 @@ internal fun ChatPanel(
                     },
                     modifier = Modifier.weight(1f),
                 )
-            } else if (view == ChatView.TERMINAL) {
-                // A real PTY for this session, from the host's `terminal` Remote
-                // namespace. The screen creates or adopts the session's terminal, so
-                // it is only reachable for an open session — the strip that selects
-                // it is not drawn on the hero.
+            } else {
+                // The three destinations, as pages.
                 //
-                // The pending new-session seat therefore has no Shell tab, and the
-                // seat split is what keeps that honest: `HOST_SHELL` materialises its
-                // *own* dedicated archived session at the workspace root and never
-                // consults the pending target, while `THIS_SESSION` is work inside
-                // the open session and would have to materialise the seat first
-                // rather than open a second, unnamed terminal session.
-                terminal(Modifier.weight(1f))
-            } else if (view == ChatView.TRAJECTORY) {
-                val trajectory = remember(entries, endedTurns) {
-                    buildTrajectory(entries, endedTurns, actions.toolParents())
-                }
-                TrajectoryScreen(
-                    model = trajectory,
-                    title = current?.title ?: "DSH",
-                    onClose = { view = ChatView.CHAT },
+                // The bar says "you can go three places"; a horizontal swipe is how a
+                // phone says the same thing without a control, and it is the one
+                // gesture the transcript cannot use for anything else — it scrolls
+                // vertically. See docs/PHASE-2-PLAN.md §2.5c.
+                //
+                // The header, the banner, the composer, the dock and the bar are not
+                // pages: they are chrome around the destinations. Only the body
+                // between the banner and the bar moves.
+                //
+                // ## ⚠️ The drawer's edge swipe — **unverified**, check it on a device
+                //
+                // `drawerDrag` listens in the left 96dp band and takes a horizontal drag
+                // only if no child consumed it; that is what keeps a sideways scroll
+                // inside a bash output block working. The pager is now such a child, so
+                // the swipe that opens the drawer passes through it first.
+                //
+                // The expectation is that it still works **on CHAT**: page 0 is the
+                // leftmost page, so a rightward swipe has nowhere to go, and a scrollable
+                // that cannot move is expected to report no consumption rather than eat
+                // the gesture — which is the same rule that lets the drawer's own band
+                // win today. On TRAJECTORY and SHELL the swipe goes back a page instead,
+                // which is what the reader asked for by being there, and the drawer stays
+                // reachable from the header's menu seat.
+                //
+                // **That is an expectation, not a measurement.** This box cannot run
+                // `:app`'s Compose tests (aapt2), so it is written down here as the
+                // thing to check first on the device — if the drawer stops opening from
+                // the edge, the fix is to gate the pager's `userScrollEnabled` off inside
+                // `DRAWER_EDGE`, not to widen the drawer's band.
+                HorizontalPager(
+                    state = pagerState,
+                    // Keyed per destination so each page keeps its own vertical scroll
+                    // position: going to Trajectory and back must not lose the reader's
+                    // place in the transcript. A shared saver would file all three
+                    // under one key and they would overwrite each other.
+                    key = { page -> ChatView.entries[page].name },
                     modifier = Modifier.weight(1f),
-                    // The conversation header above already carries the title, the
-                    // back-to-drawer seat and the view tabs, exactly as the web's
-                    // `.viewArea` sits below `.tabs` — the screen's own title row
-                    // would be a second copy of it.
-                    showHeader = false,
-                )
-            } else if (awaitingTranscript) {
-                // A non-blank session with nothing loaded yet: the host has not
-                // answered this session's follow stream. Naming the connection
-                // when it is the reason costs no new copy — the drawer's own
-                // "Loading…" plus the shell's connection word.
-                //
-                // The composer and the pills are not siblings of this branch —
-                // they live in the transcript `else` below — so the chrome is
-                // the whole offset: `weight(1f)`'s box runs from the header
-                // (plus banner) to the Column's bottom, putting its centre at
-                // `H/2 + (header + banner)/2`. Half of that, negated, is the
-                // viewport's centre. Reading the states inside `offset` keeps the
-                // first frame still (both are 0 until measured) and re-places
-                // instead of recomposing when the banner arrives.
-                LoadingSessionBody(
-                    connection = connectionLabel,
-                    // A Box wraps its content, so without `fillMaxWidth` the
-                    // Column's Start alignment parks the dot+label on the left
-                    // edge; filling the width is what makes the centring two-
-                    // dimensional.
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .offset { IntOffset(0, -(headerPx + bannerPx) / 2) },
-                )
-            } else if (isHero) {
-                // The hero has no flex child that can absorb a pill the way the
-                // transcript does, so an in-flow row would lift the centred
-                // composer by half the pill's height when the socket drops.
-                // Overlaid on the seat it costs no layout at all, and the strip
-                // it lands on is empty because the hero block is centred.
-                Box(Modifier.weight(1f)) {
-                    HeroBody(
-                        modifier = Modifier.fillMaxSize(),
-                        state = draft,
-                        running = ui.running,
-                        modelTrigger = modelTrigger,
-                        onModelClick = { showModels = true },
-                        permissionLabel = permissionLabel,
-                        onPermissionClick = { showPermission = true },
-                        planActive = ui.planActive,
-                        onExitPlan = actions.exitPlanMode,
-                        contextPercent = ui.contextPercent,
-                        contextTokens = ui.contextTokens,
-                        contextWindow = ui.contextWindow,
-                        contextBreakdown = ui.contextBreakdown,
-                        attachments = ui.attachments,
-                        onToggleCommands = { menuOpen = !menuOpen },
-                        onRemoveAttachment = actions.removeAttachment,
-                        menuOpen = menuOpen,
-                        triggers = triggers,
-                        references = references,
-                        clearReferences = actions.clearReferences,
-                        onPickCommand = onPickCommand,
-                        workspaceLabel = heroCwd?.let(::shortenLastSegment) ?: "Choose workspace",
-                        onWorkspaceClick = { showWorkspace = true },
-                        presetLabel = presetLabel,
-                        showPresetChip = showPresetChip,
-                        onPresetClick = {
-                            actions.refreshAgentPresets()
-                            showPresets = true
-                        },
-                        onSend = {
-                            val text = takeDraftForSend()
-                            followFrom++
-                            // The hero send is the deferred one: a hero turn has never
-                            // run, so there is no busy policy to honour yet. The
-                            // in-session composer below is the one that passes
-                            // `submitMode()`.
-                            actions.sendDeferred(text)
-                        },
-                        onStop = actions.stop,
-                        // A child can land on the hero for the moment before its
-                        // history snapshot arrives; the same gate claims its seat
-                        // there as in a live session.
-                        readOnlyReason = readOnlyReason,
+                    // Deliberately no `beyondViewportPageCount`: a page off screen is
+                    // not composed. Shell holds a live terminal canvas and Trajectory a
+                    // full derivation of the transcript; paying for both while the
+                    // reader looks at neither would cost more than the swipe saves.
+                ) { page ->
+                    when (ChatView.entries[page]) {
+                        ChatView.TERMINAL -> Column(Modifier.fillMaxSize()) {
+                    // A real PTY for this session, from the host's `terminal` Remote
+                    // namespace. The screen creates or adopts the session's terminal, so
+                    // it is only reachable for an open session — the strip that selects
+                    // it is not drawn on the hero.
+                    //
+                    // The pending new-session seat therefore has no Shell tab, and the
+                    // seat split is what keeps that honest: `HOST_SHELL` materialises its
+                    // *own* dedicated archived session at the workspace root and never
+                    // consults the pending target, while `THIS_SESSION` is work inside
+                    // the open session and would have to materialise the seat first
+                    // rather than open a second, unnamed terminal session.
+                    terminal(Modifier.weight(1f))
+                        }
+
+                        ChatView.TRAJECTORY -> Column(Modifier.fillMaxSize()) {
+                    val trajectory = remember(entries, endedTurns) {
+                        buildTrajectory(entries, endedTurns, actions.toolParents())
+                    }
+                    TrajectoryScreen(
+                        model = trajectory,
+                        title = current?.title ?: "DSH",
+                        onClose = { goTo(ChatView.CHAT) },
+                        modifier = Modifier.weight(1f),
+                        // The conversation header above already carries the title, the
+                        // back-to-drawer seat and the view tabs, exactly as the web's
+                        // `.viewArea` sits below `.tabs` — the screen's own title row
+                        // would be a second copy of it.
+                        showHeader = false,
                     )
+                        }
+
+                        ChatView.CHAT -> Column(Modifier.fillMaxSize()) {
+    if (awaitingTranscript) {
+                    // A non-blank session with nothing loaded yet: the host has not
+                    // answered this session's follow stream. Naming the connection
+                    // when it is the reason costs no new copy — the drawer's own
+                    // "Loading…" plus the shell's connection word.
+                    //
+                    // The composer and the pills are not siblings of this branch —
+                    // they live in the transcript `else` below — so the chrome is
+                    // the whole offset: `weight(1f)`'s box runs from the header
+                    // (plus banner) to the Column's bottom, putting its centre at
+                    // `H/2 + (header + banner)/2`. Half of that, negated, is the
+                    // viewport's centre. Reading the states inside `offset` keeps the
+                    // first frame still (both are 0 until measured) and re-places
+                    // instead of recomposing when the banner arrives.
+                    LoadingSessionBody(
+                        connection = connectionLabel,
+                        // A Box wraps its content, so without `fillMaxWidth` the
+                        // Column's Start alignment parks the dot+label on the left
+                        // edge; filling the width is what makes the centring two-
+                        // dimensional.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .offset { IntOffset(0, -(headerPx + bannerPx) / 2) },
+                    )
+                } else if (isHero) {
+                    // The hero has no flex child that can absorb a pill the way the
+                    // transcript does, so an in-flow row would lift the centred
+                    // composer by half the pill's height when the socket drops.
+                    // Overlaid on the seat it costs no layout at all, and the strip
+                    // it lands on is empty because the hero block is centred.
+                    Box(Modifier.weight(1f)) {
+                        HeroBody(
+                            modifier = Modifier.fillMaxSize(),
+                            state = draft,
+                            running = ui.running,
+                            modelTrigger = modelTrigger,
+                            onModelClick = { showModels = true },
+                            permissionLabel = permissionLabel,
+                            onPermissionClick = { showPermission = true },
+                            planActive = ui.planActive,
+                            onExitPlan = actions.exitPlanMode,
+                            contextPercent = ui.contextPercent,
+                            contextTokens = ui.contextTokens,
+                            contextWindow = ui.contextWindow,
+                            contextBreakdown = ui.contextBreakdown,
+                            attachments = ui.attachments,
+                            onToggleCommands = { menuOpen = !menuOpen },
+                            onRemoveAttachment = actions.removeAttachment,
+                            menuOpen = menuOpen,
+                            triggers = triggers,
+                            references = references,
+                            clearReferences = actions.clearReferences,
+                            onPickCommand = onPickCommand,
+                            workspaceLabel = heroCwd?.let(::shortenLastSegment) ?: "Choose workspace",
+                            onWorkspaceClick = { showWorkspace = true },
+                            presetLabel = presetLabel,
+                            showPresetChip = showPresetChip,
+                            onPresetClick = {
+                                actions.refreshAgentPresets()
+                                showPresets = true
+                            },
+                            onSend = {
+                                val text = takeDraftForSend()
+                                followFrom++
+                                // The hero send is the deferred one: a hero turn has never
+                                // run, so there is no busy policy to honour yet. The
+                                // in-session composer below is the one that passes
+                                // `submitMode()`.
+                                actions.sendDeferred(text)
+                            },
+                            onStop = actions.stop,
+                            // A child can land on the hero for the moment before its
+                            // history snapshot arrives; the same gate claims its seat
+                            // there as in a live session.
+                            readOnlyReason = readOnlyReason,
+                        )
+                        connectionLabel?.let {
+                            ConnectionPill(
+                                label = it,
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(top = DshSpacing.md),
+                            )
+                        }
+                    }
+                } else {
+                    // Ascending seq order from the reducer, oldest first, so the newest
+                    // turn is the last item and therefore the visual bottom.
+                    // `frozenLive` while the reader is in history, so the streaming row
+                    // cannot grow and reflow the list under them.
+                    val shownLive = frozenLive ?: live
+                    val rows = remember(entries, foldedTurns, expandedTurns, shownLive, foldTurns) {
+                        buildDisplayRows(
+                            entries = entries,
+                            endedTurns = foldedTurns,
+                            expandedTurns = expandedTurns,
+                            live = shownLive,
+                            fold = foldTurns,
+                        )
+                    }
+
+                    // The tool-call forest, keyed by call id so a row can find its own
+                    // node. Keyed on `entries` because that is what changes when a
+                    // dispatch event lands: the same event either adds the sub-call's
+                    // row or fills its result in.
+                    val toolNodes = remember(entries) {
+                        buildToolCallTree(
+                            entries.filterIsInstance<ChatEntry.ToolCall>(),
+                            actions.toolParents(),
+                        ).associateBy { it.entry.callId }
+                    }
+
+                    // Jump targets: the row index of every real (non-plugin) user
+                    // message, oldest first so the rail reads top-to-bottom in time —
+                    // which in a top-anchored list is also the order of the rows
+                    // themselves, so no reversal is needed to match the transcript.
+                    // Each carries its prompt and the assistant prose that answered it,
+                    // which is what the rail's preview shows while you scrub. The rail
+                    // shows the most recent `MAX_RAIL_TICKS` of them.
+                    val jumpTargets = remember(rows) {
+                        rows.withIndex()
+                            .mapNotNull { (index, row) ->
+                                val entry = (row as? DisplayRow.Single)?.entry
+                                if (entry is ChatEntry.UserMessage && !entry.fromPlugin) {
+                                    TurnJump(
+                                        index = index,
+                                        prompt = { entry.text },
+                                        response = { responseAfter(rows, index) },
+                                    )
+                                } else {
+                                    null
+                                }
+                            }
+                    }
+                    // The turns on screen, which is what the fold rule above asks about.
+                    // One frame behind by construction, which is the safe direction: a fold
+                    // can only ever be applied to a turn that was off screen when the turn
+                    // ended.
+                    val rowsNow by rememberUpdatedState(rows)
+                    LaunchedEffect(listState) {
+                        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }
+                            .collect { indices ->
+                                val latest = indices.mapNotNull { rowsNow.getOrNull(it)?.turnOrNull() }.toSet()
+                                if (latest != visibleTurns) visibleTurns = latest
+                            }
+                    }
+
+                    val firstVisible by remember { derivedStateOf { listState.firstVisibleItemIndex } }
+                    // The turn you are reading is the newest target at or above the
+                    // first visible row.
+                    val activeTarget = remember(jumpTargets, firstVisible) {
+                        jumpTargets.filter { it.index <= firstVisible }.maxByOrNull { it.index }?.index
+                    }
+
+                    // Bug A: the transcript is the flex child, so a row inserted
+                    // above it takes its height out of the transcript's flexible
+                    // space and leaves every seat below — the dock, the composer —
+                    // exactly where it was. The newest turn stays pinned to the
+                    // bottom and no row moves.
                     connectionLabel?.let {
                         ConnectionPill(
                             label = it,
                             modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = DshSpacing.md),
+                                .align(Alignment.CenterHorizontally)
+                                .padding(top = DshSpacing.sm),
                         )
                     }
-                }
-            } else {
-                // Ascending seq order from the reducer, oldest first, so the newest
-                // turn is the last item and therefore the visual bottom.
-                // `frozenLive` while the reader is in history, so the streaming row
-                // cannot grow and reflow the list under them.
-                val shownLive = frozenLive ?: live
-                val rows = remember(entries, foldedTurns, expandedTurns, shownLive, foldTurns) {
-                    buildDisplayRows(
-                        entries = entries,
-                        endedTurns = foldedTurns,
-                        expandedTurns = expandedTurns,
-                        live = shownLive,
-                        fold = foldTurns,
-                    )
-                }
 
-                // The tool-call forest, keyed by call id so a row can find its own
-                // node. Keyed on `entries` because that is what changes when a
-                // dispatch event lands: the same event either adds the sub-call's
-                // row or fills its result in.
-                val toolNodes = remember(entries) {
-                    buildToolCallTree(
-                        entries.filterIsInstance<ChatEntry.ToolCall>(),
-                        actions.toolParents(),
-                    ).associateBy { it.entry.callId }
-                }
-
-                // Jump targets: the row index of every real (non-plugin) user
-                // message, oldest first so the rail reads top-to-bottom in time —
-                // which in a top-anchored list is also the order of the rows
-                // themselves, so no reversal is needed to match the transcript.
-                // Each carries its prompt and the assistant prose that answered it,
-                // which is what the rail's preview shows while you scrub. The rail
-                // shows the most recent `MAX_RAIL_TICKS` of them.
-                val jumpTargets = remember(rows) {
-                    rows.withIndex()
-                        .mapNotNull { (index, row) ->
-                            val entry = (row as? DisplayRow.Single)?.entry
-                            if (entry is ChatEntry.UserMessage && !entry.fromPlugin) {
-                                TurnJump(
-                                    index = index,
-                                    prompt = { entry.text },
-                                    response = { responseAfter(rows, index) },
-                                )
-                            } else {
-                                null
-                            }
-                        }
-                }
-                // The turns on screen, which is what the fold rule above asks about.
-                // One frame behind by construction, which is the safe direction: a fold
-                // can only ever be applied to a turn that was off screen when the turn
-                // ended.
-                val rowsNow by rememberUpdatedState(rows)
-                LaunchedEffect(listState) {
-                    snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }
-                        .collect { indices ->
-                            val latest = indices.mapNotNull { rowsNow.getOrNull(it)?.turnOrNull() }.toSet()
-                            if (latest != visibleTurns) visibleTurns = latest
-                        }
-                }
-
-                val firstVisible by remember { derivedStateOf { listState.firstVisibleItemIndex } }
-                // The turn you are reading is the newest target at or above the
-                // first visible row.
-                val activeTarget = remember(jumpTargets, firstVisible) {
-                    jumpTargets.filter { it.index <= firstVisible }.maxByOrNull { it.index }?.index
-                }
-
-                // Bug A: the transcript is the flex child, so a row inserted
-                // above it takes its height out of the transcript's flexible
-                // space and leaves every seat below — the dock, the composer —
-                // exactly where it was. The newest turn stays pinned to the
-                // bottom and no row moves.
-                connectionLabel?.let {
-                    ConnectionPill(
-                        label = it,
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .padding(top = DshSpacing.sm),
-                    )
-                }
-
-                // A top-anchored list: new rows appear below the fold rather than
-                // moving what is above them, and [TailFollow] decides — only for a
-                // reader already at the tail — when to bring them into view.
-                Box(Modifier.weight(1f)) {
-                    // Latent: records the transcript's position and gestures. It
-                    // consumes nothing and scrolls nothing, so what it captures is
-                    // the behaviour that existed before any of this was added.
-                    DiagLazyList("chat", listState)
-                    DiagFrames()
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .touchGate(touch)
-                            .diagDrag("chat") { listState.diagOffset() },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            start = DshSpacing.xl,
-                            end = DshSpacing.xl,
-                            top = DshSpacing.xl,
-                            bottom = DshSpacing.md,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(DshSpacing.xl),
-                    ) {
-                    // Gated on this session's own turn, not the host's `running`: a
-                    // parent whose turn the journal has closed reports a live
-                    // subagent through the header's `+N running` chip, not by
-                    // wearing this row.
-                    items(items = rows, key = { it.key }) { row ->
-                            Box(
-                                Modifier
-                                    .widthIn(max = 920.dp)
-                                    .diagRowGrowth(row.key),
-                            ) {
-                              // Text in a Compose row is not selectable until it is
-                              // inside a SelectionContainer, and on the web every one
-                              // of these rows is. It is per row rather than around the
-                              // list: a selection that spans two lazily-composed
-                              // items loses its ends when either is recycled, and
-                              // "copy this answer" is the case that matters.
-                              SelectionContainer {
-                              Column {
-                                when (row) {
-                                    is DisplayRow.Single -> when (val entry = row.entry) {
-                                        is ChatEntry.UserMessage -> UserMessageRow(entry, actions.imageBitmap)
-                                        is ChatEntry.AssistantMessage -> {
-                                            // Offered only where the reducer could
-                                            // name the turn's `turn/end`, which is
-                                            // the boundary `session/fork` cuts at; a
-                                            // row without one gets no button rather
-                                            // than a dead one.
-                                            val branch: (() -> Unit)? =
-                                                branchSeqs[entry.seq]
-                                                    ?.let { atSeq -> { branchAt = atSeq } }
-                                            AssistantMessageRow(
-                                                entry = entry,
-                                                showFooter = entry.seq in closingSeqs,
-                                                durationMs = turnDurations[entry.turn],
-                                                onBranch = branch,
-                                            )
-                                        }
-                                        is ChatEntry.ToolCall -> {
-                                            // A PTC sub-call renders under the call
-                                            // that dispatched it; every other call
-                                            // has no node children and falls through
-                                            // to the same flat row as before.
-                                            val node = toolNodes[entry.callId]
-                                            if (node != null) {
-                                                ToolCallTreeRow(node, actions.imageBitmap)
-                                            } else {
-                                                ToolCallRow(
-                                                    entry,
-                                                    actions.imageBitmap,
-                                                    jobOutput = ui.jobOutput,
-                                                    onObserveJob = actions.observeJob,
+                    // A top-anchored list: new rows appear below the fold rather than
+                    // moving what is above them, and [TailFollow] decides — only for a
+                    // reader already at the tail — when to bring them into view.
+                    Box(Modifier.weight(1f)) {
+                        // Latent: records the transcript's position and gestures. It
+                        // consumes nothing and scrolls nothing, so what it captures is
+                        // the behaviour that existed before any of this was added.
+                        DiagLazyList("chat", listState)
+                        DiagFrames()
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .touchGate(touch)
+                                .diagDrag("chat") { listState.diagOffset() },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                start = DshSpacing.xl,
+                                end = DshSpacing.xl,
+                                top = DshSpacing.xl,
+                                bottom = DshSpacing.md,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(DshSpacing.xl),
+                        ) {
+                        // Gated on this session's own turn, not the host's `running`: a
+                        // parent whose turn the journal has closed reports a live
+                        // subagent through the header's `+N running` chip, not by
+                        // wearing this row.
+                        items(items = rows, key = { it.key }) { row ->
+                                Box(
+                                    Modifier
+                                        .widthIn(max = 920.dp)
+                                        .diagRowGrowth(row.key),
+                                ) {
+                                  // Text in a Compose row is not selectable until it is
+                                  // inside a SelectionContainer, and on the web every one
+                                  // of these rows is. It is per row rather than around the
+                                  // list: a selection that spans two lazily-composed
+                                  // items loses its ends when either is recycled, and
+                                  // "copy this answer" is the case that matters.
+                                  SelectionContainer {
+                                  Column {
+                                    when (row) {
+                                        is DisplayRow.Single -> when (val entry = row.entry) {
+                                            is ChatEntry.UserMessage -> UserMessageRow(entry, actions.imageBitmap)
+                                            is ChatEntry.AssistantMessage -> {
+                                                // Offered only where the reducer could
+                                                // name the turn's `turn/end`, which is
+                                                // the boundary `session/fork` cuts at; a
+                                                // row without one gets no button rather
+                                                // than a dead one.
+                                                val branch: (() -> Unit)? =
+                                                    branchSeqs[entry.seq]
+                                                        ?.let { atSeq -> { branchAt = atSeq } }
+                                                AssistantMessageRow(
+                                                    entry = entry,
+                                                    showFooter = entry.seq in closingSeqs,
+                                                    durationMs = turnDurations[entry.turn],
+                                                    onBranch = branch,
                                                 )
                                             }
+                                            is ChatEntry.ToolCall -> {
+                                                // A PTC sub-call renders under the call
+                                                // that dispatched it; every other call
+                                                // has no node children and falls through
+                                                // to the same flat row as before.
+                                                val node = toolNodes[entry.callId]
+                                                if (node != null) {
+                                                    ToolCallTreeRow(node, actions.imageBitmap)
+                                                } else {
+                                                    ToolCallRow(
+                                                        entry,
+                                                        actions.imageBitmap,
+                                                        jobOutput = ui.jobOutput,
+                                                        onObserveJob = actions.observeJob,
+                                                    )
+                                                }
+                                            }
+                                            is ChatEntry.Todos -> TodoCard(entry.items)
+                                            is ChatEntry.Notice -> NoticeRow(
+                                                entry,
+                                                jobOutput = ui.jobOutput,
+                                                onObserveJob = actions.observeJob,
+                                            )
                                         }
-                                        is ChatEntry.Todos -> TodoCard(entry.items)
-                                        is ChatEntry.Notice -> NoticeRow(
-                                            entry,
-                                            jobOutput = ui.jobOutput,
-                                            onObserveJob = actions.observeJob,
+
+                                        is DisplayRow.TurnProcess -> TurnProcessRow(row) {
+                                            expandedTurns = if (row.turn in expandedTurns) {
+                                                expandedTurns - row.turn
+                                            } else {
+                                                expandedTurns + row.turn
+                                            }
+                                        }
+
+                                        is DisplayRow.Live -> LiveAttemptRow(
+                                            row.attempt,
                                         )
                                     }
 
-                                    is DisplayRow.TurnProcess -> TurnProcessRow(row) {
-                                        expandedTurns = if (row.turn in expandedTurns) {
-                                            expandedTurns - row.turn
-                                        } else {
-                                            expandedTurns + row.turn
-                                        }
+                                    // `turn-deliverables.ts`: the row belongs to the turn's
+                                    // *closing* message, so it lands after the prose that
+                                    // ended the turn — and, for a folded turn, after the
+                                    // process summary that now stands in for that prose.
+                                    // Through-seq is the closing message's own seq, which is
+                                    // the web's `producedForClosing(data, owner.seq)`.
+                                    // The closing entry is bound to a local first. This used
+                                    // to test `row.entry is AssistantMessage` inline and
+                                    // rely on the smart cast, which stopped working when
+                                    // `ChatEntry` moved to :core:model: Kotlin will not
+                                    // smart-cast a public API property across a module
+                                    // boundary, because it cannot prove another module's
+                                    // `val` never changes. One binding is the same test.
+                                    val closing =
+                                        (row as? DisplayRow.Single)?.entry as? ChatEntry.AssistantMessage
+                                    val delivered = when {
+                                        row is DisplayRow.TurnProcess ->
+                                            deliverableCache.getOrPut(row.key) {
+                                                SessionFiles.deliverablesFor(entries, row.turn)
+                                            }
+
+                                        closing != null && closing.seq in closingSeqs ->
+                                            deliverableCache.getOrPut(row.key) {
+                                                SessionFiles.deliverablesFor(entries, closing.turn, closing.seq)
+                                            }
+
+                                        else -> null
                                     }
-
-                                    is DisplayRow.Live -> LiveAttemptRow(
-                                        row.attempt,
-                                    )
+                                    if (delivered != null && !delivered.isEmpty) {
+                                        DeliverableRow(
+                                            delivered = delivered,
+                                            onOpen = { path ->
+                                                filesFocus = path
+                                                showFiles = true
+                                            },
+                                            downloader = fileDownloader,
+                                        )
+                                    }
+                                  }
+                                  }
                                 }
+                            }
 
-                                // `turn-deliverables.ts`: the row belongs to the turn's
-                                // *closing* message, so it lands after the prose that
-                                // ended the turn — and, for a folded turn, after the
-                                // process summary that now stands in for that prose.
-                                // Through-seq is the closing message's own seq, which is
-                                // the web's `producedForClosing(data, owner.seq)`.
-                                // The closing entry is bound to a local first. This used
-                                // to test `row.entry is AssistantMessage` inline and
-                                // rely on the smart cast, which stopped working when
-                                // `ChatEntry` moved to :core:model: Kotlin will not
-                                // smart-cast a public API property across a module
-                                // boundary, because it cannot prove another module's
-                                // `val` never changes. One binding is the same test.
-                                val closing =
-                                    (row as? DisplayRow.Single)?.entry as? ChatEntry.AssistantMessage
-                                val delivered = when {
-                                    row is DisplayRow.TurnProcess ->
-                                        deliverableCache.getOrPut(row.key) {
-                                            SessionFiles.deliverablesFor(entries, row.turn)
-                                        }
-
-                                    closing != null && closing.seq in closingSeqs ->
-                                        deliverableCache.getOrPut(row.key) {
-                                            SessionFiles.deliverablesFor(entries, closing.turn, closing.seq)
-                                        }
-
-                                    else -> null
-                                }
-                                if (delivered != null && !delivered.isEmpty) {
-                                    DeliverableRow(
-                                        delivered = delivered,
-                                        onOpen = { path ->
-                                            filesFocus = path
-                                            showFiles = true
-                                        },
-                                        downloader = fileDownloader,
-                                    )
-                                }
-                              }
-                              }
+                            // The running-turn status line is the newest thing in the
+                            // transcript, so in a top-anchored list it is emitted last.
+                            if (ui.ownTurnInFlight) {
+                                item(key = "turn-status") { TurnStatusRow(elapsedMs) }
                             }
                         }
 
-                        // The running-turn status line is the newest thing in the
-                        // transcript, so in a top-anchored list it is emitted last.
-                        if (ui.ownTurnInFlight) {
-                            item(key = "turn-status") { TurnStatusRow(elapsedMs) }
+                        // Turn navigator rail: one tick per human message that opened a
+                        // turn, so you can jump straight to any prompt. The web hides it
+                        // under a 900px container; on a phone it is the fastest way back
+                        // through a long session, so it stays.
+                        if (jumpTargets.size > 1) {
+                            TurnRail(
+                                targets = jumpTargets,
+                                activeIndex = activeTarget,
+                                onJump = { index ->
+                                    ScrollDiag.prog("chat", "rail")
+                                    scope.launch { listState.animateScrollToItem(index) }
+                                },
+                                // Flush to the edge and only as wide as the ticks: the
+                                // rail owns the whole column for pointer input, so any
+                                // inset ate into the rows' trailing controls (the To-dos
+                                // chevron sits in that strip and was unreachable).
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .padding(end = 1.dp),
+                            )
+                        }
+
+                        // Offered whenever the follow has been released, which is the
+                        // same question as "is the newest row on screen" — there is no
+                        // second notion of being at the bottom to keep in step.
+                        if (!following.value) {
+                            ScrollToBottomButton(
+                                onClick = {
+                                    ScrollDiag.prog("chat", "to-bottom-button")
+                                    // Instant, and to the last index at the moment it
+                                    // runs: an animation to an index captured before it
+                                    // started lands short whenever a row arrives during
+                                    // it, which during a turn is always.
+                                    scope.launch {
+                                        val last = listState.layoutInfo.totalItemsCount - 1
+                                        if (last >= 0) listState.scrollToItem(last)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(end = DshSpacing.xl, bottom = DshSpacing.lg),
+                            )
                         }
                     }
 
-                    // Turn navigator rail: one tick per human message that opened a
-                    // turn, so you can jump straight to any prompt. The web hides it
-                    // under a 900px container; on a phone it is the fastest way back
-                    // through a long session, so it stays.
-                    if (jumpTargets.size > 1) {
-                        TurnRail(
-                            targets = jumpTargets,
-                            activeIndex = activeTarget,
-                            onJump = { index ->
-                                ScrollDiag.prog("chat", "rail")
-                                scope.launch { listState.animateScrollToItem(index) }
-                            },
-                            // Flush to the edge and only as wide as the ticks: the
-                            // rail owns the whole column for pointer input, so any
-                            // inset ate into the rows' trailing controls (the To-dos
-                            // chevron sits in that strip and was unreachable).
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .padding(end = 1.dp),
+                    if (ui.approval != null) {
+                        ApprovalCard(
+                            toolName = ui.approval!!.toolName,
+                            reason = ui.approval!!.reason,
+                            answer = ui.approval!!.answer,
+                            onAllow = { actions.resolveApproval(true) },
+                            onReject = { actions.resolveApproval(false) },
+                            modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
                         )
                     }
 
-                    // Offered whenever the follow has been released, which is the
-                    // same question as "is the newest row on screen" — there is no
-                    // second notion of being at the bottom to keep in step.
-                    if (!following.value) {
-                        ScrollToBottomButton(
-                            onClick = {
-                                ScrollDiag.prog("chat", "to-bottom-button")
-                                // Instant, and to the last index at the moment it
-                                // runs: an animation to an index captured before it
-                                // started lands short whenever a row arrives during
-                                // it, which during a turn is always.
-                                scope.launch {
-                                    val last = listState.layoutInfo.totalItemsCount - 1
-                                    if (last >= 0) listState.scrollToItem(last)
-                                }
-                            },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = DshSpacing.xl, bottom = DshSpacing.lg),
+                    // A host question blocks the agent's tool call, so it takes the
+                    // same seat as an approval — directly above the composer.
+                    ui.questions?.let { questions ->
+                        QuestionCard(
+                            set = questions,
+                            onSubmit = actions.answerQuestions,
+                            onSkip = actions.skipQuestions,
+                            modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
                         )
                     }
-                }
 
-                if (ui.approval != null) {
-                    ApprovalCard(
-                        toolName = ui.approval!!.toolName,
-                        reason = ui.approval!!.reason,
-                        answer = ui.approval!!.answer,
-                        onAllow = { actions.resolveApproval(true) },
-                        onReject = { actions.resolveApproval(false) },
-                        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
-                    )
-                }
+                    // Dock order mirrors the web UI: todo (0) → goal (10) → queue (20).
+                    if (todos.isNotEmpty()) {
+                        TodoCard(
+                            items = todos,
+                            modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
+                        )
+                    }
 
-                // A host question blocks the agent's tool call, so it takes the
-                // same seat as an approval — directly above the composer.
-                ui.questions?.let { questions ->
-                    QuestionCard(
-                        set = questions,
-                        onSubmit = actions.answerQuestions,
-                        onSkip = actions.skipQuestions,
-                        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
-                    )
-                }
+                    ui.goal?.takeIf { it.visible }?.let { goal ->
+                        GoalBar(
+                            goal = goal,
+                            onPause = actions.pauseGoal,
+                            onResume = actions.resumeGoal,
+                            onEdit = actions.editGoal,
+                            onClear = actions.clearGoal,
+                            modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
+                        )
+                    }
 
-                // Dock order mirrors the web UI: todo (0) → goal (10) → queue (20).
-                if (todos.isNotEmpty()) {
-                    TodoCard(
-                        items = todos,
-                        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
-                    )
-                }
+                    // Queue (dock order 20). Its bottom edge is tucked under the
+                    // composer card — the web's negative margin — so the two read as
+                    // one surface; Column paints the later child over the earlier
+                    // one, which is what hides the seam. The dock stays composed when
+                    // the queue is empty so it can animate itself away, and its offset
+                    // spans the composer's top gap as well: that keeps the composer
+                    // still while the dock unfolds and sinks above it.
+                    //
+                    // How deep that tuck has to be is set by the card's own corner
+                    // arc, not by the web's 3px. The dock is inset `md` (8dp) from the
+                    // card on each side and the card is a `DshRadius.bubble` (22dp)
+                    // capsule, so at the dock's own edge the arc already stands
+                    //   `22 - sqrt(22^2 - (22 - 8)^2) = 5.03dp`
+                    // below the card's flat top. A 3dp tuck therefore left background
+                    // showing in the corner — measured at 420dpi (2.625 px/dp), a
+                    // 4px-tall by 6px-wide wedge at each end (1.5dp x 2.3dp) where the
+                    // dock's square corner and the card's arc curve away from each
+                    // other. 7dp clears the 5.03dp arc at every density (both are dp)
+                    // and leaves ~2dp of margin. QueueDock pays the extra 4dp out of
+                    // its *bottom padding*, so the panel's visible top edge and its
+                    // rows do not move; only the part the card covers grows.
+                    //
+                    // The extra `md` inset on each side is the web's
+                    // `--dsh-composer-dock-inset` (8px): the panel is deliberately
+                    // *narrower* than the input card, so its square bottom corners
+                    // hide inside the card's 22dp rounded top corners. At the card's
+                    // own width they poked out beside the curve as two dark ears,
+                    // which is what made the join read as two separate cards.
+                    // Boxed rather than modified in place: the dock's own size
+                    // animation clips its content to the growing bounds, so the offset
+                    // has to live outside it or the tucked bottom edge gets cut off.
+                    Box(
+                        Modifier
+                            .padding(horizontal = DshSpacing.xl + DshSpacing.md)
+                            .offset(y = DshSpacing.sm + 7.dp),
+                    ) {
+                        QueueDock(
+                            items = ui.queue,
+                            running = ui.running,
+                            mutable = queueMutable,
+                            busy = ui.queueBusy,
+                            onEdit = actions.editQueueItem,
+                            onRemove = actions.removeQueueItem,
+                            onSteer = actions.steerQueueItem,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
 
-                ui.goal?.takeIf { it.visible }?.let { goal ->
-                    GoalBar(
-                        goal = goal,
-                        onPause = actions.pauseGoal,
-                        onResume = actions.resumeGoal,
-                        onEdit = actions.editGoal,
-                        onClear = actions.clearGoal,
-                        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
-                    )
-                }
-
-                // Queue (dock order 20). Its bottom edge is tucked under the
-                // composer card — the web's negative margin — so the two read as
-                // one surface; Column paints the later child over the earlier
-                // one, which is what hides the seam. The dock stays composed when
-                // the queue is empty so it can animate itself away, and its offset
-                // spans the composer's top gap as well: that keeps the composer
-                // still while the dock unfolds and sinks above it.
-                //
-                // How deep that tuck has to be is set by the card's own corner
-                // arc, not by the web's 3px. The dock is inset `md` (8dp) from the
-                // card on each side and the card is a `DshRadius.bubble` (22dp)
-                // capsule, so at the dock's own edge the arc already stands
-                //   `22 - sqrt(22^2 - (22 - 8)^2) = 5.03dp`
-                // below the card's flat top. A 3dp tuck therefore left background
-                // showing in the corner — measured at 420dpi (2.625 px/dp), a
-                // 4px-tall by 6px-wide wedge at each end (1.5dp x 2.3dp) where the
-                // dock's square corner and the card's arc curve away from each
-                // other. 7dp clears the 5.03dp arc at every density (both are dp)
-                // and leaves ~2dp of margin. QueueDock pays the extra 4dp out of
-                // its *bottom padding*, so the panel's visible top edge and its
-                // rows do not move; only the part the card covers grows.
-                //
-                // The extra `md` inset on each side is the web's
-                // `--dsh-composer-dock-inset` (8px): the panel is deliberately
-                // *narrower* than the input card, so its square bottom corners
-                // hide inside the card's 22dp rounded top corners. At the card's
-                // own width they poked out beside the curve as two dark ears,
-                // which is what made the join read as two separate cards.
-                // Boxed rather than modified in place: the dock's own size
-                // animation clips its content to the growing bounds, so the offset
-                // has to live outside it or the tucked bottom edge gets cut off.
-                Box(
-                    Modifier
-                        .padding(horizontal = DshSpacing.xl + DshSpacing.md)
-                        .offset(y = DshSpacing.sm + 7.dp),
-                ) {
-                    QueueDock(
-                        items = ui.queue,
-                        running = ui.running,
-                        mutable = queueMutable,
-                        busy = ui.queueBusy,
-                        onEdit = actions.editQueueItem,
-                        onRemove = actions.removeQueueItem,
-                        onSteer = actions.steerQueueItem,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                // The menu sits directly above the composer card, as the web's
-                // menu is anchored to the card's top edge.
-                // `@` and `/` are mutually exclusive by their first character, so
-                // only one of these can be open at a time.
-                ComposerPopups(
-                    triggers = triggers,
-                    references = references,
-                    state = draft,
-                    menuOpen = menuOpen,
-                    onPickCommand = onPickCommand,
-                    clearReferences = actions.clearReferences,
-                    modifier = Modifier.padding(
-                        start = DshSpacing.xl,
-                        end = DshSpacing.xl,
-                        bottom = DshSpacing.sm,
-                    ),
-                )
-
-                if (readOnlyReason != null) {
-                    // The frame takes the composer's own slot and padding, so the
-                    // queue dock, the pills below and the transcript above it do
-                    // not move when the seat is claimed.
-                    SubagentReadOnlyComposer(
-                        reason = readOnlyReason,
-                        modifier = Modifier.padding(
-                            start = DshSpacing.xl,
-                            end = DshSpacing.xl,
-                            // Keeps the frame in the composer's slot: the same
-                            // 6dp the card leaves above the pills.
-                            bottom = DshSpacing.sm,
-                            top = DshSpacing.sm,
-                        ),
-                    )
-                } else {
-                    Composer(
+                    // The menu sits directly above the composer card, as the web's
+                    // menu is anchored to the card's top edge.
+                    // `@` and `/` are mutually exclusive by their first character, so
+                    // only one of these can be open at a time.
+                    ComposerPopups(
+                        triggers = triggers,
+                        references = references,
                         state = draft,
-                        onSend = {
-                            val text = takeDraftForSend()
-                            // Sending is one of the two moments that mean "follow
-                            // again", wherever the reader had got to.
-                            followFrom++
-                            actions.send(text, actions.submitMode())
-                        },
-                        onSendMode = { mode ->
-                            val text = takeDraftForSend()
-                            followFrom++
-                            actions.send(text, mode)
-                        },
-                        onToggleBusyEnter = {
-                            actions.updateBusyEnter(
-                                if (ui.busyEnter == BusyEnter.STEER) BusyEnter.QUEUE else BusyEnter.STEER,
-                            )
-                        },
-                        busyEnter = ui.busyEnter,
-                        onStop = actions.stop,
-                        running = ui.running,
-                        modelTrigger = modelTrigger,
-                        onModelClick = { showModels = true },
-                        permissionLabel = permissionLabel,
-                        onPermissionClick = { showPermission = true },
-                        planActive = ui.planActive,
-                        onExitPlan = actions.exitPlanMode,
-                        contextPercent = ui.contextPercent,
-                        contextTokens = ui.contextTokens,
-                        contextWindow = ui.contextWindow,
-                        contextBreakdown = ui.contextBreakdown,
-                        attachments = ui.attachments,
-                        onToggleCommands = { menuOpen = !menuOpen },
-                        onRemoveAttachment = actions.removeAttachment,
+                        menuOpen = menuOpen,
+                        onPickCommand = onPickCommand,
+                        clearReferences = actions.clearReferences,
                         modifier = Modifier.padding(
                             start = DshSpacing.xl,
                             end = DshSpacing.xl,
-                            // Matches the pills' own bottom margin below, so the
-                            // two gaps around the row are the same 6dp. With the
-                            // pills absent this is the composer's clearance to the
-                            // navigation inset, which is why it is not larger.
                             bottom = DshSpacing.sm,
-                            // Constant whether or not the dock is present: the dock's
-                            // own offset reaches back down over this gap when it is.
-                            top = DshSpacing.sm,
+                        ),
+                    )
+
+                    if (readOnlyReason != null) {
+                        // The frame takes the composer's own slot and padding, so the
+                        // queue dock, the pills below and the transcript above it do
+                        // not move when the seat is claimed.
+                        SubagentReadOnlyComposer(
+                            reason = readOnlyReason,
+                            modifier = Modifier.padding(
+                                start = DshSpacing.xl,
+                                end = DshSpacing.xl,
+                                // Keeps the frame in the composer's slot: the same
+                                // 6dp the card leaves above the pills.
+                                bottom = DshSpacing.sm,
+                                top = DshSpacing.sm,
+                            ),
+                        )
+                    } else {
+                        Composer(
+                            state = draft,
+                            onSend = {
+                                val text = takeDraftForSend()
+                                // Sending is one of the two moments that mean "follow
+                                // again", wherever the reader had got to.
+                                followFrom++
+                                actions.send(text, actions.submitMode())
+                            },
+                            onSendMode = { mode ->
+                                val text = takeDraftForSend()
+                                followFrom++
+                                actions.send(text, mode)
+                            },
+                            onToggleBusyEnter = {
+                                actions.updateBusyEnter(
+                                    if (ui.busyEnter == BusyEnter.STEER) BusyEnter.QUEUE else BusyEnter.STEER,
+                                )
+                            },
+                            busyEnter = ui.busyEnter,
+                            onStop = actions.stop,
+                            running = ui.running,
+                            modelTrigger = modelTrigger,
+                            onModelClick = { showModels = true },
+                            permissionLabel = permissionLabel,
+                            onPermissionClick = { showPermission = true },
+                            planActive = ui.planActive,
+                            onExitPlan = actions.exitPlanMode,
+                            contextPercent = ui.contextPercent,
+                            contextTokens = ui.contextTokens,
+                            contextWindow = ui.contextWindow,
+                            contextBreakdown = ui.contextBreakdown,
+                            attachments = ui.attachments,
+                            onToggleCommands = { menuOpen = !menuOpen },
+                            onRemoveAttachment = actions.removeAttachment,
+                            modifier = Modifier.padding(
+                                start = DshSpacing.xl,
+                                end = DshSpacing.xl,
+                                // Matches the pills' own bottom margin below, so the
+                                // two gaps around the row are the same 6dp. With the
+                                // pills absent this is the composer's clearance to the
+                                // navigation inset, which is why it is not larger.
+                                bottom = DshSpacing.sm,
+                                // Constant whether or not the dock is present: the dock's
+                                // own offset reaches back down over this gap when it is.
+                                top = DshSpacing.sm,
+                            ),
+                        )
+                    }
+
+                    // The web mounts the statistic pills on the composer dock, just
+                    // under the card — not in the header, which is where they would
+                    // otherwise look like they belonged. Self-gating, so an empty
+                    // session (and every session before its projections land) draws
+                    // nothing at all rather than an empty row.
+                    SessionStatsPills(
+                        stats = ui.sessionStats,
+                        onBalance = {
+                            showBalance = true
+                            // Ask when the door opens, not when the app starts: a figure
+                            // read at launch is stale by the time anyone looks at it.
+                            actions.refreshBalance()
+                        },
+                        // Priced routes only. The rates follow the session's *current*
+                        // model, which is also what the host bills the next turn at.
+                        rates = usageRates,
+                        family = family,
+                        modifier = Modifier.padding(
+                            start = DshSpacing.xl,
+                            end = DshSpacing.xl,
+                            // The block is the last thing in the column, so it owns the
+                            // gap to the navigation inset; without it the pills sat on
+                            // whatever the inset happened to be on that device.
+                            bottom = DshSpacing.sm,
                         ),
                     )
                 }
-
-                // The web mounts the statistic pills on the composer dock, just
-                // under the card — not in the header, which is where they would
-                // otherwise look like they belonged. Self-gating, so an empty
-                // session (and every session before its projections land) draws
-                // nothing at all rather than an empty row.
-                SessionStatsPills(
-                    stats = ui.sessionStats,
-                    onBalance = {
-                        showBalance = true
-                        // Ask when the door opens, not when the app starts: a figure
-                        // read at launch is stale by the time anyone looks at it.
-                        actions.refreshBalance()
-                    },
-                    // Priced routes only. The rates follow the session's *current*
-                    // model, which is also what the host bills the next turn at.
-                    rates = usageRates,
-                    family = family,
-                    modifier = Modifier.padding(
-                        start = DshSpacing.xl,
-                        end = DshSpacing.xl,
-                        // The block is the last thing in the column, so it owns the
-                        // gap to the navigation inset; without it the pills sat on
-                        // whatever the inset happened to be on that device.
-                        bottom = DshSpacing.sm,
-                    ),
-                )
+                        }
+                    }
+                }
             }
 
             // The floating bar, at the very bottom of the screen's column and below the
@@ -1649,7 +1735,7 @@ internal fun ChatPanel(
                     items = BOTTOM_BAR_ITEMS,
                     selectedKey = view.name,
                     onSelect = { key ->
-                        ChatView.entries.firstOrNull { it.name == key }?.let { view = it }
+                        ChatView.entries.firstOrNull { it.name == key }?.let(goTo)
                     },
                 )
             }
