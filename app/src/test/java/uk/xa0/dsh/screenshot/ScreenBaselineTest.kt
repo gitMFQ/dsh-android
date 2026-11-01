@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -54,7 +55,11 @@ import uk.xa0.dsh.ui.ChatActions
 import uk.xa0.dsh.ui.ChatPanel
 import uk.xa0.dsh.ui.ChatUiState
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
+import uk.xa0.dsh.ui.ME_ENTRIES
+import uk.xa0.dsh.ui.MeSubPage
+import uk.xa0.dsh.ui.MeTab
 import uk.xa0.dsh.ui.MiuixProbe
+import uk.xa0.dsh.ui.PlaceholderTab
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.PermissionSheet
 import uk.xa0.dsh.ui.SessionsDrawer
@@ -688,6 +693,69 @@ class ScreenBaselineTest {
                 ),
                 actions = ChatActions(),
                 terminal = { Modifier.fillMaxSize() },
+            )
+        }
+    }
+    /**
+     * The Me page: identity on top, the settings tabs under it (3.3).
+     *
+     * A page of its own rather than a row inside a screen capture, because the two
+     * things worth pinning are its *shape* — a header that says whose account this is,
+     * then a list of tabs — and the fact that the tabs are reached by opening a page
+     * rather than by toggling a value.
+     *
+     * The balance is given as a string, not as a `BalanceState`: the page takes the
+     * figure it should draw, so a capture cannot accidentally depend on which state the
+     * read happened to be in when the baseline was recorded.
+     */
+    @Test
+    fun meTab() {
+        capture("me-tab") {
+            MeTab(
+                username = "tony",
+                balanceText = "Balance · 12.34 CNY",
+                entries = ME_ENTRIES,
+                onOpen = {},
+            )
+        }
+    }
+
+    /**
+     * A settings tab's own page: the back bar and, for now, a placeholder body (3.3).
+     *
+     * Captured with [PlaceholderTab] rather than with a real tab's contents because the
+     * contents are the work of their own PRs. What this pins is the *frame* every tab
+     * will be drawn in — and, more usefully, it makes the placeholder visible so nobody
+     * ships believing the tabs are done.
+     */
+    @Test
+    fun meSubPage() {
+        capture("me-subpage") {
+            MeSubPage(title = "Appearance", onBack = {}) {
+                PlaceholderTab(
+                    title = "Appearance",
+                    summary = "Theme, and the seven appearances it resolves to.",
+                    icon = Icons.Rounded.Palette,
+                )
+            }
+        }
+    }
+
+    /**
+     * The Plugins destination, which is a placeholder on purpose (3.3).
+     *
+     * Captured for the same reason the MiuiX probe was: an empty page is a claim about
+     * the product, and a claim nobody can see is one that rots. When the plugin surfaces
+     * land, this capture is what shows what they replaced.
+     */
+    @Test
+    fun pluginsTab() {
+        capture("plugins-tab") {
+            PlaceholderTab(
+                title = "Plugins",
+                summary = "Plugin surfaces will live here. The panel and block protocol " +
+                    "already exist; this page is where they land.",
+                icon = Icons.Rounded.Extension,
             )
         }
     }
