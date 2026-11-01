@@ -24,7 +24,6 @@ import org.robolectric.annotation.GraphicsMode
 import uk.xa0.dsh.AppPhase
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.PendingAttachment
-import uk.xa0.dsh.PendingSessionTarget
 import uk.xa0.dsh.PermissionOption
 import uk.xa0.dsh.TerminalPhase
 import uk.xa0.dsh.TerminalUiState
@@ -35,8 +34,10 @@ import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.FileTouch
 import uk.xa0.dsh.model.SessionFile
 import uk.xa0.dsh.model.SessionFiles
+import uk.xa0.dsh.model.PendingSessionTarget
 import uk.xa0.dsh.model.SessionHeader
 import uk.xa0.dsh.model.SessionItem
+import uk.xa0.dsh.model.SessionTarget
 import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.model.WorkspaceListPhase
 import uk.xa0.dsh.scroll.HarnessApplication
@@ -568,7 +569,9 @@ class ScreenBaselineTest {
                 state = ChatUiState(
                     ui = UiState(
                         phase = AppPhase.READY,
-                        pendingSession = PendingSessionTarget(cwd = "/home/user/var/work/dsh-android"),
+                        pendingSession = PendingSessionTarget(
+                            target = SessionTarget.Directory("/home/user/var/work/dsh-android"),
+                        ),
                     ),
                 ),
                 actions = ChatActions(),
