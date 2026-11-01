@@ -193,9 +193,9 @@
 
 > **⚠️ 2.0–2.4 全部完成，别再照着旧文开工。当前进度与下一步见 §7.3。**
 >
-> 已完成：2.0（窗口底色跟随外观）→ 2.1（删 `KsuTokens.Space`）→ 2.2a/b/c（基线 + 抽 `TerminalPanel`）→ 2.3（miuix 闸门）→ **2.4（浮动底栏 + 调色板适配器 + 状态栏 + ROUTER 出目的地列表，PR #17）**。
+> 已完成：2.0（窗口底色跟随外观）→ 2.1（删 `KsuTokens.Space`）→ 2.2a/b/c（基线 + 抽 `TerminalPanel`）→ 2.3（miuix 闸门）→ 2.4（浮动底栏 + 调色板适配器 + 状态栏 + ROUTER 出目的地列表，PR #17）→ **2.5a（抽 `ChatPanel`，会话屏终于可拍照）**。
 >
-> 剩余：2.5（pager / rail）→ 2.6（TopBar 折叠）→ 2.7（抽屉换装）→ 2.8（设置/关于换装）→ 2.9（Sheet 统一）。
+> 剩余：2.5b（聊天屏基线）→ 2.5c（pager）→ 2.5d（rail）→ 2.6（TopBar 折叠）→ 2.7（抽屉换装）→ 2.8（设置/关于换装）→ 2.9（Sheet 统一）。
 
 ### 7.3 阶段 2.5 开工清单（2.4 已合入 master）
 
@@ -226,12 +226,14 @@
 
 | # | 分支 | 内容 | 验收 | 风险 |
 |---|---|---|---|---|
-| **2.5a** | `refactor/chat-stateless` | **先拆 `ChatScreen`**：`ChatScreen(vm: DshViewModel)` 是唯一入口（`ChatScreen.kt:191`），100+ 处 `ui.` 读取 + `LaunchedEffect` 里发网络。抽出 `ChatPanel(state, callbacks…)` 无状态壳，`ChatScreen` 退化为取 `StateFlow` 的外壳 | `tests` 原数不减；`screenshots` **11 张逐字节不变**（纯搬运） | 中 |
+| **2.5a** ✅ | `refactor/chat-stateless` | **已交付**。抽出 `ChatPanel(state, actions, terminal)` 无状态壳 + `ChatUiState` / `ChatActions`；`ChatScreen` 退化为取 `StateFlow` 与拼参数的外壳（**3 284 → 226 行**）。三条结论见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.5 | `tests` 原数不减；`screenshots` **11 张逐字节不变**（纯搬运） | 中 |
 | **2.5b** | `test/baseline-chat` | 给 `ChatPanel` 录基线：空会话 hero、有消息的会话、（可选）宽屏 | 新增 2~3 张；原有 11 张不变 | 低（纯测试） |
 | **2.5c** | `feat/pager-navigation` | `HorizontalPager` 接管 `ChatView` 三个目的地；弹簧切页；底栏点按 → `animateScrollToPage` | 切页流畅；旋转保持；**底栏仍恒 3 项** | 中 |
 | **2.5d** | `feat/nav-rail` | 宽屏（`WindowWidthSizeClass.Expanded`）把底栏换成 `NavigationRail` | 宽屏可用；窄屏不变 | 中 |
 
-> **2.5a 不能跳过。** 没有它，2.5c 改的就是一个没有像素保护、且入口是 view model 的 3300 行文件 —— 和 2.4 之前 `TerminalPanel` 的处境一模一样，而那次的做法（先 refactor、再 baseline、分两个 PR）就是本仓的标准答案。
+> **2.5a ✅ 已完成**（`ChatScreen` 3 284 → 226 行，`ChatPanel` + `ChatUiState` + `ChatActions`）。它为什么不能跳过：没有它，2.5c 改的就是一个没有像素保护、且入口是 view model 的 3300 行文件 —— 和 2.4 之前 `TerminalPanel` 的处境一模一样，而那次的做法（先 refactor、再 baseline、分两个 PR）就是本仓的标准答案。
+>
+> **拆完才知道的一条**（详见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.5）：`ChatPanel` 收的是**整个 `UiState`** 而不是三十个扁平字段——拆分的目的是「边界上没有 view model」，不是「参数好看」。而最容易丢的是**没被测试覆盖的那条连线**：`vm.terminal` 忘了接，`seats` 就恒为 0，「关掉最后一个 shell 自动回 Chat」静默失效，**编译完全通过**。
 
 #### 7.3.4 2.5c 的接入点（已实测，不用再找）
 

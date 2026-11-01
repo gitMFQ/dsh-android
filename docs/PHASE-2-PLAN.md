@@ -99,7 +99,10 @@ private enum class ChatView(val label: String) {
 | **2.2c** ✅ | `test/baseline-terminal` | **已交付（PR #15）**。给 `TerminalPanel` 录 `terminal.png`（80×24、running、十几行输出） | `screenshots=8`（实测）；原有 7 张 sha256 逐字节相同 | 低（纯测试） |
 | **2.3** ✅ | `spike/miuix-adoption` | **已交付（PR #16）—— 结论：行。** 一个 `SwitchPreference` 套在 `DshTheme` 里，实测能画。两个必须带进后续 PR 的结论见 §2.2 下方 | `tests=1136`（不变）/ `screenshots=9` | 已完成 |
 | **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs`。**调色板适配器先落地**（`design/.../MiuixPalette.kt` + `DshTheme` 根部提供 `MiuixTheme`），**状态栏跟随 7 档外观**（`SystemBars.kt`），**ROUTER 移出目的地列表**（见 §2.4 结论）。底栏 **3 项固定**：Chat / Trajectory / Shell | 基线新增底栏 2 张；原有 9 张不变；`tests` 原数不减 + 新增 | 中 |
-| **2.5** | `feat/pager-navigation` | 4 目的地 pager + 弹簧切页；宽屏切 `NavigationRail` | 切页流畅；旋转保持 | 中 |
+| **2.5a** ✅ | `refactor/chat-stateless` | **已交付**。抽 `ChatPanel(state, actions, terminal)` 无状态壳 + `ChatUiState` / `ChatActions`；`ChatScreen` 退化为取 `StateFlow` 与拼参数的外壳（3 284 → 226 行）。见 §2.5 的三条结论 | `tests` 原数不减；11 张基线逐字节不变 | 中 |
+| **2.5b** | `test/baseline-chat` | 给 `ChatPanel` 录基线：空会话 hero、有消息的会话 | 新增 2~3 张；原有 11 张不变 | 低 |
+| **2.5c** | `feat/pager-navigation` | `HorizontalPager` 接管三个目的地；弹簧切页 | 切页流畅；旋转保持；底栏恒 3 项 | 中 |
+| **2.5d** | `feat/nav-rail` | 宽屏切 `NavigationRail` | 宽屏可用；窄屏不变 | 中 |
 | **2.6** | `feat/topbar-collapse` | TopBar 折叠 + 状态胶囊 | 滚动折叠无跳变 | 中 |
 | **2.7** | `feat/drawer-reskin` | 抽屉换装（搜索栏 / 分段列表 / 分组排序） | 基线 diff 符合预期 | 中 |
 | **2.8** | `feat/settings-reskin` | 设置页 + 关于页换装 | 项全部可达 | 中 |
@@ -178,6 +181,40 @@ private enum class ChatView(val label: String) {
 | `build.yml` 还在 JDK 17 | Debug APK 任务里 `:design:testDebugUnitTest` **25 个测试全挂**，`NoClassDefFoundError` | 2.4 把适配器搬进 `:design`，miuix 的 Java 21 字节码就上了**那个模块**的测试类路径。症状像「测试文件写坏了」，实际是 JDK 版本。已升 21；`release.yml` 留 17 并写明原因（它只 `assembleRelease`，D8 吃 21 字节码没问题） |
 
 > **可复用的判据**：一个测试类**整片**因 `NoClassDefFoundError` / `ExceptionInInitializerError` 挂掉时，先看 JDK 版本，再看测试本身。而「6 个测试按同一个方向失败」几乎总是**命名与语义反向**，不是六个独立的 bug。
+
+### 2.5 2.5a 的三条结论（2026-11-01）
+
+#### (1) 拆法：状态一坨、动作一堆，不要按字段拆
+
+`ChatPanel(state: ChatUiState, actions: ChatActions, terminal: @Composable (Modifier) -> Unit)`。
+
+`ChatUiState.ui` 是**整个 `UiState`**，不是三十个扁平字段。理由不是省事，是这次拆分的目的是「让屏幕可被拍照」，而不是「让参数好看」：`ChatPanel` 有 30 处从 `ui` 上取字段，逐字段拆开是一次**改名**，不是一次重构，而它带来的每个新参数都是下一次改屏时的一处冲突。真正需要「是数据」的是**边界**——面板里没有 `DshViewModel`、没有 `collectAsState`、没有 RPC——而不是每个字段单独成参。
+
+#### (2) 哪些东西必须留在壳里（这是判据，不是清单）
+
+判据一句话：**「是连接，还是连接的画法」**。留在 `ChatScreen` 的只有四类：
+
+| 留下的 | 为什么 |
+|---|---|
+| `collectAsStateWithLifecycle` 的十几个订阅 | 面板收的是值；订阅是「跟 host 说话」 |
+| 一秒走时器（`nowMs`） | 时钟是对着 host 时间线的一次**动作**；面板改成收 `elapsedMs: Long?` 一个数，截图才能定格 |
+| 首帧的 `loadHostSettings()` | 同上，是一次 RPC |
+| `TerminalScreen` | 它自己 collect `StateFlow` 并在 `LaunchedEffect` 里 `enterTerminal`/`leaveTerminal`，所以面板收的是**已组好的 Composable 槽位** `terminal(Modifier)`，而不是知道怎么造它 |
+
+> **踩到的一处**：第一版把 `terminal` 槽位写好了，却忘了把 `vm.terminal` 订阅接上——`val seats = terminal.terminals.size` 于是变成 `state.terminal.terminals.size`，而 `state.terminal` 恒为默认值。症状是「关掉最后一个 shell 不再自动回 Chat」，**编译完全通过**。这条和 §2.4 的「一条 import 指向哪个模块看不出来」是同一类：**拆分时最容易丢的是没被任何一个测试覆盖的那条连线**。
+
+#### (3) 「纯搬运」的证据是 diff，不是感觉
+
+做法：从 `git show HEAD:...ChatScreen.kt` 里取出原 body，用与改代码**同一套**正则做 `vm.` → `actions.` 替换，再逐行 diff 新 `ChatPanel` 的 body。剩下的差异应该**只有**下面六处，多一处就是手滑：
+
+1. 签名行（`fun ChatScreen(vm)` → `internal fun ChatPanel(state, actions, terminal)`）；
+2. 六个 `collectAsStateWithLifecycle` → 直接读 `state`；
+3. 首帧 `loadHostSettings` 移走；
+4. 一秒走时器 → `state.elapsedMs`；
+5. `TerminalScreen(...)` → `terminal(Modifier.weight(1f))`；
+6. `LaunchedEffect(ui.draftRestore)` → `LaunchedEffect(state.draftRestore)`。
+
+> 还有两处**故意的行为修正**，写在这里以免下一轮 review 当成漂移：`onSend` 拆成 `send(text, submitMode())`（会话内）与 `sendDeferred(text)`（hero），因为原代码 hero 用的是 `vm.send(text)` 的一参重载、会话内用的是两参——**两者不是同一个调用**，抽成一个 lambda 会把 hero 也套上 busy 策略。
 
 ### 2.1 执行中修正的四件事（2026-11-01）
 
