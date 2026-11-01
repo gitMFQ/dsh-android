@@ -117,6 +117,17 @@ class ScreenBaselineTest {
     @get:Rule
     val rule = createComposeRule()
 
+    /**
+     * A fixed wall clock for the fixtures that draw one.
+     *
+     * The transcript prints a time under each user message, so a fixture left at
+     * `time = 1_000L` renders "1971-1-1 00:00" — which is really "the epoch plus a
+     * second", and reads as a bug in the capture rather than in the fixture.
+     * 2026-10-31T09:00:00Z is arbitrary but *fixed*: a baseline may not depend on when
+     * it was recorded, the same rule the locale pin in `@Config` follows.
+     */
+    private val FIXTURE_CLOCK_MS = 1_793_446_800_000L
+
     private fun capture(name: String, content: @Composable () -> Unit) {
         rule.setContent {
             // Light, explicitly. `DshTheme()` defaults to `ThemeMode.SYSTEM`, which
@@ -618,7 +629,7 @@ class ScreenBaselineTest {
                             seq = 1,
                             id = "m1",
                             text = "Re-skin the shell, one screen at a time.",
-                            time = 1_000L,
+                            time = FIXTURE_CLOCK_MS,
                             fromPlugin = false,
                             summary = null,
                         ),
@@ -628,7 +639,7 @@ class ScreenBaselineTest {
                             step = 1,
                             reasoning = "",
                             text = "Starting with the frame: the bar, the header, the composer.",
-                            time = 2_000L,
+                            time = FIXTURE_CLOCK_MS + 61_000L,
                         ),
                         ChatEntry.ToolCall(
                             seq = 3,
@@ -637,14 +648,14 @@ class ScreenBaselineTest {
                             arguments = "{\"path\":\"/home/user/var/work/dsh-android/docs/PHASE-2-PLAN.md\"}",
                             result = "ok",
                             isError = false,
-                            time = 3_000L,
+                            time = FIXTURE_CLOCK_MS + 74_000L,
                             turn = 1,
                         ),
                         ChatEntry.UserMessage(
                             seq = 4,
                             id = "m2",
                             text = "Good. Then the drawer.",
-                            time = 4_000L,
+                            time = FIXTURE_CLOCK_MS + 132_000L,
                             fromPlugin = false,
                             summary = null,
                         ),
