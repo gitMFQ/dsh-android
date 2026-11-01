@@ -6,7 +6,7 @@
 
 ## 1. 一句话现状
 
-仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、1136 个功能测试全绿 + 9 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入且**已验证可用（见 2.3 闸门）**。
+仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、`tests=1165` 全绿 + 11 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入且**已验证可用（见 2.3 闸门），并在 2.4 真正用上（调色板适配器已接线）**。
 
 **换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**五个模块已经抽出来了**：`:core:model`（PR #6，413 个测试）、`:core:term`（PR #7，186 个测试，**纯 JVM —— 本仓第一次能在本机跑功能测试**）、`:core:config`（PR #8）、`:core:protocol`（PR #9，73 个测试 —— **并抓出第一个生产缺陷**，见 research/13 §2.11）、`:design`（PR #10，7 个测试）。
 
@@ -191,27 +191,88 @@
 
 一句话：浮动底栏 + pager / TopBar 折叠 / 抽屉换装 / 设置页换装 / Sheet 统一。
 
-> **⚠️ 这一段已完成，别再照着它开工。** 它列的四件事全部处理完了：基线已补到 9 张、miuix 已验证可用、窗口底色已修。**当前进度与下一步见下面的「立即开工」小节。**
+> **⚠️ 2.0–2.4 全部完成，别再照着旧文开工。当前进度与下一步见 §7.3。**
+>
+> 已完成：2.0（窗口底色跟随外观）→ 2.1（删 `KsuTokens.Space`）→ 2.2a/b/c（基线 + 抽 `TerminalPanel`）→ 2.3（miuix 闸门）→ **2.4（浮动底栏 + 调色板适配器 + 状态栏 + ROUTER 出目的地列表，PR #17）**。
+>
+> 剩余：2.5（pager / rail）→ 2.6（TopBar 折叠）→ 2.7（抽屉换装）→ 2.8（设置/关于换装）→ 2.9（Sheet 统一）。
 
-**已完成**：2.0（窗口底色）→ 2.1（删 `KsuTokens.Space`）→ 2.2a/b/c（基线 + 抽 `TerminalPanel`）→ 2.3（miuix 闸门）。
+### 7.3 阶段 2.5 开工清单（2.4 已合入 master）
 
-### 立即开工：2.4 浮动底栏
+> 写于 2026-11-01，2.4（PR #17）合入之后。**动手前先读 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.4 的三个结论**，那里解释了为什么调色板适配器、状态栏、ROUTER 都已经就位。
+>
+> 当前 master 实测：`git log --oneline -1` = `60d8ee2`；`src @Test = 1176`；`screenshots = 11`；CI 报 `tests=1165` / `screenshots=11`。
 
+#### 7.3.1 先确认三件事已经不用做了
+
+2.4 刻意把它们提前做完了，**2.5 不要再做一遍**：
+
+| 已经就位 | 位置 | 对 2.5 的意义 |
+|---|---|---|
+| 调色板适配器 | `design/.../MiuixPalette.kt` + `DshTheme` 根部套 `MiuixTheme` | 直接用 miuix 组件，**不要再写适配器**，也不要绕过 `DshTheme` 自己 `MiuixTheme(colors = …)` |
+| 状态栏跟随外观 | `design/.../SystemBars.kt` | 新屏不需要管状态栏 |
+| 底栏恒 3 项 | `ChatScreen.kt` 的 `BOTTOM_BAR_ITEMS` | **条目数是常量**，2.5 的 pager 必须沿用这个前提 |
+
+#### 7.3.2 依赖：两个都不用新引
+
+实测过，别凭直觉加依赖：
+
+- **`HorizontalPager` / `rememberPagerState` 已经在 `androidx.compose.foundation` 里**（`foundation.aar` 里 `androidx/compose/foundation/pager/` 共 61 个 class），而 `:app` 已经 `implementation("androidx.compose.foundation:foundation")`（`app/build.gradle.kts:183`）。**零新增依赖。**
+- **`material3-window-size-class` 已经作为 miuix 的传递依赖在类路径上**（`miuix-ui/0.9.4` 的 `metadataApiElements` 声明了 `org.jetbrains.compose.material3:material3-window-size-class:1.12.0-alpha03`）。要用 `calculateWindowSizeClass()` 就直接写，**不要**再 `implementation` 一遍。
+
+> 但要注意：传递来的那个是 **`org.jetbrains.compose` 版本（CMP）**，与 `androidx.compose` 的包名相同但坐标不同。若出现类冲突，显式声明 `androidx.compose.material3:material3-window-size-class`（BOM 2026.09.00 管版本）覆盖传递版本，**这是唯一可能需要加依赖的地方**。
+
+#### 7.3.3 开工顺序（单变量，每步一个 PR）
+
+| # | 分支 | 内容 | 验收 | 风险 |
+|---|---|---|---|---|
+| **2.5a** | `refactor/chat-stateless` | **先拆 `ChatScreen`**：`ChatScreen(vm: DshViewModel)` 是唯一入口（`ChatScreen.kt:191`），100+ 处 `ui.` 读取 + `LaunchedEffect` 里发网络。抽出 `ChatPanel(state, callbacks…)` 无状态壳，`ChatScreen` 退化为取 `StateFlow` 的外壳 | `tests` 原数不减；`screenshots` **11 张逐字节不变**（纯搬运） | 中 |
+| **2.5b** | `test/baseline-chat` | 给 `ChatPanel` 录基线：空会话 hero、有消息的会话、（可选）宽屏 | 新增 2~3 张；原有 11 张不变 | 低（纯测试） |
+| **2.5c** | `feat/pager-navigation` | `HorizontalPager` 接管 `ChatView` 三个目的地；弹簧切页；底栏点按 → `animateScrollToPage` | 切页流畅；旋转保持；**底栏仍恒 3 项** | 中 |
+| **2.5d** | `feat/nav-rail` | 宽屏（`WindowWidthSizeClass.Expanded`）把底栏换成 `NavigationRail` | 宽屏可用；窄屏不变 | 中 |
+
+> **2.5a 不能跳过。** 没有它，2.5c 改的就是一个没有像素保护、且入口是 view model 的 3300 行文件 —— 和 2.4 之前 `TerminalPanel` 的处境一模一样，而那次的做法（先 refactor、再 baseline、分两个 PR）就是本仓的标准答案。
+
+#### 7.3.4 2.5c 的接入点（已实测，不用再找）
+
+- **当前 body 分支**：`ChatScreen.kt:1003` `if (showFiles)` / `:1038` `else if (view == ChatView.TERMINAL)` / `:1058` `else if (view == ChatView.TRAJECTORY)` —— pager 要把后两个分支换成 page 内容，`showFiles` 留在 pager **之外**（它是覆盖面板，不是页）。
+- **底栏**：`ChatScreen.kt:1643-1653`，`selectedKey = view.name`，`onSelect` 现在直接 `view = it`；2.5c 要改成「同时 `pagerState.animateScrollToPage(index)`」，**并让滑动手势反向更新底栏选中态**（用 `pagerState.currentPage` 驱动，别维护两份状态）。
+- **状态保存**：`view` 是 `rememberSaveable(ui.currentSessionId)`（`:489`）。换 pager 后要么保留它作为唯一真相、pager 只是视图，要么把 `pagerState` 也 save。**别两个都存**，那会产生两个可写状态。
+
+#### 7.3.5 必须一起定的一件事：第 4 项要不要补
+
+现在底栏 3 项（Chat/Trajectory/Shell）。`ROADMAP.md` 原来的「4 目的地」是笔误，2.4 已改正。要补第 4 项，**正确做法是把 `showFiles` 提升成 `ChatView.FILES`**（它已经有整块 body + 自带返回，`ChatScreen.kt:1003-1036`），而不是把 Settings 塞进来（那是 sheet，属 2.8）。
+
+> 若做，建议并进 **2.5c**：pager 的页数、底栏项数、`ChatView` 枚举三者必须是同一个数字，分两个 PR 改必然有一边不同步。**若不做，就在 PR 描述里写一句「故意保持 3 项」**，别让它悬着。
+
+#### 7.3.6 本机怎么验（别用 `build.sh`）
+
+`:design` 的测试要 **JDK 21** 且要临时改 build-tools，`build.sh` 写死 17 跑不了。用已提交进仓库的脚本：
+
+```sh
+tools/localbuild.sh . :app:compileDebugKotlin
+tools/localbuild.sh . :design:testDebugUnitTest
 ```
-读 docs/PHASE-2-PLAN.md §2 的 2.4 那一行 + §2.2 的闸门结论
-git log --oneline -1                 # 应是 2.3 之后的 docs 提交
-git status --short                   # 必须干净
+
+- **`:app` 的测试源码仍然编不了**（aapt2，§0）—— 2.5 新增的 `:app` 测试（包括所有基线）只能由 CI 验。
+- 改完记得 `git status` 是干净的：脚本用 `trap` 还原 `buildToolsVersion`，漏还原会出现在 diff 里。
+- 一轮 `:design:testDebugUnitTest` 实测 **1.5–3 分钟**，比 CI 一轮 7 分钟省一半。
+
+#### 7.3.7 基线流程（2.4 刚走过，照做）
+
+```sh
+# 录基线：必须 --ref <分支>，否则跑的是 master 的 workflow 文件
+gh workflow run screenshots.yml --ref <分支> -f branch=<分支>
+gh run watch <run-id>
+gh run download <run-id> -n roborazzi-baselines -D /tmp/bl
 ```
 
-**2.4 的第一件事不是摆组件，是写调色板适配器。** 2.3 实测：给 `MiuixTheme` 不传参数，它会用自己的 `#3482FF`，而本 app 亮色强调色是 `#4176E6` —— 两个强调色同屏，且**不报错**。所以顺序是：
+**录完先逐张比对 sha256**，确认「该变的是预期的那几张、不该变的一张没动」，再提交。2.4 就是这么验的：11 张里 2 张新增、1 张（`miuix-probe.png`）按预期变化、8 张逐字节相同。
 
-1. `DshColors → miuix Colors` 的适配器（`Colors` 有 `copy`，可行；建议放 `:design`，本机可跑测试）
-2. 再写底栏本体（自绘玻璃层，**不引 `miuix-blur`**，它 minSdk 33）
-3. 底栏 4 项：**先把「`ROUTER` 要不要进底栏」定下来**（它现在是条件性的，进底栏会让项数在运行中变化 —— 计划 §1.3 明确说这是坏设计）
+#### 7.3.8 两条 2.4 留下的判据
 
-**验收**：`screenshots` 从 9 增加到「9 + 底栏屏」，且**原有 9 张里除被底栏挤到的那些之外必须不动**；`tests` 不减。
-
-PHASE-2-PLAN 里给了 2.4–2.9 的剩余序列和每步验收。
+1. **整个测试类因 `NoClassDefFoundError` / `ExceptionInInitializerError` 全挂 → 先查 JDK 版本**，不是测试写坏了。`build.yml` 曾因此在 JDK 17 上挂掉 25 个测试。
+2. **六个测试按同一方向失败 → 几乎总是命名与语义反向**，不是六个独立 bug。`SystemBars` 曾把 `isAppearanceLightStatusBars` 理解反了。
 
 ## 8. 给新会话的提醒
 
