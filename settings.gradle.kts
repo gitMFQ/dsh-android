@@ -26,13 +26,25 @@ pluginManagement {
     // top-level val shared with the block below — and it is cheap enough to state twice.
     val localMirrorsFirst = System.getenv("DSH_LOCAL_MIRRORS") == "1"
     repositories {
-        // Maven's own declaration order is what matters; Gradle walks it in order and
-        // stops at the first repository that has the artifact.
-        if (localMirrorsFirst) maven("https://maven.aliyun.com/repository/gradle-plugin")
+        // Declaration order is what Gradle walks, stopping at the first repository that has
+        // the artifact — so on this box all three mirrors go first, not just the
+        // `gradle-plugin` one. Leaving `google`/`public` out here looked harmless and was
+        // not: plugin *markers* that the `gradle-plugin` mirror does not carry fell through
+        // to `google()`, which stalls from here, and the build sat in configuration for ten
+        // minutes without touching the compiler.
+        if (localMirrorsFirst) {
+            maven("https://maven.aliyun.com/repository/google")
+            maven("https://maven.aliyun.com/repository/public")
+            maven("https://maven.aliyun.com/repository/gradle-plugin")
+        }
         google()
         mavenCentral()
         gradlePluginPortal()
-        if (!localMirrorsFirst) maven("https://maven.aliyun.com/repository/gradle-plugin")
+        if (!localMirrorsFirst) {
+            maven("https://maven.aliyun.com/repository/google")
+            maven("https://maven.aliyun.com/repository/public")
+            maven("https://maven.aliyun.com/repository/gradle-plugin")
+        }
     }
 }
 
