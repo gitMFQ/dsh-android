@@ -100,7 +100,7 @@ private enum class ChatView(val label: String) {
 | **2.3** ✅ | `spike/miuix-adoption` | **已交付（PR #16）—— 结论：行。** 一个 `SwitchPreference` 套在 `DshTheme` 里，实测能画。两个必须带进后续 PR 的结论见 §2.2 下方 | `tests=1136`（不变）/ `screenshots=9` | 已完成 |
 | **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs`。**调色板适配器先落地**（`design/.../MiuixPalette.kt` + `DshTheme` 根部提供 `MiuixTheme`），**状态栏跟随 7 档外观**（`SystemBars.kt`），**ROUTER 移出目的地列表**（见 §2.4 结论）。底栏 **3 项固定**：Chat / Trajectory / Shell | 基线新增底栏 2 张；原有 9 张不变；`tests` 原数不减 + 新增 | 中 |
 | **2.5a** ✅ | `refactor/chat-stateless` | **已交付**。抽 `ChatPanel(state, actions, terminal)` 无状态壳 + `ChatUiState` / `ChatActions`；`ChatScreen` 退化为取 `StateFlow` 与拼参数的外壳（3 284 → 226 行）。见 §2.5 的三条结论 | `tests` 原数不减；11 张基线逐字节不变 | 中 |
-| **2.5b** | `test/baseline-chat` | 给 `ChatPanel` 录基线：空会话 hero、有消息的会话 | 新增 2~3 张；原有 11 张不变 | 低 |
+| **2.5b** ✅ | `test/baseline-chat` | **已交付（PR #19）**。`chat-hero` + `chat-transcript` 两张，原有 **11 张 sha256 逐字节相同**。**录制过程中 CI 抓到两个真缺陷**，见 §2.6 | `screenshots=13` | 低 |
 | **2.5c** | `feat/pager-navigation` | `HorizontalPager` 接管三个目的地；弹簧切页 | 切页流畅；旋转保持；底栏恒 3 项 | 中 |
 | **2.5d** | `feat/nav-rail` | 宽屏切 `NavigationRail` | 宽屏可用；窄屏不变 | 中 |
 | **2.6** | `feat/topbar-collapse` | TopBar 折叠 + 状态胶囊 | 滚动折叠无跳变 | 中 |
@@ -215,6 +215,26 @@ private enum class ChatView(val label: String) {
 6. `LaunchedEffect(ui.draftRestore)` → `LaunchedEffect(state.draftRestore)`。
 
 > 还有两处**故意的行为修正**，写在这里以免下一轮 review 当成漂移：`onSend` 拆成 `send(text, submitMode())`（会话内）与 `sendDeferred(text)`（hero），因为原代码 hero 用的是 `vm.send(text)` 的一参重载、会话内用的是两参——**两者不是同一个调用**，抽成一个 lambda 会把 hero 也套上 busy 策略。
+
+### 2.6 2.5b 抓到的两个缺陷（2026-11-01）
+
+录一张截图失败了两次，**两次都不是测试写坏了**。这正是「先补基线再改屏」的价值：这两个 bug 都不是 2.5b 引入的，是本来就存在、只是**没有任何东西能把它们触发出来**。
+
+#### (1) `performMeasureAndLayout called during measure layout`
+
+`TailFollow` 的 rearm 调 `scrollToItem`，它**立即测量**。当这个 effect 跑在「正在做首次测量」的那次组合里时，等于在 `measureAndLayout` 内部再调一次，Compose 直接抛异常。
+
+这个排布不是测试造出来的，**是会话屏自己的**：`ChatPanel` 故意跨会话复用 `LazyListState`，并让它从「越界」开始（`initialFirstVisibleItemIndex = Int.MAX_VALUE`），这样首帧画的是最新一行；打开会话时 key 变了、rearm 跑了。**手机上之所以没炸，只是因为常规路径里列表那时已经布局完了** —— 截图 fixture 是冷的，正好撞上手机从未走过的那个分支。
+
+修法：`requestScrollToItem`，它设置「下一次测量要用的位置」而不是现在测。可观察行为一样，且这里完全不碰布局。回归测试用屏幕的真实形状写：**列表从越界开始、且里面已经有行**。
+
+#### (2) `Compose did not get idle after 86857 attempts in 60 SECONDS`
+
+transcript 分支调 `DiagFrames()`，那是一个包着 `withFrameNanos` 的 `while (true)`。在设备上不可见（帧回调本来就是 app 的日常），在 Compose 测试里是致命的：`waitForIdle` 等的是组合静止，而帧循环是**永久的下一帧请求**。
+
+**这比 2.5b 老得多**：`diag/DiagScroll.kt` 自己的文件头写着「Nothing here consumes a pointer event, holds a gesture, requests a frame, or writes Compose state」，而它是这个包里唯一违背这句话的东西。修法：只有 `ScrollDiag` 真的 attach 了才采样——app 在 `DshApplication.onCreate` 里 attach，测试 harness 不 attach。
+
+> **可复用的判据（2.5c 必读）**：`diag/` 里的东西必须**惰性**。任何 `withFrameNanos` / `rememberInfiniteTransition` 都会让 Compose 永不 idle —— 它不只是「测试环境的问题」，而是**任何想把这一屏拍下来的尝试都会失败**。同理，pager 的弹簧动画在静止时必须是静止的，否则 `chat-*` 这两张基线会变成「录一次失败一次」。
 
 ### 2.1 执行中修正的四件事（2026-11-01）
 
