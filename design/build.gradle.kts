@@ -82,6 +82,19 @@ dependencies {
     // modules are the app's business, not the theme's.
     api("top.yukonga.miuix.kmp:miuix-ui:0.9.4")
 
+    // The liquid glass. `miuix-blur` declares **minSdk 33** (its own AndroidManifest says so),
+    // while this app supports 26 — so the dependency is admitted under an explicit
+    // `tools:overrideLibrary` in `:app`'s manifest rather than by pretending the floor moved.
+    //
+    // That is only honest because every call site is gated: the backdrop APIs are reached
+    // exclusively through `LiquidGlass`, which falls back to a translucent fill with a
+    // hairline stroke below API 33 (see `ui/glass/LiquidGlass.kt`). Nothing here is on a
+    // path API 26-32 can execute.
+    //
+    // It is `api` because the glass composables this module now owns take `Backdrop` in
+    // their signatures, and a consumer cannot call them without naming that type.
+    api("top.yukonga.miuix.kmp:miuix-blur:0.9.4")
+
     // `WindowCompat.getInsetsController` — the system bars' icon appearance has three
     // different spellings across API 26..30+, and this is the one that covers all of them.
     // `implementation`, not `api`: no signature this module publishes mentions androidx.core,
