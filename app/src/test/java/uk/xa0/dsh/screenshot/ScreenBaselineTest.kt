@@ -21,16 +21,21 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import uk.xa0.dsh.AppPhase
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.PendingAttachment
+import uk.xa0.dsh.PendingSessionTarget
 import uk.xa0.dsh.PermissionOption
 import uk.xa0.dsh.TerminalPhase
 import uk.xa0.dsh.TerminalUiState
+import uk.xa0.dsh.UiState
 import uk.xa0.dsh.data.ThemeMode
+import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.FileTouch
 import uk.xa0.dsh.model.SessionFile
 import uk.xa0.dsh.model.SessionFiles
+import uk.xa0.dsh.model.SessionHeader
 import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.model.WorkspaceListPhase
@@ -42,6 +47,9 @@ import uk.xa0.dsh.term.TerminalInfo
 import uk.xa0.dsh.term.TerminalSeat
 import uk.xa0.dsh.term.TerminalState
 import uk.xa0.dsh.ui.AboutContent
+import uk.xa0.dsh.ui.ChatActions
+import uk.xa0.dsh.ui.ChatPanel
+import uk.xa0.dsh.ui.ChatUiState
 import uk.xa0.dsh.ui.MiuixProbe
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.PermissionSheet
@@ -71,8 +79,13 @@ import uk.xa0.dsh.ui.theme.DshTheme
  * and no clock, are captured. A screen that needs a `DshViewModel` would drag the
  * whole host connection into a screenshot test and produce a baseline that
  * changes whenever the connection does — that is a flaky test wearing a
- * screenshot's clothes. `ChatScreen` is therefore deliberately absent; it is the
- * next baseline to add, once it can be driven from a fixture.
+ * screenshot's clothes.
+ *
+ * The conversation screen used to be in that category, and 2.5a is what took it
+ * out: `ChatPanel` takes data and lambdas instead of a view model, so the two
+ * `chat-*` captures at the end of this file can drive it from a fixture. They are
+ * the reason that refactor was worth doing at all — everything else here pins
+ * chrome around the screen readers actually live in.
  *
  * ## What a passing diff does and does not mean
  *
@@ -532,6 +545,117 @@ class ScreenBaselineTest {
                 onOrderByUpdated = {},
                 onShowArchived = {},
                 onCollapsedSections = {},
+            )
+        }
+    }
+
+    /**
+     * The conversation screen's hero — the state a reader meets on a new session.
+     *
+     * This is the first baseline of the screen readers spend the most time on, and it
+     * only exists because 2.5a took the view model out of it: [ChatPanel] takes data and
+     * lambdas, so a fixture can hold it still. Before that, the only protection this
+     * screen had was the functional suite — which asserts semantics, not layout.
+     *
+     * The bar is drawn only when the screen is *not* the hero (a session with nothing in
+     * it has no Trajectory to show and no Shell to open), so its absence here is the
+     * expected picture rather than a missing element. The bar has its own two captures.
+     */
+    @Test
+    fun chatHero() {
+        capture("chat-hero") {
+            ChatPanel(
+                state = ChatUiState(
+                    ui = UiState(
+                        phase = AppPhase.READY,
+                        pendingSession = PendingSessionTarget(cwd = "/home/user/var/work/dsh-android"),
+                    ),
+                ),
+                actions = ChatActions(),
+                terminal = { Modifier.fillMaxSize() },
+            )
+        }
+    }
+
+    /**
+     * The conversation screen with a transcript: two turns, a tool call, the composer
+     * and the bar.
+     *
+     * The rows are the plainest ones available on purpose — a user message, an assistant
+     * message, a tool call that answered, the next user message. Anything richer
+     * (markdown, a diff, an image) would pin *that row's* rendering, which has its own
+     * tests; what this capture is for is the **frame**: the header, the transcript's
+     * insets and spacing, the composer's seat, the pills and the floating bar, and the
+     * relationship between them.
+     *
+     * `elapsedMs` stays null so the running-turn status row is absent: a capture with a
+     * live clock in it would change every time it ran.
+     */
+    @Test
+    fun chatTranscript() {
+        capture("chat-transcript") {
+            ChatPanel(
+                state = ChatUiState(
+                    ui = UiState(
+                        phase = AppPhase.READY,
+                        currentSessionId = "s1",
+                        sessions = listOf(
+                            SessionItem(
+                                id = "s1",
+                                title = "Re-skin the shell",
+                                cwd = "/home/user/var/work/dsh-android",
+                                updatedAt = 1_000L,
+                                running = false,
+                                isSubagent = false,
+                            ),
+                        ),
+                    ),
+                    entries = listOf(
+                        ChatEntry.UserMessage(
+                            seq = 1,
+                            id = "m1",
+                            text = "Re-skin the shell, one screen at a time.",
+                            time = 1_000L,
+                            fromPlugin = false,
+                            summary = null,
+                        ),
+                        ChatEntry.AssistantMessage(
+                            seq = 2,
+                            turn = 1,
+                            step = 1,
+                            reasoning = "",
+                            text = "Starting with the frame: the bar, the header, the composer.",
+                            time = 2_000L,
+                        ),
+                        ChatEntry.ToolCall(
+                            seq = 3,
+                            callId = "c1",
+                            name = "read",
+                            arguments = "{\"path\":\"/home/user/var/work/dsh-android/docs/PHASE-2-PLAN.md\"}",
+                            result = "ok",
+                            isError = false,
+                            time = 3_000L,
+                            turn = 1,
+                        ),
+                        ChatEntry.UserMessage(
+                            seq = 4,
+                            id = "m2",
+                            text = "Good. Then the drawer.",
+                            time = 4_000L,
+                            fromPlugin = false,
+                            summary = null,
+                        ),
+                    ),
+                    header = SessionHeader(
+                        id = "s1",
+                        cwd = "/home/user/var/work/dsh-android",
+                        createdAt = 0L,
+                        agentPreset = null,
+                        parentSession = null,
+                    ),
+                ),
+                actions = ChatActions(),
+                terminal = { Modifier.fillMaxSize() },
             )
         }
     }
