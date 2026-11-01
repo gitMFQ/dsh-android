@@ -10,9 +10,13 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.scroll.HarnessApplication
+import uk.xa0.dsh.ui.theme.MonetPalette
 import uk.xa0.dsh.ui.theme.SystemBars
+import uk.xa0.dsh.ui.theme.dshPalette
 
 /**
  * The system bars' icon appearance follows the appearance the reader chose, not the
@@ -159,6 +163,39 @@ class SystemBarsTest {
             SystemBars.apply(activity, ThemeMode.AMOLED, systemDark = false)
             assertFalse(lightBackground(activity))
         }
+    }
+
+    @Test
+    fun theNavigationBarColourIsThePalettesBaseSurface() {
+        // API 26–28 paint the navigation bar from a colour this app supplies, because the
+        // platform computes its own scrim from the *system's* night setting — the same bug
+        // as the icons, one layer down. The colour must therefore be the palette's base,
+        // which is the surface the rest of the chrome already uses.
+        for (mode in ThemeMode.all) {
+            for (systemDark in listOf(true, false)) {
+                val expected = dshPalette(mode, systemDark).bgBase.toArgb()
+                assertEquals(
+                    "navigation bar colour for $mode (systemDark=$systemDark)",
+                    expected,
+                    SystemBars.navigationBarColor(mode, systemDark),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun theNavigationBarColourFollowsAMonetWallpaper() {
+        // A palette-derived colour, not a constant: Monet moves the base surface, so the
+        // bar has to move with it or an API 26–28 phone on a wallpaper theme would get a
+        // strip that matches nothing.
+        val wallpaper = MonetPalette(
+            androidx.compose.material3.darkColorScheme(
+                background = Color(0xFF123456),
+            ),
+        )
+        val expected = dshPalette(ThemeMode.MONET_DARK, systemDark = true, monet = wallpaper)
+            .bgBase.toArgb()
+        assertEquals(expected, SystemBars.navigationBarColor(ThemeMode.MONET_DARK, true, wallpaper))
     }
 
     @Test

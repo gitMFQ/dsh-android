@@ -1,6 +1,8 @@
 package uk.xa0.dsh.ui.theme
 
 import android.app.Activity
+import android.os.Build
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.view.WindowCompat
 
 /**
@@ -71,6 +73,15 @@ object SystemBars {
         !dshPalette(themeMode, systemDark, monet).isDark
 
     /**
+     * The colour the navigation bar is painted on API 26–28, where the platform still lets
+     * an app set one. Split out so the choice is testable without a window, and because it
+     * is the *base surface* rather than a new token: the bar sits on the same colour as the
+     * chrome above it, which is what the app already draws behind the status bar.
+     */
+    fun navigationBarColor(themeMode: String, systemDark: Boolean, monet: MonetPalette? = null): Int =
+        dshPalette(themeMode, systemDark, monet).bgBase.toArgb()
+
+    /**
      * Apply the palette's icon appearance to [activity]'s system bars.
      *
      * [systemDark] is supplied for the same reason [WindowBackground.apply] takes it: a
@@ -82,8 +93,14 @@ object SystemBars {
         themeMode: String,
         systemDark: Boolean = WindowBackground.isSystemDark(activity),
     ) {
-        val monet = monetPalette(activity, themeMode, systemDark)
-        apply(activity, lightBackground(themeMode, systemDark, monet))
+        // No `monetPalette(...)` here, deliberately, and it is not an oversight:
+        // `ThemeMode.isDark` decides the light/dark side from the appearance alone, and
+        // `toMonet` never changes `isDark`. Passing wallpaper colours would build a
+        // `dynamicColorScheme` on the main thread during `onCreate` to reach the same
+        // answer. `WindowBackground.apply` does need it — it paints a Monet *colour* —
+        // and that is the difference between the two calls.
+        val palette = dshPalette(themeMode, systemDark)
+        apply(activity, lightBackground = !palette.isDark, navigationBarColor = palette.bgBase.toArgb())
     }
 
     /**
@@ -94,14 +111,43 @@ object SystemBars {
      * API 30 (a `View` system-UI flag), on 30+ (`WindowInsetsController`), and the compat
      * wrapper is the only one that covers all of them — this app's minSdk is 26.
      */
-    fun apply(activity: Activity, lightBackground: Boolean) {
+    fun apply(
+        activity: Activity,
+        lightBackground: Boolean,
+        /**
+         * Ignored above API 28, where the platform owns the navigation bar. Defaulted so a
+         * caller that only cares about the icons (a preview, a test of the flag itself)
+         * does not have to invent a colour.
+         */
+        navigationBarColor: Int = android.graphics.Color.TRANSPARENT,
+    ) {
         val window = activity.window ?: return
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = lightBackground
-            // The navigation bar gets the same answer for the same reason. It is not
-            // painted by this app (enableEdgeToEdge's scrim is under it), but its icons
-            // were wrong in exactly the same four appearances.
+            // The navigation bar gets the same answer for the same reason: its icons were
+            // wrong in exactly the same four appearances. Its *colour* is a separate
+            // question, answered below, and only on the API levels where this app owns it.
             isAppearanceLightNavigationBars = lightBackground
+        }
+        // **API 26–28: the navigation bar needs its colour set, and only there.**
+        //
+        // This is the same bug as the icons, hiding one layer down, and it is the only
+        // place in this class where the *colour* has to be written rather than only the
+        // appearance flag. Above API 28 the platform gives the bar a transparent scrim
+        // whatever the appearance is (`SystemBarStyle.getScrimWithEnforcedContrast`
+        // returns 0 when `nightMode == 0`, which is what the no-argument
+        // `enableEdgeToEdge()` passes), so the icon flag is the only authority — but on
+        // 26–28 the scrim is computed from `auto(DefaultLightScrim, DefaultDarkScrim)`
+        // against the **system's** night setting. Forcing Dark on a light-mode phone then
+        // painted a near-white bar (`0xE6FFFFFF`) behind light icons.
+        //
+        // Setting it to the palette's own base puts the bar back on the same surface as
+        // the rest of the chrome, which is what the app already draws behind the status
+        // bar. Guarded to <29 because above that the platform owns the bar and this
+        // call would be a no-op at best.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            @Suppress("DEPRECATION")
+            window.navigationBarColor = navigationBarColor
         }
     }
 }
