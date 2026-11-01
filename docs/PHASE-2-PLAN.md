@@ -149,6 +149,10 @@ private enum class ChatView(val label: String) {
 
 修法：`design/.../SystemBars.kt`，用同一个 `dshPalette` 推出 `iconsAreLight`，经 `WindowCompat` 写 `isAppearanceLightStatusBars` / `…NavigationBars`；`MainActivity` 在 `onCreate`（Compose 之前）和 `LaunchedEffect(themeMode, systemDark)` 里各调一次。**颜色不用设**：API 35+ `setStatusBarColor` 已是 no-op，而 app 根部 `Box` 本来就铺 `bgBase` + `statusBarsPadding()`，状态栏显示的已经是调色板底色。
 
+
+> **补记（审计后追加）**：上面这条在 API 26–28 上**不止图标**，导航栏的**底色**也一样错 —— 那三档平台用 `auto(DefaultLightScrim, DefaultDarkScrim)` 按**系统**夜间设置算 scrim，于是强制 Dark + 系统亮 → 近白条（`0xE6FFFFFF`）配浅色图标，还是同一个 bug 换了个位置。29+ 上 `nightMode == 0` 让 `getScrimWithEnforcedContrast` 直接返回 0，所以上面那几档是透明的、图标标志才是唯一权威。修法：`SystemBars` 在 `SDK_INT < Q` 时显式写 `window.navigationBarColor = palette.bgBase`（`themes.xml` 救不了，`enableEdgeToEdge` 会在 `onCreate` 里覆盖它）。
+>
+> 另外 `SystemBars.apply` **不传** `monetPalette`：`ThemeMode.isDark` 只由外观决定、`toMonet` 从不改 `isDark`，传壁纸色只会在 `onCreate` 主线程白建一次 `dynamicColorScheme`。`WindowBackground.apply` 则确实需要它（它画的是 Monet **颜色**）—— 这就是两个调用唯一的差别。
 > 基线看不到它 —— 状态栏不是 Compose 树的一部分，和 2.0 的窗口是同一个结构性盲区。所以补的是 `SystemBarsTest`，不是截图。
 
 #### (3) ROUTER 去留：**移出目的地列表，改成头部 seat + sheet**
@@ -162,6 +166,18 @@ private enum class ChatView(val label: String) {
 结果：`ChatView` 只剩 CHAT / TRAJECTORY / TERMINAL，底栏恒 3 项；`shownView` 及其 12 处下游、`BASE_VIEWS`/`ALL_VIEWS`、`ViewTabs` 整体删除（净减约 75 行）。
 
 > **与 ROADMAP §阶段 2 的对账**：那里写「4 目的地 pager（Chat/Trajectory/Files/Settings）」是**待修正的笔误** —— 代码里 Files 是 `showFiles` 面板、Settings 是 `showSettings` 的 sheet，都不是目的地。第 4 项若要补，正确候选是把 `showFiles` 提升成 `ChatView.FILES`，**那是独立 PR**（本 PR 保持 3 项固定，不混两个变量）。
+
+
+#### (4) CI 抓到的两件事，本机抓不到
+
+这台机器编不了 `:app` 的测试源码（aapt2，`BUILD-AND-CI.md` §0），所以第一版是带着未验证的 `SystemBarsTest` 推上去的。CI 红了，而且红得对：
+
+| 缺陷 | 表现 | 根因 |
+|---|---|---|
+| `SystemBars` 的极性反了 | `SystemBarsTest` 6/9 失败 | `isAppearanceLightStatusBars = true` 说的是**「这条栏是浅色，所以图标画深色」** —— 它描述的是**背景**。按「图标是浅色」去理解就会把调色板取反，于是修出了**方向相反的同一个 bug**。现已改名 `lightBackground`，把语义放进名字，并逐档断言方向而不是让它隐含 |
+| `build.yml` 还在 JDK 17 | Debug APK 任务里 `:design:testDebugUnitTest` **25 个测试全挂**，`NoClassDefFoundError` | 2.4 把适配器搬进 `:design`，miuix 的 Java 21 字节码就上了**那个模块**的测试类路径。症状像「测试文件写坏了」，实际是 JDK 版本。已升 21；`release.yml` 留 17 并写明原因（它只 `assembleRelease`，D8 吃 21 字节码没问题） |
+
+> **可复用的判据**：一个测试类**整片**因 `NoClassDefFoundError` / `ExceptionInInitializerError` 挂掉时，先看 JDK 版本，再看测试本身。而「6 个测试按同一个方向失败」几乎总是**命名与语义反向**，不是六个独立的 bug。
 
 ### 2.1 执行中修正的四件事（2026-11-01）
 
