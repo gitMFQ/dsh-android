@@ -146,7 +146,7 @@ import uk.xa0.dsh.model.turnOrNull
 import uk.xa0.dsh.ui.agentPresetLabel
 import uk.xa0.dsh.ui.components.ApprovalCard
 import uk.xa0.dsh.ui.components.AssistantMessageRow
-import uk.xa0.dsh.ui.components.BottomBarItem
+import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.CommandEntry
 import uk.xa0.dsh.ui.components.CommandMenu
 import uk.xa0.dsh.ui.components.Composer
@@ -155,7 +155,7 @@ import uk.xa0.dsh.ui.components.DotState
 import uk.xa0.dsh.ui.components.DshMark
 import uk.xa0.dsh.ui.components.ExplorerWiring
 import uk.xa0.dsh.ui.components.FilesPanel
-import uk.xa0.dsh.ui.components.FloatingBottomBar
+import uk.xa0.dsh.ui.nav.FloatingBottomBar
 import uk.xa0.dsh.ui.components.GoalBar
 import uk.xa0.dsh.ui.components.JobsSeat
 import uk.xa0.dsh.ui.components.JobsSheet

@@ -7,8 +7,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChatBubble
-import androidx.compose.material.icons.rounded.Terminal
-import androidx.compose.material.icons.rounded.Timeline
+import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -57,10 +58,10 @@ import uk.xa0.dsh.ui.PermissionSheet
 import uk.xa0.dsh.ui.SessionsDrawer
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.TerminalPanel
-import uk.xa0.dsh.ui.components.BottomBarItem
+import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.Composer
 import uk.xa0.dsh.ui.components.FilesPanel
-import uk.xa0.dsh.ui.components.FloatingBottomBar
+import uk.xa0.dsh.ui.nav.FloatingBottomBar
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -479,18 +480,21 @@ class ScreenBaselineTest {
     }
 
     /**
-     * The floating bottom bar that replaced the top `ViewTabs` strip (2.4).
+     * The floating bottom bar, now the vendored glass one (3.2).
      *
-     * Captured on its own because it is the one piece of 2.4 that is new chrome rather
-     * than a re-skin, and because the property it must hold is a *layout* property that
-     * no unit test can see: **the item count is fixed**. The three captures below are
-     * deliberately all of them — a bar whose fourth item appeared for a local model would
-     * show up here as two different widths for the same bar.
+     * Captured on its own because the property it must hold is a *layout* property that
+     * no unit test can see: **the item count is fixed**. The two captures below are
+     * deliberately all of it — a bar whose item appeared or disappeared for one session
+     * would show up here as two different widths for the same bar.
      *
-     * The three destinations are Chat / Trajectory / Shell. There is no fourth: the
-     * llama.cpp router panel left the destination list in this PR, because a conditional
-     * item is exactly what makes a bar's width change under the reader's thumb. See
-     * `ChatScreen`'s `ChatView` and `docs/PHASE-2-PLAN.md` §2.4.
+     * The four destinations are Chat / Files / Plugins / Me (3.3). There is no
+     * conditional one: the llama.cpp router panel left the destination list in 2.4,
+     * because a conditional item is exactly what makes a bar's width change under the
+     * reader's thumb. See `Destination` in `ui/ShellTabs.kt`.
+     *
+     * The second capture moves the highlight to a seat that is *not* the first, because
+     * a single capture would pin the unselected seats and leave the active tint — the
+     * whole affordance — unverified.
      */
     @Test
     fun floatingBottomBar() {
@@ -498,8 +502,9 @@ class ScreenBaselineTest {
             FloatingBottomBar(
                 items = listOf(
                     BottomBarItem("CHAT", "Chat", Icons.Rounded.ChatBubble),
-                    BottomBarItem("TRAJECTORY", "Trajectory", Icons.Rounded.Timeline),
-                    BottomBarItem("TERMINAL", "Shell", Icons.Rounded.Terminal),
+                    BottomBarItem("FILES", "Files", Icons.Rounded.Folder),
+                    BottomBarItem("PLUGINS", "Plugins", Icons.Rounded.Extension),
+                    BottomBarItem("ME", "Me", Icons.Rounded.Person),
                 ),
                 selectedKey = "CHAT",
                 onSelect = {},
@@ -513,15 +518,16 @@ class ScreenBaselineTest {
      * active tint unverified — and the active tint is the whole affordance.
      */
     @Test
-    fun floatingBottomBarTrajectorySelected() {
-        capture("bottom-bar-trajectory") {
+    fun floatingBottomBarFilesSelected() {
+        capture("bottom-bar-files") {
             FloatingBottomBar(
                 items = listOf(
                     BottomBarItem("CHAT", "Chat", Icons.Rounded.ChatBubble),
-                    BottomBarItem("TRAJECTORY", "Trajectory", Icons.Rounded.Timeline),
-                    BottomBarItem("TERMINAL", "Shell", Icons.Rounded.Terminal),
+                    BottomBarItem("FILES", "Files", Icons.Rounded.Folder),
+                    BottomBarItem("PLUGINS", "Plugins", Icons.Rounded.Extension),
+                    BottomBarItem("ME", "Me", Icons.Rounded.Person),
                 ),
-                selectedKey = "TRAJECTORY",
+                selectedKey = "FILES",
                 onSelect = {},
             )
         }
