@@ -8,7 +8,8 @@
 |---|---|---|
 | 1 | ★ [HANDOFF-NEXT.md](HANDOFF-NEXT.md) | **新会话先读这个**：一句话现状、已完成、约束、下一步 |
 | 2 | ★ [ROADMAP.md](ROADMAP.md) | 任务板：阶段 0.5（工具链）→ 1 → 2 → 3 → 3.5（i18n）→ 4 |
-| 3 | ★ [PHASE-2-PLAN.md](PHASE-2-PLAN.md) | **阶段 2 可执行计划**：2.0–2.9 的 PR 序列、每步验收、开工检查清单 |
+| 3 | ★ [PHASE-3-PLAN.md](PHASE-3-PLAN.md) | **当前计划（阶段 3）**：GPL 套件接管外壳、4 目的地 IA、移植清单、三档降级 |
+| 3b | [PHASE-2-PLAN.md](PHASE-2-PLAN.md) | 阶段 2 历史计划与结论（2.0–2.5 已完成，2.6 被阶段 3 取代） |
 | 4 | ★ [research/10-version-lock.md](research/10-version-lock.md) | 版本锁：AGP 9.3.1 / Gradle 9.5.0 / Kotlin 2.4.21 / SDK 37 / miuix 0.9.4 |
 | 5 | [PLAN.md](PLAN.md) | 总纲：fork 决策、协议事实、里程碑、风险 |
 
@@ -18,7 +19,8 @@
 |---|---|
 | [DESIGN.md](DESIGN.md) | 设计系统落地：信息架构、组件取舍、与 fork 的冲突点 |
 | ★ [DESIGN-TOKENS.md](DESIGN-TOKENS.md) | 设计规范：实测刻度、`KsuTokens`、底栏行为、Miuix 分工 |
-| [FORK-SURGERY.md](FORK-SURGERY.md) | fork 改造：改包名清单、模块拆分、MPL 义务 |
+| [FORK-SURGERY.md](FORK-SURGERY.md) | fork 改造：改包名清单、模块拆分、MPL→GPL 义务 |
+| [../NOTICE.md](../NOTICE.md) | **许可与来源**：为什么整仓转 GPL-3.0、GPL 代码复用规则 |
 | [BUILD-AND-CI.md](BUILD-AND-CI.md) | 构建与 CI（本机 aarch64 不能打包） |
 | [I18N.md](I18N.md) | 多语言：债务量化、20 条 DSH 术语表、抽取顺序 |
 

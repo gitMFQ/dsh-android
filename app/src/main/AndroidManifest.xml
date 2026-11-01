@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- miuix-blur declares minSdk 33; this app's floor is 26. The override is deliberate and
+         safe only because every blur call site is version-gated inside `:design`'s
+         `LiquidGlass` — below 33 nothing loads that package's classes. See NOTICE.md and
+         docs/PHASE-3-PLAN.md §1. -->
+    <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
