@@ -27,9 +27,25 @@
 | **31–32** | 半透明填充 + 1dp 描边（无背景模糊） | `Modifier.blur` 只能糊自身，做不出 backdrop，所以退到描边 |
 | **26–30** | 不透明 `bgLayer1` + 1dp 描边 | 纯色浮层 |
 
-> **判据**：三档都必须是「同一套代码的三个分支」，不是三份实现。所有 `miuix.kmp.blur` 的符号只允许出现在
-> `:design` 的 `glass/` 包内，且调用点必须在 `if (Build.VERSION.SDK_INT >= 33)` 之后 —— 否则 API 26 设备会在
-> 加载类时崩溃（`NoClassDefFoundError`），而这在编译期完全看不出来。
+> **判据**：三档都必须是「同一套代码的三个分支」，不是三份实现。
+>
+> **纪律（3.2 修订过一次措辞，别照旧文抄）**：所有 `miuix.kmp.blur` 的符号只允许出现在 **`:design` 模块**；
+> 其中**会真正执行**那些代码的只有两处 ——
+>
+> 1. `design/src/main/java/uk/xa0/dsh/ui/glass/`（材质与 backdrop 记录），
+> 2. `design/src/main/java/uk/xa0/dsh/ui/nav/FloatingBottomBarLiquid.kt`（底栏的液态档）。
+>
+> `:app` **一个 blur 类型都不 naming**：它只经 `rememberGlassBarBackdrop()` 拿一个不透明句柄，
+> 再用 `Modifier.glassBarLayer(...)` 把它挂到内容上。这是 3.2b 特意加的缝，
+> 否则「app 不 naming blur 类型」这条纪律会在最难审计的那个调用点被破坏。
+>
+> **为什么措辞改过**：原文写的是「只允许出现在 `glass/` 包内」。3.2 之后 `FloatingBottomBarLiquid.kt`
+> 在 `ui/nav/` 里（它讲的是导航栏，不是通用玻璃材质），按字面它违反原文、按意图它不违反。
+> 与其为了迁就措辞搬文件、连带把 `FloatingBarState`/`BarHeight` 一批 internal 暴露，
+> 不如把纪律说准：**约束的是「谁执行」，不是「谁出现」**。
+>
+> **真正的运行时风险是执行而不是名字**：依赖本来就打进 APK，所以类在任何设备上都存在；
+> API 26 上会崩的是「调用了只能在 33+ 跑的东西」，而这在编译期看不出来。
 
 ## 3. 新的信息架构（用户 2026-11-01 定稿）
 

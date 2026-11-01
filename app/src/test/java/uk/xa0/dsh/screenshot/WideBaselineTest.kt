@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -24,6 +25,7 @@ import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.ui.ChatActions
 import uk.xa0.dsh.ui.ChatPanel
 import uk.xa0.dsh.ui.ChatUiState
+import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.theme.DshTheme
 
 /**
@@ -78,12 +80,19 @@ class WideBaselineTest {
     private fun capture(name: String, content: @Composable () -> Unit) {
         rule.setContent {
             DshTheme(themeMode = ThemeMode.LIGHT) {
+                // Glass off, same as the phone fixture — and this surface needs the
+                // argument spelled out too, because it *does* compose a backdrop: on a
+                // wide window the bar is replaced by the rail, but the pager still
+                // records into the layer the bar would have sampled. See
+                // `ScreenBaselineTest.capture` for why the switch exists at all.
+                CompositionLocalProvider(LocalGlassEnabled provides false) {
                 Box(
                     Modifier
                         .fillMaxSize()
                         .background(DshTheme.colors.bgBase),
                 ) {
                     content()
+                }
                 }
             }
         }
