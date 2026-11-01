@@ -151,6 +151,12 @@ class InteractiveHighlight(
  * same reason `ui/glass/LiquidGlass.kt` does: this predicate must be answerable *without*
  * loading the miuix-blur classes, or an API 26 device fails inside the very check that was
  * meant to protect it. The two agree, because that helper is itself an API-level test.
+ *
+ * Deliberately *not* folded into `ui/glass/GlassBarBackdrop.kt#glassBarSupported`: that one asks
+ * a different question. It also requires `isRenderEffectSupported()`, because a backdrop is drawn
+ * through a RenderEffect, while this shader is drawn through a plain `ShaderBrush` and needs only
+ * the API-33 `RuntimeShader` class to exist. Two questions, two predicates — collapsing them would
+ * make the highlight go flat on a device whose backdrop still works.
  */
 @SuppressLint("NewApi")
 internal fun canRunShader(): Boolean =

@@ -146,6 +146,8 @@ import uk.xa0.dsh.model.turnOrNull
 import uk.xa0.dsh.ui.agentPresetLabel
 import uk.xa0.dsh.ui.components.ApprovalCard
 import uk.xa0.dsh.ui.components.AssistantMessageRow
+import uk.xa0.dsh.ui.glass.glassBarLayer
+import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.CommandEntry
 import uk.xa0.dsh.ui.components.CommandMenu
@@ -538,6 +540,16 @@ internal fun ChatPanel(
     }
     var chatView by rememberSaveable(ui.currentSessionId) { mutableStateOf(ChatView.CHAT) }
     val goToView: (ChatView) -> Unit = { chatView = it }
+
+    // The bar's material needs something to sample (3.2b).
+    //
+    // The handle is opaque on purpose: this file must not name a miuix-blur type, or the
+    // rule in NOTICE.md that keeps those names inside `:design` would be broken by the
+    // one caller that is hardest to audit. Null means "this platform paints the flat
+    // material", and both ends of the wiring below turn that into a no-op — so the same
+    // two lines run on every device and the platform decides how much of them means
+    // anything. See `ui/glass/GlassBarBackdrop.kt` for the capability test.
+    val glassBackdrop = rememberGlassBarBackdrop()
     // A session switch returns to the conversation *and* to its transcript view, which is
     // what re-creating the old `rememberSaveable(ui.currentSessionId)` on the pager used
     // to do at both levels.
@@ -1140,7 +1152,11 @@ internal fun ChatPanel(
                 // the transcript. A shared saver would file all four under one key and
                 // they would overwrite each other.
                 key = { page -> Destination.entries[page].name },
-                modifier = Modifier.weight(1f),
+                // `glassBarLayer` records this subtree into the backdrop the bar samples.
+                // On the pager rather than on the Column because the *bar itself* must not
+                // be part of what the bar blurs: the pager is the content behind it, and
+                // nothing else in this column is.
+                modifier = Modifier.weight(1f).glassBarLayer(glassBackdrop),
                 // Deliberately no `beyondViewportPageCount`: a page off screen is not
                 // composed. Shell holds a live terminal canvas and Trajectory a full
                 // derivation of the transcript; paying for both while the reader looks
@@ -1842,6 +1858,7 @@ internal fun ChatPanel(
                     onSelect = { key ->
                         Destination.entries.firstOrNull { it.name == key }?.let(goToDestination)
                     },
+                    backdrop = glassBackdrop,
                 )
             }
         }

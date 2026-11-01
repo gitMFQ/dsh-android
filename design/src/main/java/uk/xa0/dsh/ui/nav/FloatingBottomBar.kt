@@ -41,7 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import top.yukonga.miuix.kmp.blur.Backdrop
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.GlassTier
 import uk.xa0.dsh.ui.glass.currentGlassTier
 import uk.xa0.dsh.ui.glass.glassSurface
@@ -90,8 +90,9 @@ internal val LocalFloatingBottomBarTabScale = staticCompositionLocalOf { { 1f } 
  * tiers are three renderings of one material, not three bars.
  *
  *  - **LIQUID** (API 33+): real backdrop blur with refraction and a tilt-lit specular edge, in
- *    [LiquidBottomBar]. Everything that names a miuix-blur symbol lives in that file, so an
- *    API 26 device never loads the classes.
+ *    [LiquidBottomBar]. That file is the only one in this module that both *names and executes*
+ *    miuix-blur code; here the backdrop arrives as an opaque [GlassBarBackdrop], so this file
+ *    names none of it and an API 26 device never enters the branch that would.
  *  - **TRANSLUCENT** (31-32) and **FLAT** (26-30): [Modifier.glassSurface] — the same
  *    fill-and-hairline material every other floating surface in the app uses, at the alpha its
  *    own tier prescribes.
@@ -115,13 +116,14 @@ fun FloatingBottomBar(
     selectedIndex: () -> Int,
     onSelected: (index: Int) -> Unit,
     tabsCount: Int,
-    backdrop: Backdrop? = null,
+    backdrop: GlassBarBackdrop? = null,
     content: @Composable RowScope.() -> Unit
 ) {
     // The tier check comes first and returns, rather than choosing a modifier inside the
-    // layout: `LiquidBottomBar` names miuix-blur symbols, and a branch that is merely *not
-    // taken* still leaves those names in this file's constant pool. Splitting the files is what
-    // makes the API-26 guarantee structural instead of a promise. See LiquidGlass.kt.
+    // layout. Since 3.2b this file does not name a single miuix-blur type — the backdrop
+    // arrives as a [GlassBarBackdrop] and is unwrapped in the branch below — so what the
+    // split guarantees is now stronger than before: the only *execution* of miuix-blur code
+    // on any tier happens inside `LiquidBottomBar`, in its own file, behind this check.
     val tier = currentGlassTier
     if (tier == GlassTier.LIQUID && backdrop != null) {
         LiquidBottomBar(
@@ -129,7 +131,9 @@ fun FloatingBottomBar(
             selectedIndex = selectedIndex,
             onSelected = onSelected,
             tabsCount = tabsCount,
-            backdrop = backdrop,
+            // The one place the handle is unwrapped. Everything above this line — every
+            // caller, this file, the overload below — deals only in GlassBarBackdrop.
+            backdrop = backdrop.layer,
             content = content,
         )
         return
@@ -147,16 +151,17 @@ fun FloatingBottomBar(
 /**
  * The 26-32 rendering: one translucent capsule and a tinted pill behind the active tab.
  *
- * **The invariant is about execution, not about names.** This file *does* name one
- * miuix-blur type — `Backdrop`, in the overload above — because the two tiers share one
- * entry point and its signature has to be able to carry the caller's backdrop. What it
- * never does is *run* any of that package's code: the only such call sits behind the tier
- * check in [LiquidBottomBar], in its own file.
+ * Nothing here touches miuix-blur, in names or in execution: the backdrop the caller passes is
+ * a [GlassBarBackdrop], [uk.xa0.dsh.ui.glass.glassBarLayer] is what turns it into a recorded
+ * layer, and this function is never handed either — [FloatingBottomBar] drops the backdrop on
+ * the way here, which is right, because on a tier that cannot sample one there is nothing to
+ * sample.
  *
- * The distinction matters because the dependency ships in the APK either way: miuix-blur
- * is an ordinary compile dependency, so its classes are present on every device. Naming a
- * type costs nothing; invoking one on a device that cannot run it is the crash this
- * arrangement is built to avoid.
+ * The execution part of the rule still matters, because the dependency ships in the APK on every
+ * device: miuix-blur is an ordinary compile dependency, so its classes are present even where
+ * they cannot run. Invoking one of them below API 33 is the `NoClassDefFoundError` this
+ * arrangement is built to avoid, and it is avoided by the early return in [FloatingBottomBar]
+ * rather than by anything in this function.
  */
 @Composable
 private fun FlatBottomBar(
@@ -282,7 +287,7 @@ fun FloatingBottomBar(
     selectedKey: String,
     onSelect: (key: String) -> Unit,
     modifier: Modifier = Modifier,
-    backdrop: Backdrop? = null,
+    backdrop: GlassBarBackdrop? = null,
 ) {
     val colors = DshTheme.colors
     // One lookup table per list identity: a caller that rebuilt the list on every
