@@ -56,17 +56,18 @@
 
 | # | 分支 | 内容 | 验收 |
 |---|---|---|---|
-| **3.0** ✅ | `gate/miuix-blur` | 许可转 GPL + `miuix-blur` 依赖 + manifest override + 本文件 | `:app:processDebugMainManifest` 绿且 `minSdkVersion=26` |
-| **3.1** | `feat/liquid-glass` | 移植 `liquid/`（InnerShadow/Lens/Vibrancy/CombinedBackdrop）+ `rememberLiquidGlass` 到 `:design` 的 `glass/` 包，含三档降级 | `:design:testDebugUnitTest` 绿；新增 1 张 `liquid-glass-probe.png` |
-| **3.2** | `feat/pill-dock` | 移植 `FloatingBottomBar` + `bottombar/`，改成 4 项药丸底栏，替换现有手写玻璃 | 4 张底栏基线全部重录；原有 14 张中聊天两张预期变化 |
-| **3.3** | `feat/four-destinations` | `ChatView` 拆成「4 目的地」+「聊天内 3 视图」两个枚举；pager 改 4 页 | 4 页可切；返回键回 Chat；宽屏 rail 4 项 |
-| **3.4** | `feat/files-tab` | 文件页：把现有 `FilesSurface` 提升为目的地（先复用，不做 VSCode） | 新增 `files-tab.png` |
-| **3.5** | `feat/plugins-tab` | 插件页空壳（占位 + 说明文案） | 新增 `plugins-tab.png` |
-| **3.6** | `feat/me-tab` | 我的页：头像/余额头部 + 设置页签列表；页签点进去是子页 | 新增 `me-tab.png` + `me-subpage.png` |
-| **3.7** | `feat/topbar-collapse` | TopAppBar 折叠并入：改用 Miuix `TopAppBar` + `MiuixScrollBehavior`；**随页变，不随滚动**（见 §6） | 聊天基线重录 |
-| **3.8** | `feat/status-capsule` | 状态胶囊：连接/运行/待审批 | 新增 1 张胶囊基线 |
-| **3.9** | `feat/sheets-miuix` | Sheet/Dialog 统一到移植来的 `Dialog` + `OverlayBottomSheet` | 审批/提问/模型选择三处换装 |
-| **3.10** | `feat/drawer-miuix` | 抽屉换装：`SuperSearchBar` + `SegmentedList` | 抽屉两张基线重录 |
+| **3.0** ✅ | `gate/miuix-blur` | 许可转 GPL-3.0 + `miuix-blur` 依赖 + manifest override + 玻璃基座 + 本文件 | PR **#25** 合入；CI `tests=1166` / `screenshots=14` 均不变 |
+| **3.1** ✅ | （并入 3.0） | `glass/`：InnerShadow / Lens / Vibrancy / CombinedBackdrop + `LiquidGlass.kt` 三档裁决 | `:design:compileDebugKotlin` + `testDebugUnitTest` 绿 |
+| **3.3** ✅ | `feat/four-destinations` | 底栏改 4 目的地（Chat/Files/Plugins/Me），会话三视图降为页内药丸；`showFiles` 双源清除 | PR **#26** 合入；11 张基线逐字节不变，3 张按预期移动 |
+| **3.2** ✅ | `feat/glass-bar` | 移植套件玻璃底栏（8 文件）+ 替换手写底栏；旧 `components/FloatingBottomBar.kt` 删除 | PR **#27** 合入；`tests=1166` / `screenshots=14` |
+| **3.2b** ⏳ | `feat/bar-backdrop` | **液态档真正生效**：`:design` 出不透明句柄 `GlassBarBackdrop` + `rememberGlassBarBackdrop()` + `Modifier.glassBarLayer()`；app 侧两步布线 | 真机 API 33+ 看到折射；**基线必然仍是平材质**（Robolectric 无 RenderEffect），这一点要写进 PR |
+| **3.4** | `test/page-baselines` | 给 Me 页 / Me 子页 / Plugins 页补基线（页面骨架已在 3.3 落地） | `screenshots` 14 → 17 |
+| **3.5** | `feat/me-tabs` | Me 的各设置页签填真内容：把 `SettingsContent.kt` 的段落提权成可独立进子页 | 每个页签一条基线 |
+| **3.6** | `feat/files-page` | Files 页从「复用面板」变成类 VSCode 的树浏览器 | 新增/重录 Files 基线 |
+| **3.7** | `feat/topbar-collapse` | TopBar 折叠：**随页变，不随滚动**（见 §6） | 聊天基线重录 |
+| **3.8** | `feat/status-capsule` | 状态胶囊：连接 / 运行 / 待审批 | 新增 1 张胶囊基线 |
+| **3.9** | `feat/sheets-miuix` | Sheet/Dialog 统一到移植来的 `Dialog` + `OverlayBottomSheet`（`overlay/` 已在移植） | 审批/提问/模型选择三处换装 |
+| **3.10** | `feat/drawer-miuix` | 抽屉换装：`SuperSearchBar` + `SegmentedList`（`list/` 已在移植） | 抽屉两张基线重录 |
 
 ## 5. 移植清单（按依赖顺序）
 

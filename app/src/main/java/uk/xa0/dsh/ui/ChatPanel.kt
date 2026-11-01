@@ -3638,7 +3638,7 @@ private fun MeDestination(
  * (archived, plugins), then the facts (about). Each one's page is a PR of its own; the
  * list is here so the level is fixed before the contents are argued about.
  */
-private val ME_ENTRIES: List<MeEntry> = listOf(
+internal val ME_ENTRIES: List<MeEntry> = listOf(
     MeEntry("appearance", "Appearance", "Theme, and the seven appearances it resolves to.", Icons.Rounded.Palette),
     MeEntry("general", "General", "Enter behaviour, transcript folding, and the host's own settings.", Icons.Rounded.Tune),
     MeEntry("model", "Model", "Which route answers, and the provider order behind it.", Icons.Rounded.SmartToy),
