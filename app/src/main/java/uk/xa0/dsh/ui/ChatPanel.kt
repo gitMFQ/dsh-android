@@ -47,16 +47,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Badge
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Timeline
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -108,6 +115,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import uk.xa0.dsh.BalanceState
 import uk.xa0.dsh.PENDING_DRAFT_KEY
 import uk.xa0.dsh.ReferenceCandidate
 import uk.xa0.dsh.data.BusyEnter
@@ -494,36 +502,50 @@ internal fun ChatPanel(
     // `schedule/catalog` call, so nothing here costs anything until it is asked for.
     var showAutomations by rememberSaveable { mutableStateOf(false) }
 
-    // The three destinations, as a pager.
+    // Two levels of navigation, and the split is the whole of 3.3.
     //
-    // ## One writable state, not two (2.5c)
+    // ## Destinations are the pager; views are a plain value
     //
-    // `pagerState` is the only thing written. `view` is *derived* from the page the
-    // pager is on, so the bar's highlighted seat, the back handler and the "last shell
-    // closed" rule all read the same fact the reader is looking at — and a swipe updates
-    // all three for free. A separate `var view` beside `pagerState` would be two
-    // writable sources for one answer, which `docs/HANDOFF-NEXT.md` §7.3.4 names as the
-    // thing not to do: they drift the first time one is written without the other, and
-    // the symptom is a bar highlighting one destination while another is on screen.
+    // The **destination** is where in the app you are — Chat, Files, Plugins, Me — and it
+    // is a pager, so a horizontal swipe is how a phone says the same thing without a
+    // control. Inside the Chat destination the **view** — Chat, Trajectory, Shell — is
+    // three readings of the same session, so it is a pill, not a place.
     //
-    // The session is the key, as it was: the web remembers the choice per session, and
+    // ## One writable state per level (2.5c, still true)
+    //
+    // `destinationState` is the only thing written for the outer level; `destination` is
+    // *derived* from the page the pager is on, so the bar's highlighted seat, the back
+    // handler and the Files seat all read the same fact the reader is looking at, and a
+    // swipe updates all three for free. A parallel `var destination` would be two
+    // writable sources for one answer — the symptom being a bar highlighting one place
+    // while another is on screen.
+    //
+    // `chatView` is the second level, and having a second writable value here is not the
+    // mistake 2.5c warned about: it answers a *different* question, and nothing derives
+    // one from the other. What 2.5c forbade was two writables for the *same* answer.
+    //
+    // The session keys the view, as it did: the web remembers the choice per session, and
     // moving between sessions is not a reason to carry Shell open into the next one.
-    val pagerState = rememberPagerState(
-        initialPage = ChatView.CHAT.ordinal,
-        pageCount = { ChatView.entries.size },
+    val destinationState = rememberPagerState(
+        initialPage = Destination.CHAT.ordinal,
+        pageCount = { Destination.entries.size },
     )
-    val view = ChatView.entries[pagerState.currentPage]
+    val destination = Destination.entries[destinationState.currentPage]
     // A tap on the bar is a *request* that takes a spring to arrive, so it goes through
     // the pager rather than writing the destination.
-    val goTo: (ChatView) -> Unit = { target ->
-        scope.launch { pagerState.animateScrollToPage(target.ordinal) }
+    val goToDestination: (Destination) -> Unit = { target ->
+        scope.launch { destinationState.animateScrollToPage(target.ordinal) }
     }
-    // A session switch returns to the conversation, which is what re-creating the old
-    // `rememberSaveable(ui.currentSessionId)` used to do.
+    var chatView by rememberSaveable(ui.currentSessionId) { mutableStateOf(ChatView.CHAT) }
+    val goToView: (ChatView) -> Unit = { chatView = it }
+    // A session switch returns to the conversation *and* to its transcript view, which is
+    // what re-creating the old `rememberSaveable(ui.currentSessionId)` on the pager used
+    // to do at both levels.
     LaunchedEffect(ui.currentSessionId) {
-        if (pagerState.currentPage != ChatView.CHAT.ordinal) {
-            pagerState.scrollToPage(ChatView.CHAT.ordinal)
+        if (destinationState.currentPage != Destination.CHAT.ordinal) {
+            destinationState.scrollToPage(Destination.CHAT.ordinal)
         }
+        if (chatView != ChatView.CHAT) chatView = ChatView.CHAT
     }
 
     // Closing the last shell returns to the conversation.
@@ -542,11 +564,11 @@ internal fun ChatPanel(
     val seats = state.terminal.terminals.size
     var hadShell by remember { mutableStateOf(false) }
     LaunchedEffect(seats) {
-        if (seats == 0 && hadShell && view == ChatView.TERMINAL) {
+        if (seats == 0 && hadShell && chatView == ChatView.TERMINAL) {
             android.util.Log.d("DshView", "last shell closed; returning to the conversation")
             // No animation: the shell the reader was looking at is gone, so there is
             // nothing to slide past — animating would show them two empty pages.
-            pagerState.scrollToPage(ChatView.CHAT.ordinal)
+            chatView = ChatView.CHAT
         }
         hadShell = seats > 0
     }
@@ -605,9 +627,10 @@ internal fun ChatPanel(
         if (showRouter && routerTarget != null) actions.checkRouter()
     }
 
-    // The right panel's `files` surface. A phone has no room for a column beside
-    // the transcript, so it takes the whole body with its own back bar.
-    var showFiles by rememberSaveable(ui.currentSessionId) { mutableStateOf(false) }
+    // There is no `showFiles` any more (3.3): Files went from a panel that covered the
+    // conversation to a destination of its own, so "is it open" is
+    // `destination == Destination.FILES` — one fact, not two. The focus path survives
+    // because a deliverable chip still has to say *which* file to look at.
     // The balance sheet, reached from the token panel. Its read is on demand rather
     // than on launch: it is the one call this app makes to DeepSeek itself.
     var showBalance by rememberSaveable { mutableStateOf(false) }
@@ -683,11 +706,17 @@ internal fun ChatPanel(
     // The panels come before the view: an open panel is on top of whatever view it
     // covers, so it has to close first or the press would change the view underneath
     // something still on screen.
-    BackHandler(enabled = showFiles || showRouter || view != ChatView.CHAT || subagentParent != null) {
+    BackHandler(
+        enabled = showRouter || destination != Destination.CHAT || chatView != ChatView.CHAT ||
+            subagentParent != null,
+    ) {
         when {
-            showFiles -> showFiles = false
             showRouter -> showRouter = false
-            view != ChatView.CHAT -> goTo(ChatView.CHAT)
+            // The pill first, then the destination: inside Chat the pill is the shallower
+            // level, so leaving Shell returns to the transcript rather than all the way
+            // out to a different place.
+            chatView != ChatView.CHAT -> chatView = ChatView.CHAT
+            destination != Destination.CHAT -> goToDestination(Destination.CHAT)
             else -> subagentParent?.let { actions.openSession(it.sessionId) }
         }
     }
@@ -1008,12 +1037,15 @@ internal fun ChatPanel(
         // window's navigation belongs on, and the side the drawer opens from. Placing it
         // after the content would put it on the trailing edge, which reads as a toolbar
         // and puts it on the opposite side from every other navigation surface here.
-        if (!isHero && wide) {
+        // Same gate as the bar, and no longer the hero's: the rail holds the
+        // destinations, not the conversation's views, and two of those are as real on an
+        // empty session as on a full one (3.3).
+        if (wide) {
             NavigationRail(
-                items = BOTTOM_BAR_ITEMS,
-                selectedKey = view.name,
+                items = DESTINATION_ITEMS,
+                selectedKey = destination.name,
                 onSelect = { key ->
-                    ChatView.entries.firstOrNull { it.name == key }?.let(goTo)
+                    Destination.entries.firstOrNull { it.name == key }?.let(goToDestination)
                 },
             )
         }
@@ -1035,7 +1067,7 @@ internal fun ChatPanel(
                 routerAvailable = routerTarget != null,
                 routerOpen = showRouter,
                 onRouter = { showRouter = !showRouter },
-                filesOpen = showFiles,
+                filesOpen = destination == Destination.FILES,
                 // The Files panel resolves every path against a session
                 // (`agentId`), so on the pending seat there is nothing to list. The
                 // seat states that fact by not being offered, rather than opening a
@@ -1043,11 +1075,12 @@ internal fun ChatPanel(
                 filesAvailable = ui.currentSessionId != null,
                 onFiles = {
                     filesFocus = null
-                    // Closing the panel drops the tree's cache with it, so
-                    // reopening reads the directory again rather than drawing a
-                    // snapshot from whenever it was last looked at.
-                    if (showFiles) actions.resetWorkspaceExplorer()
-                    showFiles = !showFiles
+                    val closing = destination == Destination.FILES
+                    // Leaving the page drops the tree's cache with it, so returning
+                    // reads the directory again rather than drawing a snapshot from
+                    // whenever it was last looked at.
+                    if (closing) actions.resetWorkspaceExplorer()
+                    goToDestination(if (closing) Destination.CHAT else Destination.FILES)
                 },
                 lineage = current?.let { subagentRollups[it.id] },
                 onLineage = { showLineage = true },
@@ -1072,7 +1105,53 @@ internal fun ChatPanel(
                 )
             }
 
-            if (showFiles) {
+            // The four destinations, as pages (3.3).
+            //
+            // The bar says "you can go four places"; a horizontal swipe is how a phone
+            // says the same thing without a control, and it is the one gesture the
+            // transcript cannot use for anything else — it scrolls vertically. The
+            // header, the banner and the bar are not pages: they are chrome around the
+            // destinations, and only the body between them moves.
+            //
+            // ## ⚠️ The drawer's edge swipe — **unverified**, check it on a device
+            //
+            // `drawerDrag` listens in the left 96dp band and takes a horizontal drag
+            // only if no child consumed it; that is what keeps a sideways scroll inside
+            // a bash output block working. The pager is such a child, so the swipe that
+            // opens the drawer passes through it first.
+            //
+            // The expectation is that it still works **on CHAT**: page 0 is the leftmost
+            // page, so a rightward swipe has nowhere to go, and a scrollable that cannot
+            // move is expected to report no consumption rather than eat the gesture —
+            // which is the same rule that lets the drawer's own band win today. On the
+            // three other destinations the swipe goes back a page instead, which is what
+            // the reader asked for by being there, and the drawer stays reachable from
+            // the header's menu seat.
+            //
+            // **That is an expectation, not a measurement.** This box cannot run
+            // `:app`'s Compose tests (aapt2), so it is written down here as the thing to
+            // check first on the device — if the drawer stops opening from the edge, the
+            // fix is to gate the pager's `userScrollEnabled` off inside `DRAWER_EDGE`,
+            // not to widen the drawer's band.
+            HorizontalPager(
+                state = destinationState,
+                // Keyed per destination so each page keeps its own vertical scroll
+                // position: going to Files and back must not lose the reader's place in
+                // the transcript. A shared saver would file all four under one key and
+                // they would overwrite each other.
+                key = { page -> Destination.entries[page].name },
+                modifier = Modifier.weight(1f),
+                // Deliberately no `beyondViewportPageCount`: a page off screen is not
+                // composed. Shell holds a live terminal canvas and Trajectory a full
+                // derivation of the transcript; paying for both while the reader looks
+                // at neither would cost more than the swipe saves.
+            ) { page ->
+                when (Destination.entries[page]) {
+                    // Files stopped being a panel over the conversation and became a
+                    // place (3.3). The surface is the one 2.4's panel already drew, so
+                    // this step is a *move* — same tree, one level up — and the work
+                    // left for its own PR is the VSCode-shaped explorer.
+                    Destination.FILES -> Column(Modifier.fillMaxSize()) {
                 // Derived on demand: the transcript can hold a thousand rows and
                 // neither scan is worth paying for while the panel is closed.
                 val files = remember(entries) { SessionFiles.derive(entries) }
@@ -1103,56 +1182,41 @@ internal fun ChatPanel(
                         // The tree is a per-open reading; leaving the cache up
                         // would show a stale directory the next time it opens.
                         actions.resetWorkspaceExplorer()
-                        showFiles = false
+                        goToDestination(Destination.CHAT)
                     },
                     modifier = Modifier.weight(1f),
                 )
-            } else {
-                // The three destinations, as pages.
-                //
-                // The bar says "you can go three places"; a horizontal swipe is how a
-                // phone says the same thing without a control, and it is the one
-                // gesture the transcript cannot use for anything else — it scrolls
-                // vertically. See docs/PHASE-2-PLAN.md §2.5c.
-                //
-                // The header, the banner, the composer, the dock and the bar are not
-                // pages: they are chrome around the destinations. Only the body
-                // between the banner and the bar moves.
-                //
-                // ## ⚠️ The drawer's edge swipe — **unverified**, check it on a device
-                //
-                // `drawerDrag` listens in the left 96dp band and takes a horizontal drag
-                // only if no child consumed it; that is what keeps a sideways scroll
-                // inside a bash output block working. The pager is now such a child, so
-                // the swipe that opens the drawer passes through it first.
-                //
-                // The expectation is that it still works **on CHAT**: page 0 is the
-                // leftmost page, so a rightward swipe has nowhere to go, and a scrollable
-                // that cannot move is expected to report no consumption rather than eat
-                // the gesture — which is the same rule that lets the drawer's own band
-                // win today. On TRAJECTORY and SHELL the swipe goes back a page instead,
-                // which is what the reader asked for by being there, and the drawer stays
-                // reachable from the header's menu seat.
-                //
-                // **That is an expectation, not a measurement.** This box cannot run
-                // `:app`'s Compose tests (aapt2), so it is written down here as the
-                // thing to check first on the device — if the drawer stops opening from
-                // the edge, the fix is to gate the pager's `userScrollEnabled` off inside
-                // `DRAWER_EDGE`, not to widen the drawer's band.
-                HorizontalPager(
-                    state = pagerState,
-                    // Keyed per destination so each page keeps its own vertical scroll
-                    // position: going to Trajectory and back must not lose the reader's
-                    // place in the transcript. A shared saver would file all three
-                    // under one key and they would overwrite each other.
-                    key = { page -> ChatView.entries[page].name },
-                    modifier = Modifier.weight(1f),
-                    // Deliberately no `beyondViewportPageCount`: a page off screen is
-                    // not composed. Shell holds a live terminal canvas and Trajectory a
-                    // full derivation of the transcript; paying for both while the
-                    // reader looks at neither would cost more than the swipe saves.
-                ) { page ->
-                    when (ChatView.entries[page]) {
+                    }
+
+                    Destination.PLUGINS -> PlaceholderTab(
+                        title = "Plugins",
+                        summary = "Plugin surfaces will live here. The panel and block " +
+                            "protocol already exist; this page is where they land.",
+                        icon = Icons.Rounded.Extension,
+                    )
+
+                    Destination.ME -> MeDestination(
+                        username = ui.username,
+                        balance = ui.balance,
+                    )
+
+                    // The conversation: three readings of one session, chosen by the
+                    // pill under the header rather than by the bar below (3.3).
+                    Destination.CHAT -> Column(Modifier.fillMaxSize()) {
+                        ViewPill(
+                            items = CHAT_VIEW_ITEMS,
+                            selectedKey = chatView.name,
+                            onSelect = { key ->
+                                ChatView.entries.firstOrNull { it.name == key }?.let(goToView)
+                            },
+                            modifier = Modifier.padding(
+                                start = DshSpacing.xl,
+                                end = DshSpacing.xl,
+                                top = DshSpacing.sm,
+                                bottom = DshSpacing.xs,
+                            ),
+                        )
+                        when (chatView) {
                         ChatView.TERMINAL -> Column(Modifier.fillMaxSize()) {
                     // A real PTY for this session, from the host's `terminal` Remote
                     // namespace. The screen creates or adopts the session's terminal, so
@@ -1175,7 +1239,7 @@ internal fun ChatPanel(
                     TrajectoryScreen(
                         model = trajectory,
                         title = current?.title ?: "DSH",
-                        onClose = { goTo(ChatView.CHAT) },
+                        onClose = { goToView(ChatView.CHAT) },
                         modifier = Modifier.weight(1f),
                         // The conversation header above already carries the title, the
                         // back-to-drawer seat and the view tabs, exactly as the web's
@@ -1486,7 +1550,7 @@ internal fun ChatPanel(
                                             delivered = delivered,
                                             onOpen = { path ->
                                                 filesFocus = path
-                                                showFiles = true
+                                                goToDestination(Destination.FILES)
                                             },
                                             downloader = fileDownloader,
                                         )
@@ -1752,29 +1816,31 @@ internal fun ChatPanel(
                     }
                 }
             }
+        }
 
             // The floating bar, at the very bottom of the screen's column and below the
             // composer, because it is the *destination* selector: the composer is where
             // the reader writes, the bar is where they go.
             //
-            // Not drawn on the hero, for the same reason the tab strip was not: a session
-            // with nothing in it has no Trajectory to show and no Shell to open, so two of
-            // the three destinations would be empty rooms. The bar appears once there is
-            // something to navigate.
+            // **No longer gated on the hero** (3.3). The old bar was withheld when the
+            // session was empty, because two of its three items (Trajectory, Shell) would
+            // have opened empty rooms. Files, Plugins and Me are not about the session at
+            // all — the Plugins and Me pages are just as real on a session with nothing in
+            // it — so hiding the bar there would hide the only route to them.
             //
-            // `ChatView.entries` is passed whole and never filtered — the item count is a
-            // constant. See the enum's own comment for why that is not negotiable.
+            // `DESTINATION_ITEMS` is passed whole and never filtered — the item count is
+            // a constant. See the enum's own comment for why that is not negotiable.
             //
             // **Exactly one of these is composed.** A bar on a wide window would be the
-            // same three destinations twice, one of them in the wrong place for the
-            // hand — so the choice is made once, here, and both branches read the same
-            // `view` and call the same `goTo`.
-            if (!isHero && !wide) {
+            // same destinations twice, one of them in the wrong place for the hand — so
+            // the choice is made once, here, and both branches read the same
+            // `destination` and call the same `goToDestination`.
+            if (!wide) {
                 FloatingBottomBar(
-                    items = BOTTOM_BAR_ITEMS,
-                    selectedKey = view.name,
+                    items = DESTINATION_ITEMS,
+                    selectedKey = destination.name,
                     onSelect = { key ->
-                        ChatView.entries.firstOrNull { it.name == key }?.let(goTo)
+                        Destination.entries.firstOrNull { it.name == key }?.let(goToDestination)
                     },
                 )
             }
@@ -2555,13 +2621,20 @@ private fun ChatHeader(
 }
 
 /**
- * The registered `conversation.view` entries, in the host's own order, plus this
- * client's own terminal view.
+ * The three readings of one session: the transcript, its trajectory, and the shell.
+ *
+ * ## This used to be the bottom bar (3.3)
  *
  * `ui-conversation/src/client/contract/views.ts` — chat (order 0, the default in
  * `view-selection.ts`) and trajectory (order 10). Terminal is not a host-registered
- * view: it is a client view over the host's `terminal` Remote namespace, which is
- * what the web client's own terminal tab is assembled from too.
+ * view: it is a client view over the host's `terminal` Remote namespace, which is what
+ * the web client's own terminal tab is assembled from too.
+ *
+ * 2.4 put these three in the bar and 3.3 took them out again, because they were never
+ * destinations: all three are the session already on screen, read differently. The bar
+ * now holds `Destination` and this holds the pill under the header. What survives from
+ * 2.4 is the invariant — **every value is unconditional**, so a control built from
+ * `ChatView.entries` has a constant item count and cannot move under the reader's thumb.
  */
 private enum class ChatView(val label: String) {
     CHAT("Chat"),
@@ -2570,22 +2643,16 @@ private enum class ChatView(val label: String) {
     // this session's own confined terminal — so the accurate word is the general one,
     // and the seat chips inside say which is which.
     TERMINAL("Shell"),
-    // **Every value here is unconditional.** The bar draws `ChatView.entries` as a
-    // constant list, so a value whose availability depended on session state would
-    // change the bar's width at runtime — the one thing `docs/PHASE-2-PLAN.md` §2.4 says
-    // it must not do. The llama.cpp router panel used to be a fourth value here and is
-    // now a sheet behind a header seat; see the gate in `ChatScreen` for why.
 }
 
 /**
- * What the floating bar draws — one entry per `ChatView`, in the enum's order.
+ * What the pill draws — one entry per `ChatView`, in the enum's order.
  *
- * A constant, and that is the point: `docs/PHASE-2-PLAN.md` §2.4 requires a bar whose item
- * count cannot change while the reader is looking at it. The icons are Material's, because
- * miuix's icon set is not yet in use anywhere else and mixing the two sets on one bar would
- * be a visual decision nobody has made.
+ * All three, unconditionally. The llama.cpp router panel used to be a fourth value in
+ * this list and is now a sheet behind a header seat; see the gate in `ChatPanel` for why.
+ * The icons are Material's, the same set the bar below uses.
  */
-private val BOTTOM_BAR_ITEMS: List<BottomBarItem> = listOf(
+private val CHAT_VIEW_ITEMS: List<BottomBarItem> = listOf(
     BottomBarItem(ChatView.CHAT.name, ChatView.CHAT.label, Icons.Rounded.ChatBubble),
     BottomBarItem(ChatView.TRAJECTORY.name, ChatView.TRAJECTORY.label, Icons.Rounded.Timeline),
     BottomBarItem(ChatView.TERMINAL.name, ChatView.TERMINAL.label, Icons.Rounded.Terminal),
@@ -3517,3 +3584,67 @@ private fun BranchFromMessageDialog(
         },
     )
 }
+
+/**
+ * The Me destination, and the only place a settings tab's sub-page state lives.
+ *
+ * ## Why the sub-page is state here and not a second pager
+ *
+ * A settings tab is a *stack*, not a sibling: you go in and come back out. A pager
+ * would make the tabs swipeable as if they were places beside each other, and it would
+ * put the reader's position in a structure that is not showing them where they are.
+ *
+ * ## What the tabs are, today
+ *
+ * Placeholders, deliberately. The shape is what this step fixes — identity on top, a
+ * list of tabs, each opening its own page — and the content of each tab is its own PR.
+ * The one thing not left open is the header, because "whose account is this and what is
+ * left on it" is already known and is the reason the page reads as *me* rather than as a
+ * preferences screen.
+ */
+@Composable
+private fun MeDestination(
+    username: String,
+    balance: BalanceState,
+) {
+    var openTab by rememberSaveable { mutableStateOf<String?>(null) }
+    val tab = openTab?.let { id -> ME_ENTRIES.firstOrNull { it.id == id } }
+    if (tab == null) {
+        MeTab(
+            username = username,
+            // The figure, not the state machine: the page has no room for a retry, and
+            // the balance sheet behind the stat pills is where a failed read is answered.
+            balanceText = (balance as? BalanceState.Ready)?.let { state ->
+                // The figure the stat pills already lead with: the whole total for the
+                // currency the account is billed in, not a derived number. Null when the
+                // reply carried no currency, and the header then draws only the name.
+                state.account.primary?.let { info -> "Balance · ${info.totalBalance} ${info.currency}" }
+            },
+            entries = ME_ENTRIES,
+            onOpen = { openTab = it.id },
+        )
+    } else {
+        MeSubPage(title = tab.title, onBack = { openTab = null }) {
+            PlaceholderTab(title = tab.title, summary = tab.summary, icon = tab.icon)
+        }
+    }
+}
+
+/**
+ * The settings tabs, as rows on the Me page.
+ *
+ * Order is the reader's: the everyday settings first (how the app behaves and what it
+ * looks like), then what powers it (model, agent), then what is rare or dangerous
+ * (archived, plugins), then the facts (about). Each one's page is a PR of its own; the
+ * list is here so the level is fixed before the contents are argued about.
+ */
+private val ME_ENTRIES: List<MeEntry> = listOf(
+    MeEntry("appearance", "Appearance", "Theme, and the seven appearances it resolves to.", Icons.Rounded.Palette),
+    MeEntry("general", "General", "Enter behaviour, transcript folding, and the host's own settings.", Icons.Rounded.Tune),
+    MeEntry("model", "Model", "Which route answers, and the provider order behind it.", Icons.Rounded.SmartToy),
+    MeEntry("agent", "Agent", "Presets, and the permission level a session starts at.", Icons.Rounded.Badge),
+    MeEntry("terminal", "Terminal", "The shell's font size and cells.", Icons.Rounded.Terminal),
+    MeEntry("plugins", "Plugins", "The surfaces this client is allowed to draw.", Icons.Rounded.Extension),
+    MeEntry("archived", "Archived sessions", "Sessions put away, and how to bring one back.", Icons.Rounded.Archive),
+    MeEntry("about", "About", "Connection, account, version and the way out.", Icons.Rounded.Info),
+)
