@@ -99,10 +99,10 @@ private enum class ChatView(val label: String) {
 | **2.2c** ✅ | `test/baseline-terminal` | **已交付（PR #15）**。给 `TerminalPanel` 录 `terminal.png`（80×24、running、十几行输出） | `screenshots=8`（实测）；原有 7 张 sha256 逐字节相同 | 低（纯测试） |
 | **2.3** ✅ | `spike/miuix-adoption` | **已交付（PR #16）—— 结论：行。** 一个 `SwitchPreference` 套在 `DshTheme` 里，实测能画。两个必须带进后续 PR 的结论见 §2.2 下方 | `tests=1136`（不变）/ `screenshots=9` | 已完成 |
 | **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs`。**调色板适配器先落地**（`design/.../MiuixPalette.kt` + `DshTheme` 根部提供 `MiuixTheme`），**状态栏跟随 7 档外观**（`SystemBars.kt`），**ROUTER 移出目的地列表**（见 §2.4 结论）。底栏 **3 项固定**：Chat / Trajectory / Shell | 基线新增底栏 2 张；原有 9 张不变；`tests` 原数不减 + 新增 | 中 |
-| **2.5a** ✅ | `refactor/chat-stateless` | **已交付**。抽 `ChatPanel(state, actions, terminal)` 无状态壳 + `ChatUiState` / `ChatActions`；`ChatScreen` 退化为取 `StateFlow` 与拼参数的外壳（3 284 → 226 行）。见 §2.5 的三条结论 | `tests` 原数不减；11 张基线逐字节不变 | 中 |
-| **2.5b** ✅ | `test/baseline-chat` | **已交付（PR #19）**。`chat-hero` + `chat-transcript` 两张，原有 **11 张 sha256 逐字节相同**。**录制过程中 CI 抓到两个真缺陷**，见 §2.6 | `screenshots=13` | 低 |
+| **2.5a** ✅ | `refactor/chat-stateless` | **已交付**。抽 `ChatPanel(state, actions, terminal)` 无状态壳 + `ChatUiState` / `ChatActions`；`ChatScreen` 退化为取 `StateFlow` 与拼参数的外壳（3 284 → 226 行）。见 §2.5a | `tests` 原数不减；11 张基线逐字节不变 | 中 |
+| **2.5b** ✅ | `test/baseline-chat` | **已交付（PR #19）**。`chat-hero` + `chat-transcript` 两张，原有 **11 张 sha256 逐字节相同**。**录制过程中 CI 抓到两个真缺陷**，见 §2.5b | `screenshots=13` | 低 |
 | **2.5c** ✅ | `feat/pager-navigation` | **已交付（PR #21）**。`HorizontalPager` 接管三个目的地；`pagerState` 是**唯一可写状态**，`view` 由 `currentPage` 派生。**13 张基线逐字节不变** | `screenshots=13`（不变） | 中 |
-| **2.5d** ✅ | `feat/nav-rail` | **已交付（PR #22）**。`WIDE_LAYOUT = 600.dp` 之上底栏换 `NavigationRail`；用 `BoxWithConstraints` 而非 `material3-window-size-class`（见 §2.7） | `screenshots=14`；原有 13 张不变 | 中 |
+| **2.5d** ✅ | `feat/nav-rail` | **已交付（PR #22）**。`WIDE_LAYOUT = 600.dp` 之上底栏换 `NavigationRail`；用 `BoxWithConstraints` 而非 `material3-window-size-class`（见 §2.5c） | `screenshots=14`；原有 13 张不变 | 中 |
 | **2.6** | `feat/topbar-collapse` | TopBar 折叠 + 状态胶囊 | 滚动折叠无跳变 | 中 |
 | **2.7** | `feat/drawer-reskin` | 抽屉换装（搜索栏 / 分段列表 / 分组排序） | 基线 diff 符合预期 | 中 |
 | **2.8** | `feat/settings-reskin` | 设置页 + 关于页换装 | 项全部可达 | 中 |
@@ -182,7 +182,7 @@ private enum class ChatView(val label: String) {
 
 > **可复用的判据**：一个测试类**整片**因 `NoClassDefFoundError` / `ExceptionInInitializerError` 挂掉时，先看 JDK 版本，再看测试本身。而「6 个测试按同一个方向失败」几乎总是**命名与语义反向**，不是六个独立的 bug。
 
-### 2.5 2.5a 的三条结论（2026-11-01）
+### 2.5a 的三条结论（2026-11-01）
 
 #### (1) 拆法：状态一坨、动作一堆，不要按字段拆
 
@@ -216,7 +216,7 @@ private enum class ChatView(val label: String) {
 
 > 还有两处**故意的行为修正**，写在这里以免下一轮 review 当成漂移：`onSend` 拆成 `send(text, submitMode())`（会话内）与 `sendDeferred(text)`（hero），因为原代码 hero 用的是 `vm.send(text)` 的一参重载、会话内用的是两参——**两者不是同一个调用**，抽成一个 lambda 会把 hero 也套上 busy 策略。
 
-### 2.6 2.5b 抓到的两个缺陷（2026-11-01）
+### 2.5b 抓到的两个缺陷（2026-11-01）
 
 录一张截图失败了两次，**两次都不是测试写坏了**。这正是「先补基线再改屏」的价值：这两个 bug 都不是 2.5b 引入的，是本来就存在、只是**没有任何东西能把它们触发出来**。
 
@@ -236,7 +236,7 @@ transcript 分支调 `DiagFrames()`，那是一个包着 `withFrameNanos` 的 `w
 
 > **可复用的判据（2.5c 必读）**：`diag/` 里的东西必须**惰性**。任何 `withFrameNanos` / `rememberInfiniteTransition` 都会让 Compose 永不 idle —— 它不只是「测试环境的问题」，而是**任何想把这一屏拍下来的尝试都会失败**。同理，pager 的弹簧动画在静止时必须是静止的，否则 `chat-*` 这两张基线会变成「录一次失败一次」。
 
-### 2.7 2.5c / 2.5d 的三条结论（2026-11-01）
+### 2.5c / 2.5d 的三条结论（2026-11-01）
 
 #### (1) pager 之后，「当前目的地」只能有一个可写来源
 
