@@ -64,12 +64,18 @@ bash build.sh :core:model:testDebugUnitTest
 > 1. **`JAVA_HOME` 必须是 21**（`/usr/lib/jvm/java-21-openjdk-arm64`），17 会 `UnsupportedClassVersionError`。`build.sh` 里写死的是 17，所以不能直接用它跑 `:design` 测试。
 > 2. **`buildToolsVersion` 要临时改成 36.0.0**（本机只有 35/36），且**五处都要改**；验证完必须还原，`git diff` 里冒出 `buildToolsVersion` 就是忘了。
 >
-> 这两步已经脚本化成 `.work/localbuild.sh <worktree> <gradle task…>`（不提交，`.work/` 在 `.gitignore` 里）：它设好 21 与 SDK 变量、临时改五处 build-tools 并用 `trap` 还原、再抢全局 `.build.lock`。用法：
+> 这两步已经脚本化成 **`tools/localbuild.sh`**（**已提交进仓库**，不是本地私货）：
 >
 > ```sh
-> .work/localbuild.sh .work/fb :design:testDebugUnitTest
-> .work/localbuild.sh .work/fb :app:compileDebugKotlin
+> tools/localbuild.sh <worktree 目录> <gradle 任务…>
+> tools/localbuild.sh .work/fb :design:testDebugUnitTest
+> tools/localbuild.sh . :app:compileDebugKotlin
 > ```
+>
+> 它设好 21 与 SDK 变量、临时改五处 build-tools 并用 `trap` 还原、再抢全局 `.build.lock`。两处值得知道的实现细节：
+>
+> - **`ROOT` 用 `git rev-parse --git-common-dir` 求主工作区**，不是脚本自己的目录。`.toolchain/`（Gradle、android-home、xdg-data）和 `.build.lock` 都被 gitignore，只存在于主工作区；git worktree 里没有它们，所以脚本要从任意 worktree 借到同一份。写错这一行会让脚本在 worktree 里报 `no gradle at …` —— 实测踩过。
+> - **还原靠 `trap`**，正常退出、Ctrl-C、`set -e` 触发都还原。跑完 `git status` 应当干净。
 >
 > 一轮 `:design:testDebugUnitTest` 实测 **2.5–3 分钟**（含配置），比 CI 一轮 7 分钟省一半，且能直接看到断言消息。**`:app` 的测试源码仍然编不了**（aapt2），所以新增的 `:app` 测试（`SystemBarsTest`、基线测试）只能由 CI 验证 —— 这一点没变。
 >
