@@ -12,8 +12,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.lightColorScheme
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -47,8 +45,11 @@ const val MIUIX_PROBE_TAG = "miuix-probe"
  *    light accent is \`#4176E6\`. Two accents on one screen is exactly the bug the
  *    seven appearances exist to prevent, so a miuix shell must be handed a \`Colors\`
  *    built from \`DshTheme.colors\` rather than relying on defaults. That adapter is
- *    the first task of whatever PR actually adopts miuix; it is deliberately **not**
- *    written here, because a spike answers questions and does not ship design.
+ *    \`ui/theme/MiuixPalette.kt\`, and \`DshTheme\` now applies it at the root — which
+ *    is why the row below no longer wraps itself in a \`MiuixTheme\` of miuix's own
+ *    defaults: the capture is now evidence that the *wiring* works, not only that
+ *    miuix composes. A switch that still came out \`#3482FF\` would mean the root is
+ *    not handing miuix the app's palette.
  *
  * ## Why a screen of its own
  *
@@ -65,21 +66,18 @@ fun MiuixProbe(modifier: Modifier = Modifier) {
             .padding(DshSpacing.lg)
             .testTag(MIUIX_PROBE_TAG),
     ) {
-        // Inside, not outside: the app's palette stays the outermost authority and
-        // miuix supplies only what its own components read. The reverse order is the
-        // failure this probe would have shown as a wrong colour rather than a crash.
-        MiuixTheme(
-            // The *light* side of miuix's palette, because the capture that guards this
-            // renders under `DshTheme(LIGHT)`. Deliberately miuix's own defaults and not
-            // derived from `DshTheme.colors` — see point 3 above: the whole finding is
-            // that these two do not meet unless something adapts them.
-            colors = lightColorScheme(),
-        ) {
-            SwitchPreference(
-                title = "Keep the connection standing",
-                checked = on,
-                onCheckedChange = { on = it },
-            )
-        }
+        // No `MiuixTheme` wrapper any more, and that is the change worth capturing.
+        //
+        // 2.3 wrapped this row in `MiuixTheme(colors = lightColorScheme())` on purpose, so
+        // the baseline would show miuix's *own* palette (`#3482FF`) beside the app's
+        // (`#4176E6`) and prove point 3 above. `DshTheme` now provides the adapted
+        // palette itself, so the same row drawn with no arguments at all is the evidence
+        // that the adapter is wired: if this capture's switch still comes out `#3482FF`,
+        // the root is not handing miuix the app's colours.
+        SwitchPreference(
+            title = "Keep the connection standing",
+            checked = on,
+            onCheckedChange = { on = it },
+        )
     }
 }

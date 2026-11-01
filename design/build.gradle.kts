@@ -68,6 +68,26 @@ dependencies {
     // API, so this is `api` for the same reason as the rest.
     api("androidx.compose.animation:animation-core")
 
+    // miuix, for one reason: `DshColors.toMiuixColors()` returns miuix's `Colors`, so the
+    // type has to be on this module's API surface — `DshTheme` provides it to every screen
+    // that draws a miuix component. `api`, not `implementation`, or a consumer could call
+    // `DshTheme` but not name what it hands out.
+    //
+    // Version pinned here rather than taken from `:app`'s declaration: Gradle resolves the
+    // highest and they are the same string, so the pin only exists to keep the theme's
+    // contract readable in the file that states it. The app still declares miuix for the
+    // components themselves; this line is about the palette bridge.
+    //
+    // Only `miuix-ui` is needed — `Colors` lives there. The preference/icons/squircle
+    // modules are the app's business, not the theme's.
+    api("top.yukonga.miuix.kmp:miuix-ui:0.9.4")
+
+    // `WindowCompat.getInsetsController` — the system bars' icon appearance has three
+    // different spellings across API 26..30+, and this is the one that covers all of them.
+    // `implementation`, not `api`: no signature this module publishes mentions androidx.core,
+    // so it is an implementation detail of `SystemBars`.
+    implementation("androidx.core:core-ktx:1.13.1")
+
     // `dshPalette` is a pure function of its arguments, which is the point: the
     // Android window has no composition to read a token from, so the decision the
     // window and `DshTheme` share is testable on the JVM without one.

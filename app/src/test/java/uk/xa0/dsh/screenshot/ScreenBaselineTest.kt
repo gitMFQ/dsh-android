@@ -5,6 +5,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChatBubble
+import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -44,8 +48,10 @@ import uk.xa0.dsh.ui.PermissionSheet
 import uk.xa0.dsh.ui.SessionsDrawer
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.TerminalPanel
+import uk.xa0.dsh.ui.components.BottomBarItem
 import uk.xa0.dsh.ui.components.Composer
 import uk.xa0.dsh.ui.components.FilesPanel
+import uk.xa0.dsh.ui.components.FloatingBottomBar
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -444,6 +450,55 @@ class ScreenBaselineTest {
     fun miuixProbe() {
         capture("miuix-probe") {
             MiuixProbe()
+        }
+    }
+
+    /**
+     * The floating bottom bar that replaced the top `ViewTabs` strip (2.4).
+     *
+     * Captured on its own because it is the one piece of 2.4 that is new chrome rather
+     * than a re-skin, and because the property it must hold is a *layout* property that
+     * no unit test can see: **the item count is fixed**. The three captures below are
+     * deliberately all of them — a bar whose fourth item appeared for a local model would
+     * show up here as two different widths for the same bar.
+     *
+     * The three destinations are Chat / Trajectory / Shell. There is no fourth: the
+     * llama.cpp router panel left the destination list in this PR, because a conditional
+     * item is exactly what makes a bar's width change under the reader's thumb. See
+     * `ChatScreen`'s `ChatView` and `docs/PHASE-2-PLAN.md` §2.4.
+     */
+    @Test
+    fun floatingBottomBar() {
+        capture("bottom-bar") {
+            FloatingBottomBar(
+                items = listOf(
+                    BottomBarItem("CHAT", "Chat", Icons.Rounded.ChatBubble),
+                    BottomBarItem("TRAJECTORY", "Trajectory", Icons.Rounded.Timeline),
+                    BottomBarItem("TERMINAL", "Shell", Icons.Rounded.Terminal),
+                ),
+                selectedKey = "CHAT",
+                onSelect = {},
+            )
+        }
+    }
+
+    /**
+     * The bar with a different destination selected, so the *selected* treatment is
+     * captured too. A single capture would pin the unselected seats and leave the
+     * active tint unverified — and the active tint is the whole affordance.
+     */
+    @Test
+    fun floatingBottomBarTrajectorySelected() {
+        capture("bottom-bar-trajectory") {
+            FloatingBottomBar(
+                items = listOf(
+                    BottomBarItem("CHAT", "Chat", Icons.Rounded.ChatBubble),
+                    BottomBarItem("TRAJECTORY", "Trajectory", Icons.Rounded.Timeline),
+                    BottomBarItem("TERMINAL", "Shell", Icons.Rounded.Terminal),
+                ),
+                selectedKey = "TRAJECTORY",
+                onSelect = {},
+            )
         }
     }
 

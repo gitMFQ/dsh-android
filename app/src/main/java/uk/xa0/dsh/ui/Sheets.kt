@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,6 +58,8 @@ import uk.xa0.dsh.model.ConnectionRestart
 import uk.xa0.dsh.model.HostSettings
 import uk.xa0.dsh.model.HostVersion
 import uk.xa0.dsh.model.ModelChoice
+import uk.xa0.dsh.model.RouterProbeResult
+import uk.xa0.dsh.model.RouterTarget
 import uk.xa0.dsh.net.AcceptedCert
 import uk.xa0.dsh.net.CertReadout
 import uk.xa0.dsh.net.DoorFault
@@ -140,6 +143,48 @@ fun SettingsSheet(
             onPreset = onPreset,
             onUnarchive = onUnarchive,
             onDismiss = onDismiss,
+        )
+    }
+}
+
+/**
+ * The router panel, as a sheet over the conversation.
+ *
+ * It wraps `RouterTab` unchanged: the panel's own signature takes a **non-null**
+ * `RouterTarget` and dereferences it throughout, and the whole point of moving it off the
+ * destination list was to leave that contract alone. The gate lives at the call site — the
+ * seat is only drawn while there is a local route, and `ChatScreen` closes the sheet if the
+ * gate shuts while it is open — so this composable never has to answer "what does a router
+ * panel show when there is no router".
+ *
+ * A sheet rather than a view for the same reason Files is a panel: it is something you
+ * consult about the current selection and then dismiss, not a place you stay. Keeping the
+ * conversation behind it is what lets the reader compare the answer with the model chip.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RouterSheet(
+    target: RouterTarget,
+    probe: RouterProbeResult,
+    effort: String?,
+    onCheck: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = DshTheme.colors
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = colors.bgBase,
+    ) {
+        RouterTab(
+            target = target,
+            probe = probe,
+            effort = effort,
+            onCheck = onCheck,
+            // The tab already owns its own vertical scroll and its own bottom padding;
+            // the sheet supplies the inset the tab cannot know about.
+            modifier = Modifier.navigationBarsPadding(),
         )
     }
 }

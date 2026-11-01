@@ -50,6 +50,11 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
+          # 17 is fine *here* and only here: this job runs `assembleRelease` and no
+          # tests, and D8 desugars miuix's Java 21 bytecode without complaint. The
+          # moment a test task is added to this job it must be raised to 21 like
+          # verify.yml / screenshots.yml / build.yml — the failure looks like 25
+          # tests all throwing NoClassDefFoundError, not like a version problem.
           java-version: '17'
 
       # Same layout build.sh expects; see .github/workflows/build.yml for why.
