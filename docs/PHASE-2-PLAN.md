@@ -101,8 +101,8 @@ private enum class ChatView(val label: String) {
 | **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs`。**调色板适配器先落地**（`design/.../MiuixPalette.kt` + `DshTheme` 根部提供 `MiuixTheme`），**状态栏跟随 7 档外观**（`SystemBars.kt`），**ROUTER 移出目的地列表**（见 §2.4 结论）。底栏 **3 项固定**：Chat / Trajectory / Shell | 基线新增底栏 2 张；原有 9 张不变；`tests` 原数不减 + 新增 | 中 |
 | **2.5a** ✅ | `refactor/chat-stateless` | **已交付**。抽 `ChatPanel(state, actions, terminal)` 无状态壳 + `ChatUiState` / `ChatActions`；`ChatScreen` 退化为取 `StateFlow` 与拼参数的外壳（3 284 → 226 行）。见 §2.5 的三条结论 | `tests` 原数不减；11 张基线逐字节不变 | 中 |
 | **2.5b** ✅ | `test/baseline-chat` | **已交付（PR #19）**。`chat-hero` + `chat-transcript` 两张，原有 **11 张 sha256 逐字节相同**。**录制过程中 CI 抓到两个真缺陷**，见 §2.6 | `screenshots=13` | 低 |
-| **2.5c** | `feat/pager-navigation` | `HorizontalPager` 接管三个目的地；弹簧切页 | 切页流畅；旋转保持；底栏恒 3 项 | 中 |
-| **2.5d** | `feat/nav-rail` | 宽屏切 `NavigationRail` | 宽屏可用；窄屏不变 | 中 |
+| **2.5c** ✅ | `feat/pager-navigation` | **已交付（PR #21）**。`HorizontalPager` 接管三个目的地；`pagerState` 是**唯一可写状态**，`view` 由 `currentPage` 派生。**13 张基线逐字节不变** | `screenshots=13`（不变） | 中 |
+| **2.5d** ✅ | `feat/nav-rail` | **已交付（PR #22）**。`WIDE_LAYOUT = 600.dp` 之上底栏换 `NavigationRail`；用 `BoxWithConstraints` 而非 `material3-window-size-class`（见 §2.7） | `screenshots=14`；原有 13 张不变 | 中 |
 | **2.6** | `feat/topbar-collapse` | TopBar 折叠 + 状态胶囊 | 滚动折叠无跳变 | 中 |
 | **2.7** | `feat/drawer-reskin` | 抽屉换装（搜索栏 / 分段列表 / 分组排序） | 基线 diff 符合预期 | 中 |
 | **2.8** | `feat/settings-reskin` | 设置页 + 关于页换装 | 项全部可达 | 中 |
@@ -235,6 +235,32 @@ transcript 分支调 `DiagFrames()`，那是一个包着 `withFrameNanos` 的 `w
 **这比 2.5b 老得多**：`diag/DiagScroll.kt` 自己的文件头写着「Nothing here consumes a pointer event, holds a gesture, requests a frame, or writes Compose state」，而它是这个包里唯一违背这句话的东西。修法：只有 `ScrollDiag` 真的 attach 了才采样——app 在 `DshApplication.onCreate` 里 attach，测试 harness 不 attach。
 
 > **可复用的判据（2.5c 必读）**：`diag/` 里的东西必须**惰性**。任何 `withFrameNanos` / `rememberInfiniteTransition` 都会让 Compose 永不 idle —— 它不只是「测试环境的问题」，而是**任何想把这一屏拍下来的尝试都会失败**。同理，pager 的弹簧动画在静止时必须是静止的，否则 `chat-*` 这两张基线会变成「录一次失败一次」。
+
+### 2.7 2.5c / 2.5d 的三条结论（2026-11-01）
+
+#### (1) pager 之后，「当前目的地」只能有一个可写来源
+
+`pagerState` 是唯一的可写状态，`view = ChatView.entries[pagerState.currentPage]` 是**派生值**。底栏高亮、返回键、「关掉最后一个 shell 回 Chat」三条规则都读同一个派生值，所以**一次滑动同时更新三者**。
+
+这是 §7.3.4 那条「别两个都存」的落实。反例很具体：如果同时保留 `var view` 与 `pagerState`，第一次只写其中一个时它们就分叉，症状是**底栏高亮 A 而屏幕上是 B**。
+
+> **代价**：`view` 不再是 `rememberSaveable`，所以进程被回收后不会恢复到 Shell 页 —— 恢复语义交给 pager 的 `initialPage = CHAT` 与「切会话回 Chat」的 effect。这与旧行为一致（旧代码也只是 `rememberSaveable` 到会话粒度）。
+
+#### (2) 2.5c 的 13 张基线**逐字节不变**，这是意料之中而不是门禁失效
+
+pager 改的是**页面怎么进来**，不是页面长什么样：三个目的地在第一页的静止状态与改动前完全一致。所以 13 张基线全同，恰恰证明「重构没换皮」。
+
+> 判据：**动画类改动在静止帧上是零像素差**。如果 2.5c 让某张基线动了，那才是要查的问题。
+
+#### (3) 2.5d 用 `BoxWithConstraints`，刻意不引 `material3-window-size-class`
+
+§7.3.2 说过那个库已经作为 miuix 的传递依赖在类路径上。**实测比预想的更糟**：Gradle 的 transform 缓存里**两个变体都在** —— `org.jetbrains.compose` 那份和 `androidx` 那份，包名相同、坐标不同。
+
+与其去解这个冲突（显式声明覆盖、再确认 BOM 版本），不如**不问那个问题**。屏幕真正要回答的只有「内容旁边还有地方吗」，`BoxWithConstraints` 的 `maxWidth` 直接回答它，零新增依赖、零重复类风险。
+
+> **可复用**：**「有一个库能用」不等于「应该用」**。当一个问题有等价且零依赖的本地答法时，引入一个已经在类路径上重复的库是**净负收益** —— 它把「窗口多宽」这件事变成一个需要裁决的第三方结论。
+
+> **基线要单开一个类**：Robolectric 的窗口尺寸是**类级 `@Config` qualifier**，测试内部改不了。把宽屏 fixture 塞进 411dp 的手机类里，会得到一张**任何真机都不会画出来**的「宽屏」图（`BoxWithConstraints` 只会看到 411dp）。所以 `WideBaselineTest` 是独立文件，尺寸写在类上。
 
 ### 2.1 执行中修正的四件事（2026-11-01）
 
