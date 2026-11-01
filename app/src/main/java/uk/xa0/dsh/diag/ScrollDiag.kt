@@ -119,6 +119,26 @@ object ScrollDiag {
     private var lastTokens = SystemClock.uptimeMillis()
     private var dropped = 0
 
+    /**
+     * Whether the frame-time sampler should run at all.
+     *
+     * [attach] is the app's answer, and it is also what makes [DiagFrames] safe to
+     * place unconditionally in the tree: the sampler holds a `while (true)` around
+     * `withFrameNanos`, so *any* composition that contains it never reaches idle.
+     * On a device that is invisible — a frame callback is exactly what an app does
+     * anyway. In a Compose test it is fatal: `waitForIdle` waits for the composition
+     * to quiesce, and a frame loop is a permanent request for the next frame, so the
+     * harness fails with `Compose did not get idle after N attempts`.
+     *
+     * The screenshot fixture for the conversation screen (2.5b) is what surfaced it,
+     * but the bug is older than that fixture: the sampler has always been the one
+     * thing in `diag/` that is not inert, contradicting this package's own rule that
+     * nothing here requests a frame.
+     */
+    @Volatile
+    var sampling: Boolean = false
+        private set
+
     /** Called once from [uk.xa0.dsh.DshApplication]; a no-op without a directory. */
     fun attach(base: File) {
         if (dir != null) return
@@ -133,6 +153,9 @@ object ScrollDiag {
             out = File(d, "scroll.jsonl")
             outBytes = out?.length() ?: 0L
         }
+        // Set last: the sampler must not start on a half-attached sink, and a
+        // composition that asks before this line simply records nothing.
+        sampling = true
         record(
             "meta",
             "v" to uk.xa0.dsh.BuildConfig.VERSION_NAME,
