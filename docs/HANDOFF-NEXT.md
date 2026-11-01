@@ -1,18 +1,18 @@
 # 交接文档（给新会话）
 
-> 写于 2026-10-31（当日第四版）。沿革：一版「接管 + 工具链全量升级」，二版「结构拆分开头 + 截图基线」，
-> 三版「1.2b」，**本版「阶段 1 全部完成（含 1.3 / 1.4 + 7 档外观）+ 阶段 2 可执行计划」**。
+> 写于 2026-10-31，2026-11-01 更新至第五版。沿革：一版「接管 + 工具链全量升级」，二版「结构拆分开头 + 截图基线」，
+> 三版「1.2b」，四版「阶段 1 完成 + 阶段 2 可执行计划」，**本版「阶段 2.5 全部完成（2.5a–2.5d）+ 阶段 2.6 开工清单」**。
 > **新会话请先读本文件，再按需查其它文档；动手做阶段 2 前必须读 [PHASE-2-PLAN.md](PHASE-2-PLAN.md)。**
 
 ## 1. 一句话现状
 
-仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、`tests=1165` 全绿 + 11 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入且**已验证可用（见 2.3 闸门），并在 2.4 真正用上（调色板适配器已接线）**。
+仓库 <https://github.com/gitMFQ/dsh-android>（私有，`gitMFQ/dsh-android`）已经是一个**能构建、`tests=1166` 全绿 + 14 张截图基线**的 DSH 原生安卓客户端 fork，工具链升到最新，miuix 已接入且**已验证可用（见 2.3 闸门），并在 2.4 真正用上（调色板适配器已接线）**。
 
 **换皮的安全网已经就位**（Roborazzi，PR #5），**结构拆分的第一个前置条件也已清掉**（`model/` 不再依赖根包，PR #4），**五个模块已经抽出来了**：`:core:model`（PR #6，413 个测试）、`:core:term`（PR #7，186 个测试，**纯 JVM —— 本仓第一次能在本机跑功能测试**）、`:core:config`（PR #8）、`:core:protocol`（PR #9，73 个测试 —— **并抓出第一个生产缺陷**，见 research/13 §2.11）、`:design`（PR #10，7 个测试）。
 
 **阶段 1 已完成**。`:design` 顺带交付了 **7 档外观**（Light / Dark / System / AMOLED / Monet ×3），测试总数 **1116 → 1123**。
 
-**阶段 2 已开工（2026-11-01）**：2.0（窗口底色跟随外观）、2.1（删 `KsuTokens.Space`）、2.2a/b/c（基线 4 → 8 张 + 抽 `TerminalPanel`）、2.3（miuix 闸门 —— 结论是可以）、**2.4（浮动底栏 + 调色板适配器 + 状态栏 + ROUTER 出目的地列表）** 全部合入。下一步是 **2.5 pager 导航**。
+**阶段 2 已开工（2026-11-01）**：2.0（窗口底色跟随外观）、2.1（删 `KsuTokens.Space`）、2.2a/b/c（基线 4 → 8 张 + 抽 `TerminalPanel`）、2.3（miuix 闸门 —— 结论是可以）、2.4（浮动底栏 + 调色板适配器 + 状态栏 + ROUTER 出目的地列表）、**2.5a–2.5d（抽 `ChatPanel` + 聊天屏基线 + pager + 宽屏 rail，基线 8 → 14 张）** 全部合入。下一步是 **2.6 TopBar 折叠**，开工清单见 §7.4。
 
 > **2.4 交付了什么，接手的先看 `docs/PHASE-2-PLAN.md` §2.4 的三个结论**：
 > 1. **调色板适配器已存在**（`design/.../MiuixPalette.kt`，53 角色），且 `DshTheme` 在根部就套好了 `MiuixTheme` —— 后续 miuix 屏**不需要**再各写一遍适配器，直接摆组件即可。
@@ -98,27 +98,28 @@
 
 ```
 /root/dsh-android
-  app/                     # 主模块（fork 自 bqv/dsh-android v0.6.6），抽走三个模块后仍是测试主体
+  app/                     # 主模块（fork 自 bqv/dsh-android v0.6.6），抽走五个模块后仍是测试主体
     src/main/java/uk/xa0/dsh/
-      net/                 # 协议层（~4000 行；下一步抽 :core:protocol）
-      ui/                  # 界面 54 文件 / 27k 行
+      net/                 # 协议层（已抽到 :core:protocol，这里只剩接线）
+      ui/                  # 界面 21 文件 / 14k 行（ChatPanel.kt 3.4k 是最大的一块）
       data/ widget/ diag/
-    src/test/              # 517 个功能 @Test + 4 张截图基线 + 4 个依赖 :app 的 model 测试
+    src/test/              # 476 个功能 @Test + 14 张截图基线（含 WideBaselineTest）
   core/model/              # 已抽出：领域模型 50 文件 + 43 个测试文件（413 个 @Test），com.android.library
   core/term/               # 已抽出：终端 7 文件 + 10 个测试文件（186 个 @Test），纯 kotlin("jvm")
   core/config/             # 已抽出：DshConfig + ThemeMode + BusyEnter + AcceptedCert + CertPins(JDK 部分)，com.android.library，0 测试
   core/protocol/           # 已抽出：net/ 14 文件 + 7 个测试文件（73 个 @Test），com.android.library
-  design/                  # 已抽出：DshTheme.kt（主题 + 7 档外观）+ KsuTokens.kt，com.android.library，7 个测试
+  design/                  # DshTheme.kt（主题 + 7 档外观）+ KsuTokens.kt + MiuixPalette.kt + SystemBars.kt + WindowBackground.kt，25 个测试
   docs/                    # 规划文档（见 §6）
   .github/workflows/       # build.yml（出 APK）/ verify.yml（测试+截图门禁）/ release.yml / screenshots.yml（手动录基线）
-  build.sh                 # 唯一构建入口，找 .toolchain/gradle-9.5.0
+  build.sh                 # CI 用构建入口，找 .toolchain/gradle-9.5.0（写死 JDK 17）
+  tools/localbuild.sh      # 本机验证入口：JDK 21 + 临时改 build-tools，trap 还原（见 §7.4.6）
 ```
 
 ## 5. CI
 
 | 工作流 | 触发 | 作用 |
 |---|---|---|
-| `verify.yml` | push main/master + PR | `tests=1136 failures=0` + `screenshots=8` 像素比对 |
+| `verify.yml` | push main/master + PR | `tests=1166 failures=0` + `screenshots=14` 像素比对 |
 | `build.yml` | 同上 | 出 debug APK（约 20 MB） |
 | `release.yml` | tag `v*` | 出 release APK 挂 Release |
 | `screenshots.yml` | **手动** `workflow_dispatch` | 在 CI 录基线并上传 artifact（本机录不了） |
@@ -191,7 +192,7 @@
 
 一句话：浮动底栏 + pager / TopBar 折叠 / 抽屉换装 / 设置页换装 / Sheet 统一。
 
-> **⚠️ 2.0–2.4 全部完成，别再照着旧文开工。当前进度与下一步见 §7.3。**
+> **⚠️ 2.0–2.5 全部完成，别再照着旧文开工。当前进度与下一步见 §7.4。**
 >
 > 已完成：2.0（窗口底色跟随外观）→ 2.1（删 `KsuTokens.Space`）→ 2.2a/b/c（基线 + 抽 `TerminalPanel`）→ 2.3（miuix 闸门）→ 2.4（浮动底栏 + 调色板适配器 + 状态栏 + ROUTER 出目的地列表，PR #17）→ **2.5a（抽 `ChatPanel`，会话屏终于可拍照）**。
 >
@@ -199,86 +200,96 @@
 >
 > 剩余：2.6（TopBar 折叠）→ 2.7（抽屉换装）→ 2.8（设置/关于换装）→ 2.9（Sheet 统一）。
 >
-> **2.5 的四条结论见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.5 / §2.6 / §2.7**：`ChatPanel` 收整个 `UiState` 而不拆字段；拆分时最容易丢的是没被测试覆盖的那条连线；`diag/` 里的帧循环会让任何截图尝试失败；`pagerState` 是唯一可写状态，`view` 必须派生。
+> **2.5 的四条结论见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.5a / §2.5b / §2.5c**：`ChatPanel` 收整个 `UiState` 而不拆字段；拆分时最容易丢的是没被测试覆盖的那条连线；`diag/` 里的帧循环会让任何截图尝试失败；`pagerState` 是唯一可写状态，`view` 必须派生。
 
-### 7.3 阶段 2.5 开工清单（2.4 已合入 master）
+### 7.3 ✅ 阶段 2.5 已完成（**本节只作历史记录，别照着开工**）
 
-> 写于 2026-11-01，2.4（PR #17）合入之后。**动手前先读 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.4 的三个结论**，那里解释了为什么调色板适配器、状态栏、ROUTER 都已经就位。
+2.5a–2.5d 全部合入。原始开工清单已随工作完成而作废，保留的只有三条**仍然成立**的结论：
+
+| 仍然成立 | 现状 |
+|---|---|
+| 底栏恒 3 项 | `BOTTOM_BAR_ITEMS` + `ChatView` 仍是三个值；2.5c 只改「怎么显示」，没改「有几个」 |
+| 不写第二份「当前目的地」状态 | `pagerState` 是唯一可写状态，`view = ChatView.entries[pagerState.currentPage]` 是派生值 |
+| 不引 `material3-window-size-class` | 它**在类路径上有两份**（`org.jetbrains.compose` 与 `androidx`）。2.5d 改用 `BoxWithConstraints`，零依赖 |
+
+> 2.5 的完整结论见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) **§2.5a / §2.5b / §2.5c**。
+
+### 7.4 阶段 2.6 开工清单（TopBar 折叠 + 状态胶囊）
+
+> 写于 2026-11-01，2.5 全部合入之后。**动手前先读 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.5c**，那里解释了 pager 之后「当前目的地」只有一个可写来源。
 >
-> 当前 master 实测：`git log --oneline -1` = `60d8ee2`；`src @Test = 1176`；`screenshots = 11`；CI 报 `tests=1165` / `screenshots=11`。
+> 当前 master 实测：`git log --oneline -1` = `4038d8b`；`src @Test = 1180`；`screenshots = 14`；CI 报 `tests=1166` / `screenshots=14`。
+> （`1180` 与 `1166` 差 14，正是截图类；两个数字别合并，见 §2.1。）
 
-#### 7.3.1 先确认三件事已经不用做了
+#### 7.4.1 2.6 现在**没有**可执行计划，这一节是「开工前必须先定的三件事」
 
-2.4 刻意把它们提前做完了，**2.5 不要再做一遍**：
+`ROADMAP.md` 与 `PHASE-2-PLAN.md` 的 PR 表里，2.6 都只有一行：「TopBar 折叠 + 状态胶囊 / 滚动折叠无跳变」。**这不足以开工**，因为下面三个问题都还没有答案，而且每一个都会改变实现。
 
-| 已经就位 | 位置 | 对 2.5 的意义 |
+#### 7.4.2 待定一：滚动信号与 header 在同一个作用域，但**语义**要选
+
+先说清楚，免得重走弯路：
+
+- `listState` 在 `ChatPanel.kt:284`，`ChatHeader` 的调用点在 `:1021`，两者**都在同一个 `ChatPanel` 函数体内**。
+- 消费 `listState` 的 `LazyColumn` 在 `:1368`，位于 pager 的 CHAT 页里。
+
+所以 header **本来就能读到** `listState` —— pager 只是布局容器，不是作用域边界。折叠所需的 `listState.firstVisibleItemScrollOffset` 直接可用，**不需要提升状态，也不需要 CompositionLocal**。
+
+> 真正要决定的是**语义**：Shell 与 Trajectory 页**没有** `listState`。切到那两页时 header 该保持折叠还是展开？三种做法都自洽，但只能选一个：
+> 1. 只在 CHAT 页折叠，切页即展开（最简单，但切页会看到 header 弹一下）；
+> 2. 记住离开 CHAT 时的折叠度并保持（要额外 `remember`，且 Trajectory 自己的滚动不同步）；
+> 3. header 不随滚动折叠，改成随**页**变（Chat 展开、其余压缩）。**这条最省事且不会跳变，但等于改掉了 2.6 的原意，要写进 PR 描述。**
+
+#### 7.4.3 待定二：「状态胶囊」是新组件，还是重新包装已有的三个？
+
+`ChatPanel` 里已经有三样东西在表达状态，**新胶囊必须先和它们对齐，否则会出现第四种说法**：
+
+| 已有 | 位置 | 表达什么 |
 |---|---|---|
-| 调色板适配器 | `design/.../MiuixPalette.kt` + `DshTheme` 根部套 `MiuixTheme` | 直接用 miuix 组件，**不要再写适配器**，也不要绕过 `DshTheme` 自己 `MiuixTheme(colors = …)` |
-| 状态栏跟随外观 | `design/.../SystemBars.kt` | 新屏不需要管状态栏 |
-| 底栏恒 3 项 | `ChatScreen.kt` 的 `BOTTOM_BAR_ITEMS` | **条目数是常量**，2.5 的 pager 必须沿用这个前提 |
+| `ConnectionPill(label)` | `ChatPanel.kt:3366` | 连接非 OPEN 时的原因，浮在会话上方 |
+| `ErrorBanner` | `:3317` | `ui.error`，带「Sign in again」动词 |
+| `JobsSeat` 里的 `StateDot` | `:2536` 调用、`components/JobsCard.kt:79` 定义 | 后台任务在跑 |
 
-#### 7.3.2 依赖：两个都不用新引
+要折叠进胶囊的三类状态（连接 / 运行 / 待审批）**在 `ui` 上都有现成字段**：`connectionLabel`（`:809` 读出）、`ui.running`、`ui.approval` / `ui.questions`。
 
-实测过，别凭直觉加依赖：
+> **判据**：胶囊若只是把这三者**并排画小一号**，那是纯 UI 改动；若它要**替代** `ConnectionPill` 的位置或 `ErrorBanner` 的措辞，那就是行为改动，必须单独一个 PR。**开工前先在 PR 描述里写死是哪一种。**
 
-- **`HorizontalPager` / `rememberPagerState` 已经在 `androidx.compose.foundation` 里**（`foundation.aar` 里 `androidx/compose/foundation/pager/` 共 61 个 class），而 `:app` 已经 `implementation("androidx.compose.foundation:foundation")`（`app/build.gradle.kts:183`）。**零新增依赖。**
-- **`material3-window-size-class` 已经作为 miuix 的传递依赖在类路径上**（`miuix-ui/0.9.4` 的 `metadataApiElements` 声明了 `org.jetbrains.compose.material3:material3-window-size-class:1.12.0-alpha03`）。要用 `calculateWindowSizeClass()` 就直接写，**不要**再 `implementation` 一遍。
+#### 7.4.4 待定三：header 高度是**被测量的**，折叠会牵动一个已有偏移
 
-> 但要注意：传递来的那个是 **`org.jetbrains.compose` 版本（CMP）**，与 `androidx.compose` 的包名相同但坐标不同。若出现类冲突，显式声明 `androidx.compose.material3:material3-window-size-class`（BOM 2026.09.00 管版本）覆盖传递版本，**这是唯一可能需要加依赖的地方**。
+`headerPx` / `bannerPx`（`:853-854`）由 `onSizeChanged` 写入，被 `:1212` 的 `LoadingSessionBody` 偏移用来把加载内容对到视口中心：
 
-#### 7.3.3 开工顺序（单变量，每步一个 PR）
+```kotlin
+.offset { IntOffset(0, -(headerPx + bannerPx) / 2) }
+```
 
-| # | 分支 | 内容 | 验收 | 风险 |
-|---|---|---|---|---|
-| **2.5a** ✅ | `refactor/chat-stateless` | **已交付**。抽出 `ChatPanel(state, actions, terminal)` 无状态壳 + `ChatUiState` / `ChatActions`；`ChatScreen` 退化为取 `StateFlow` 与拼参数的外壳（**3 284 → 226 行**）。三条结论见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.5 | `tests` 原数不减；`screenshots` **11 张逐字节不变**（纯搬运） | 中 |
-| **2.5b** | `test/baseline-chat` | 给 `ChatPanel` 录基线：空会话 hero、有消息的会话、（可选）宽屏 | 新增 2~3 张；原有 11 张不变 | 低（纯测试） |
-| **2.5c** | `feat/pager-navigation` | `HorizontalPager` 接管 `ChatView` 三个目的地；弹簧切页；底栏点按 → `animateScrollToPage` | 切页流畅；旋转保持；**底栏仍恒 3 项** | 中 |
-| **2.5d** | `feat/nav-rail` | 宽屏（`WindowWidthSizeClass.Expanded`）把底栏换成 `NavigationRail` | 宽屏可用；窄屏不变 | 中 |
+header 一旦能折叠，`headerPx` 就会随滚动变 —— **那个偏移会跟着抖**。两条路：
 
-> **2.5a ✅ 已完成**（`ChatScreen` 3 284 → 226 行，`ChatPanel` + `ChatUiState` + `ChatActions`）。它为什么不能跳过：没有它，2.5c 改的就是一个没有像素保护、且入口是 view model 的 3300 行文件 —— 和 2.4 之前 `TerminalPanel` 的处境一模一样，而那次的做法（先 refactor、再 baseline、分两个 PR）就是本仓的标准答案。
->
-> **拆完才知道的一条**（详见 [PHASE-2-PLAN.md](PHASE-2-PLAN.md) §2.5）：`ChatPanel` 收的是**整个 `UiState`** 而不是三十个扁平字段——拆分的目的是「边界上没有 view model」，不是「参数好看」。而最容易丢的是**没被测试覆盖的那条连线**：`vm.terminal` 忘了接，`seats` 就恒为 0，「关掉最后一个 shell 自动回 Chat」静默失效，**编译完全通过**。
+1. 折叠用 `graphicsLayer` / `translationY` 而不是改高度 → `headerPx` 不变，偏移不受影响（**推荐**，也是「无跳变」最容易达成的做法）；
+2. 折叠真的改高度 → 必须让偏移读一个**稳定的** header 高度（例如折叠前的值），否则加载态会随滚动上下漂。
 
-#### 7.3.4 2.5c 的接入点（已实测，不用再找）
+#### 7.4.5 开工顺序（建议，单变量）
 
-- **当前 body 分支**：`ChatScreen.kt:1003` `if (showFiles)` / `:1038` `else if (view == ChatView.TERMINAL)` / `:1058` `else if (view == ChatView.TRAJECTORY)` —— pager 要把后两个分支换成 page 内容，`showFiles` 留在 pager **之外**（它是覆盖面板，不是页）。
-- **底栏**：`ChatScreen.kt:1643-1653`，`selectedKey = view.name`，`onSelect` 现在直接 `view = it`；2.5c 要改成「同时 `pagerState.animateScrollToPage(index)`」，**并让滑动手势反向更新底栏选中态**（用 `pagerState.currentPage` 驱动，别维护两份状态）。
-- **状态保存**：`view` 是 `rememberSaveable(ui.currentSessionId)`（`:489`）。换 pager 后要么保留它作为唯一真相、pager 只是视图，要么把 `pagerState` 也 save。**别两个都存**，那会产生两个可写状态。
+| # | 分支 | 内容 | 验收 |
+|---|---|---|---|
+| **2.6a** | `test/baseline-header` | 给 `ChatHeader` 单独录基线（展开态）。它现在是 `private`，要先提到 `internal` 才能被 fixture 调用 —— **这是生产代码变更，但只有可见性** | 新增 1 张；原有 14 张逐字节不变 |
+| **2.6b** | `feat/topbar-collapse` | 折叠本体。按 §7.4.2 选定的语义实现；优先用 §7.4.4 的第 1 条 | `chat-transcript.png` / `chat-wide.png` 预期变化，其余不变 |
+| **2.6c** | `feat/status-capsule` | 状态胶囊。按 §7.4.3 选定的那种做 | 新增 1 张胶囊基线 |
 
-#### 7.3.5 必须一起定的一件事：第 4 项要不要补
+> **先 2.6a 再 2.6b**，理由和 2.2b→2.2c、2.5a→2.5b 完全一样：header 一旦开始动，没有基线就只能靠肉眼。而 `ChatHeader` 目前**没有**单独基线 —— 它只出现在 `chat-transcript` 的整屏里。
 
-现在底栏 3 项（Chat/Trajectory/Shell）。`ROADMAP.md` 原来的「4 目的地」是笔误，2.4 已改正。要补第 4 项，**正确做法是把 `showFiles` 提升成 `ChatView.FILES`**（它已经有整块 body + 自带返回，`ChatScreen.kt:1003-1036`），而不是把 Settings 塞进来（那是 sheet，属 2.8）。
-
-> 若做，建议并进 **2.5c**：pager 的页数、底栏项数、`ChatView` 枚举三者必须是同一个数字，分两个 PR 改必然有一边不同步。**若不做，就在 PR 描述里写一句「故意保持 3 项」**，别让它悬着。
-
-#### 7.3.6 本机怎么验（别用 `build.sh`）
-
-`:design` 的测试要 **JDK 21** 且要临时改 build-tools，`build.sh` 写死 17 跑不了。用已提交进仓库的脚本：
+#### 7.4.6 本机怎么验（与 2.5 相同，不变）
 
 ```sh
 tools/localbuild.sh . :app:compileDebugKotlin
 tools/localbuild.sh . :design:testDebugUnitTest
 ```
 
-- **`:app` 的测试源码仍然编不了**（aapt2，§0）—— 2.5 新增的 `:app` 测试（包括所有基线）只能由 CI 验。
-- 改完记得 `git status` 是干净的：脚本用 `trap` 还原 `buildToolsVersion`，漏还原会出现在 diff 里。
-- 一轮 `:design:testDebugUnitTest` 实测 **1.5–3 分钟**，比 CI 一轮 7 分钟省一半。
+`:app` 的测试源码**仍然编不了**（aapt2）—— 2.6 新增的基线只能由 CI 验。
 
-#### 7.3.7 基线流程（2.4 刚走过，照做）
+#### 7.4.7 一条 2.5 留下的、**尚未在设备上验证**的事
 
-```sh
-# 录基线：必须 --ref <分支>，否则跑的是 master 的 workflow 文件
-gh workflow run screenshots.yml --ref <分支> -f branch=<分支>
-gh run watch <run-id>
-gh run download <run-id> -n roborazzi-baselines -D /tmp/bl
-```
+pager 之后，抽屉的左缘滑动要先穿过 pager。预期在 CHAT 页仍能开抽屉（第 0 页往右无处可去，不能移动的 scrollable 不应吃掉手势），但**本机跑不了 `:app` 的 Compose 测试，所以这是预期而不是测量**。代码里已在 pager 的注释标了 `unverified`。
 
-**录完先逐张比对 sha256**，确认「该变的是预期的那几张、不该变的一张没动」，再提交。2.4 就是这么验的：11 张里 2 张新增、1 张（`miuix-probe.png`）按预期变化、8 张逐字节相同。
-
-#### 7.3.8 两条 2.4 留下的判据
-
-1. **整个测试类因 `NoClassDefFoundError` / `ExceptionInInitializerError` 全挂 → 先查 JDK 版本**，不是测试写坏了。`build.yml` 曾因此在 JDK 17 上挂掉 25 个测试。
-2. **六个测试按同一方向失败 → 几乎总是命名与语义反向**，不是六个独立 bug。`SystemBars` 曾把 `isAppearanceLightStatusBars` 理解反了。
+> **接手后第一件事**：在真机上试一次「从屏幕最左缘往右滑」。若抽屉打不开，修法是**在 `DRAWER_EDGE` 范围内关掉 pager 的 `userScrollEnabled`**，而不是把抽屉的感应带加宽。
 
 ## 8. 给新会话的提醒
 
