@@ -3614,7 +3614,12 @@ private fun MeDestination(
             username = username,
             // The figure, not the state machine: the page has no room for a retry, and
             // the balance sheet behind the stat pills is where a failed read is answered.
-            balanceText = (balance as? BalanceState.Ready)?.let { "Balance · ${'$'}{it.account.total}" },
+            balanceText = (balance as? BalanceState.Ready)?.let { state ->
+                // The figure the stat pills already lead with: the whole total for the
+                // currency the account is billed in, not a derived number. Null when the
+                // reply carried no currency, and the header then draws only the name.
+                state.account.primary?.let { info -> "Balance · ${info.totalBalance} ${info.currency}" }
+            },
             entries = ME_ENTRIES,
             onOpen = { openTab = it.id },
         )
