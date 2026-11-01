@@ -147,7 +147,16 @@ fun FloatingBottomBar(
 /**
  * The 26-32 rendering: one translucent capsule and a tinted pill behind the active tab.
  *
- * No miuix-blur symbol in this file at all — that is the invariant, not an optimisation.
+ * **The invariant is about execution, not about names.** This file *does* name one
+ * miuix-blur type — `Backdrop`, in the overload above — because the two tiers share one
+ * entry point and its signature has to be able to carry the caller's backdrop. What it
+ * never does is *run* any of that package's code: the only such call sits behind the tier
+ * check in [LiquidBottomBar], in its own file.
+ *
+ * The distinction matters because the dependency ships in the APK either way: miuix-blur
+ * is an ordinary compile dependency, so its classes are present on every device. Naming a
+ * type costs nothing; invoking one on a device that cannot run it is the crash this
+ * arrangement is built to avoid.
  */
 @Composable
 private fun FlatBottomBar(
