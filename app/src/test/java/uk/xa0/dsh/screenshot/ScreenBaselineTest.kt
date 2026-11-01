@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -52,6 +53,7 @@ import uk.xa0.dsh.ui.AboutContent
 import uk.xa0.dsh.ui.ChatActions
 import uk.xa0.dsh.ui.ChatPanel
 import uk.xa0.dsh.ui.ChatUiState
+import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.MiuixProbe
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.PermissionSheet
@@ -137,12 +139,22 @@ class ScreenBaselineTest {
             // nothing to do with the code. The dark palette gets its own baselines
             // when the re-skin starts touching colour.
             DshTheme(themeMode = ThemeMode.LIGHT) {
+                // Glass off. Robolectric answers the capability test honestly — it is
+                // an SDK compare and the shadow platform ships the classes — but it has
+                // no GPU pipeline, and recording a backdrop there throws *during
+                // composition*, taking the screen down with it rather than merely
+                // drawing flat. So a capture pins the tier every device has, and the
+                // liquid tier's verification is a device at API 33+ (see the PR that
+                // wired it). The switch lives on the surface, mirroring
+                // `LocalAnimatedDots` — which exists for the same class of problem.
+                CompositionLocalProvider(LocalGlassEnabled provides false) {
                 Column(
                     Modifier
                         .fillMaxSize()
                         .background(DshTheme.colors.bgBase),
                 ) {
                     content()
+                }
                 }
             }
         }

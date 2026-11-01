@@ -8,6 +8,7 @@ package uk.xa0.dsh.ui.glass
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -90,9 +91,25 @@ fun glassBarSupported(): Boolean =
  * rebuilt when the palette changes — which is what keeps the bar following AMOLED, Monet and the
  * rest of the seven appearances.
  */
+/**
+ * Whether glass is painted at all, for a surface that cannot paint it.
+ *
+ * The precedent is [uk.xa0.dsh.ui.components.LocalAnimatedDots], and the reason is the
+ * same one: Robolectric reports the capacity (see [glassBarSupported]) but has no GPU
+ * pipeline behind it, so the recording of a layer there does not fail loudly — it fails
+ * *at composition*, which takes the whole screen down with it. Measured, not assumed:
+ * with glass on, `chat-hero` and `chat-transcript` died inside `setContent` the moment
+ * this wiring landed.
+ *
+ * So the switch belongs to the *surface*, not to the capability test — that function has
+ * no business knowing what a test is, and a caller that cannot record a layer is not the
+ * same thing as a platform that cannot blur. Defaults to on; only a baseline turns it off.
+ */
+val LocalGlassEnabled = compositionLocalOf { true }
+
 @Composable
 fun rememberGlassBarBackdrop(enabled: Boolean = true): GlassBarBackdrop? {
-    if (!enabled || !glassBarSupported()) return null
+    if (!enabled || !LocalGlassEnabled.current || !glassBarSupported()) return null
     val surfaceColor = DshTheme.colors.bgBase
     val layer = rememberLayerBackdrop {
         drawRect(surfaceColor)
