@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.theme.Colors as MiuixColors
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import uk.xa0.dsh.data.ThemeMode
 
 /**
@@ -443,7 +445,35 @@ private fun DshColors.toMaterialScheme(): ColorScheme {
 object DshTheme {
     val colors: DshColors
         @Composable get() = LocalDshColors.current
+
+    /**
+     * The same appearance expressed in miuix's colour vocabulary.
+     *
+     * Read this when placing a miuix component. [colors] is the app's own semantics and
+     * miuix knows nothing about it; miuix's `Colors` is what its components paint from.
+     * Handing a miuix component nothing makes it use miuix's defaults — its accent is
+     * `#3482FF` against this app's `#4176E6` — which draws two accents on one screen and
+     * reports nothing at all (`docs/PHASE-2-PLAN.md` §2.2, measured in 2.3).
+     *
+     * [MiuixTheme] is applied once at the root from this same value, so a screen does not
+     * have to remember to wrap itself. The accessor stays public because a preview, a test,
+     * or a screen drawing outside the root's subtree still needs the value.
+     */
+    val miuixColors: MiuixColors
+        @Composable get() = LocalMiuixColors.current
 }
+
+/**
+ * The miuix palette for the current appearance.
+ *
+ * A [CompositionLocal] of this app's own rather than a read of miuix's
+ * `MiuixTheme.colorScheme`: that local is `internal` to miuix (`theme/Colors.kt:618`), so
+ * the only way to know what was provided is to remember it here. It also means the value
+ * is available to a caller that has not wrapped itself in [MiuixTheme] — which is what lets
+ * the root resolve one palette and provide both themes from it.
+ */
+val LocalMiuixColors: ProvidableCompositionLocal<MiuixColors> =
+    staticCompositionLocalOf { LightColors.toMiuixColors() }
 
 /**
  * The palette an appearance resolves to, outside composition.
@@ -524,11 +554,30 @@ fun DshTheme(
         monetPalette(context, themeMode, systemDark)
     }
     val palette = dshPalette(themeMode, systemDark, monet)
-    CompositionLocalProvider(LocalDshColors provides palette) {
-        MaterialTheme(
-            colorScheme = palette.toMaterialScheme(),
-            typography = DshTypography,
-            content = content,
-        )
+    // Built once per appearance, not per frame: 53 roles with a handful of alpha
+    // composites each, and `MiuixTheme` copies whatever it is handed.
+    val miuix = remember(palette) { palette.toMiuixColors() }
+    CompositionLocalProvider(LocalDshColors provides palette, LocalMiuixColors provides miuix) {
+        // miuix inside Material, not beside it: `MiuixTheme` overrides `LocalIndication`,
+        // so it has to be the inner provider or that would leak out and change how
+        // *Material* draws. Nesting it here scopes it to the miuix components and leaves
+        // every existing screen exactly as it was — which is also why this adds no pixels
+        // on its own.
+        //
+        // One trap this ordering *does* rely on, worth knowing before someone flattens it:
+        // miuix's `colors =` overload does not inject `LocalContentColor` (only its
+        // `controller =` overload does — `theme/MiuixTheme.kt:37` vs `:62-67`), so on its
+        // own it leaves Compose's default of black. Nothing breaks here only because
+        // `MaterialTheme` sits *inside* and provides its own `LocalContentColor` for
+        // everything below. So a miuix component must never be moved above the
+        // `MaterialTheme` in this block; if one ever has to be, it needs an explicit
+        // `LocalContentColor` or its uncoloured text renders black on a dark appearance.
+        MiuixTheme(colors = miuix) {
+            MaterialTheme(
+                colorScheme = palette.toMaterialScheme(),
+                typography = DshTypography,
+                content = content,
+            )
+        }
     }
 }

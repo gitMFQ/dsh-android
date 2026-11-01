@@ -36,5 +36,14 @@ __pycache__/
 # Scratch file for `git commit -F`; never part of the repository.
 .commitmsg.tmp
 
+# Any other dotfile scratch note used to compose a commit or PR body. The pattern
+# rather than one name each: two separate `git add -A` runs swept up `.pradd.md` and
+# then `.cm.tmp`, and a third name would have done the same. Dotfile-only so a real
+# markdown document at the repo root is never caught by it.
+/.*.tmp
+/.*.md.tmp
+/.[a-z]*.md
+!/.github/
+
 # Tooling scratch (not project content)
 .dsh/

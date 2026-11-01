@@ -48,8 +48,11 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
@@ -134,7 +137,9 @@ import uk.xa0.dsh.model.turnOrNull
 import uk.xa0.dsh.ui.agentPresetLabel
 import uk.xa0.dsh.ui.components.ApprovalCard
 import uk.xa0.dsh.ui.components.AssistantMessageRow
+import uk.xa0.dsh.ui.components.BottomBarItem
 import uk.xa0.dsh.ui.components.CommandEntry
+import uk.xa0.dsh.ui.components.FloatingBottomBar
 import uk.xa0.dsh.ui.components.CommandMenu
 import uk.xa0.dsh.ui.components.Composer
 import uk.xa0.dsh.ui.components.DeliverableRow
@@ -506,44 +511,58 @@ fun ChatScreen(vm: DshViewModel) {
         hadShell = seats > 0
     }
 
-    // The Router tab's gate, and the strip it decides.
+    // The router panel's gate — a **panel**, not a destination.
     //
-    // `ui.routerTarget` is derived from the host's own model selection — the
-    // same value the composer's trigger draws — so the tab exists exactly while the
-    // route this session will run is served by something on the host's loopback. A
-    // cloud model selected in force, a switch to one that is only pending, and a
-    // selection the host's document does not describe all remove it.
+    // `ui.routerTarget` is derived from the host's own model selection — the same value
+    // the composer's trigger draws — so it is non-null exactly while the route this
+    // session will run is served by something on the host's loopback. A cloud model
+    // selected in force, a switch to one that is only pending, and a selection the
+    // host's document does not describe all make it null.
     //
-    // `shownView` is the selection the *screen* honours: while the gate is shut the
-    // Router seat reads as the conversation, so the one composition between the
-    // model changing and the effect below resetting `view` cannot leave the body
-    // hanging on a tab that is no longer drawn.
+    // ## Why it is no longer a tab (2.4)
+    //
+    // It used to be the fourth `ChatView`, which meant the tab strip had **three or four
+    // items depending on the selected model** — and, because `localProviders` starts as an
+    // empty map and is filled when `settings/describe` answers, it went from three to four
+    // a moment after every cold start. On a top strip that only cost a row of chrome. On
+    // the bottom bar it would move every other item sideways while the reader was looking
+    // at it, which is the specific thing `docs/PHASE-2-PLAN.md` §2.4 says the bar must not
+    // do. The bar's item list is therefore a constant (`ChatView.entries`), and this panel
+    // opens from a header seat instead — the same affordance the Files and Jobs seats use.
+    //
+    // The alternative — a permanent fourth destination — was rejected on the code's own
+    // terms rather than on taste: `RouterTab(target: RouterTarget)` takes a **non-null**
+    // target and dereferences it 18 times, so a destination that can be reached with no
+    // local route needs a nullable signature and a fourth kind of "nothing to report"
+    // wording. It would also contradict `model/LlamaRouter.kt:138-147`, which states that
+    // "the tab cannot appear for a cloud route" as the design intent: behind a cloud route
+    // there is no llama.cpp router to describe, so there is nothing a reader loses.
     val routerTarget = ui.routerTarget
-    val views = if (routerTarget != null) ALL_VIEWS else BASE_VIEWS
-    val shownView = if (view == ChatView.ROUTER && routerTarget == null) ChatView.CHAT else view
-
-    // Leaving the Router tab behind when its model is gone, for the same reason the
-    // last closed shell returns to the conversation: a seat that is no longer drawn
-    // must not still be selected.
+    // A panel, so it has its own open/closed state — the same shape as `showFiles` and
+    // `showJobs`. Keyed by session because the answer belongs to one route in one session.
+    var showRouter by rememberSaveable(ui.currentSessionId) { mutableStateOf(false) }
+    // The gate can shut while the panel is open (the reader switches to a cloud model in
+    // the composer without closing it first). Closing it is the honest response: the panel
+    // describes a route that is no longer selected.
     LaunchedEffect(routerTarget) {
-        if (routerTarget == null && view == ChatView.ROUTER) {
-            android.util.Log.d("DshView", "local route left; returning to the conversation")
-            view = ChatView.CHAT
+        if (routerTarget == null && showRouter) {
+            android.util.Log.d("DshView", "local route left; closing the router panel")
+            showRouter = false
         }
     }
 
-    // Opening the tab is what asks the question, and re-opening it asks again: a
-    // reachability answer is only worth reading with the time it was taken, so the
-    // check is re-run rather than shown from a previous visit. The session is a key
-    // too: two sessions can select the same local route, and moving between them is
-    // a new "is my router up now", not a reason to show the other one's answer.
+    // Opening the panel is what asks the question, and re-opening it asks again: a
+    // reachability answer is only worth reading with the time it was taken, so the check
+    // is re-run rather than shown from a previous visit. The session is a key too: two
+    // sessions can select the same local route, and moving between them is a new "is my
+    // router up now", not a reason to show the other one's answer.
     LaunchedEffect(
         ui.currentSessionId,
-        shownView,
+        showRouter,
         routerTarget?.provider?.id,
         routerTarget?.modelId,
     ) {
-        if (shownView == ChatView.ROUTER && routerTarget != null) vm.checkRouter()
+        if (showRouter && routerTarget != null) vm.checkRouter()
     }
 
     // The right panel's `files` surface. A phone has no room for a column beside
@@ -621,13 +640,14 @@ fun ChatScreen(vm: DshViewModel) {
     // dismiss themselves. Composed here rather than at the root because this is where
     // the state lives, and the root gate is asked only after the screen declines.
     //
-    // `shownView`, not `view`: while the Router tab's gate is shut the screen is
-    // already showing the conversation, and consuming a press to "return" to a view
-    // it is on would swallow the back gesture for nothing.
-    BackHandler(enabled = showFiles || shownView != ChatView.CHAT || subagentParent != null) {
+    // The panels come before the view: an open panel is on top of whatever view it
+    // covers, so it has to close first or the press would change the view underneath
+    // something still on screen.
+    BackHandler(enabled = showFiles || showRouter || view != ChatView.CHAT || subagentParent != null) {
         when {
             showFiles -> showFiles = false
-            shownView != ChatView.CHAT -> view = ChatView.CHAT
+            showRouter -> showRouter = false
+            view != ChatView.CHAT -> view = ChatView.CHAT
             else -> subagentParent?.let { vm.openSession(it.sessionId) }
         }
     }
@@ -936,13 +956,13 @@ fun ChatScreen(vm: DshViewModel) {
                     vm.markJobsSeen()
                     showJobs = true
                 },
-                // The web renders `.tabs` only when more than one view is
-                // registered, so the hero screen — which has nothing to inspect
-                // yet — carries no strip at all.
-                view = shownView,
-                onView = { view = it },
-                views = views,
-                showTabs = !isHero,
+                // The panel's seat, offered only while there is a local route to
+                // describe — the header's trailing cluster is already a set of
+                // conditional seats, so this is the same shape as Files and Jobs
+                // rather than a new idea. See the gate above for why this is not a tab.
+                routerAvailable = routerTarget != null,
+                routerOpen = showRouter,
+                onRouter = { showRouter = !showRouter },
                 filesOpen = showFiles,
                 // The Files panel resolves every path against a session
                 // (`agentId`), so on the pending seat there is nothing to list. The
@@ -1015,7 +1035,7 @@ fun ChatScreen(vm: DshViewModel) {
                     },
                     modifier = Modifier.weight(1f),
                 )
-            } else if (shownView == ChatView.TERMINAL) {
+            } else if (view == ChatView.TERMINAL) {
                 // A real PTY for this session, from the host's `terminal` Remote
                 // namespace. The screen creates or adopts the session's terminal, so
                 // it is only reachable for an open session — the strip that selects
@@ -1035,7 +1055,7 @@ fun ChatScreen(vm: DshViewModel) {
                     fontSp = ui.terminalFontSp,
                     modifier = Modifier.weight(1f),
                 )
-            } else if (shownView == ChatView.TRAJECTORY) {
+            } else if (view == ChatView.TRAJECTORY) {
                 val trajectory = remember(entries, endedTurns) {
                     buildTrajectory(entries, endedTurns, vm.toolParents())
                 }
@@ -1050,20 +1070,6 @@ fun ChatScreen(vm: DshViewModel) {
                     // would be a second copy of it.
                     showHeader = false,
                 )
-            } else if (shownView == ChatView.ROUTER) {
-                // The fourth tab. `routerTarget` is non-null by construction
-                // here: `shownView` is only ROUTER while the gate is open.
-                // The model trigger's own labels are reused so the tab cannot name
-                // the effort differently from the chip beside the composer.
-                routerTarget?.let { target ->
-                    RouterTab(
-                        target = target,
-                        probe = ui.routerProbe,
-                        effort = effortLabel(ui.selectedModel, ui.selectedEffort),
-                        onCheck = vm::checkRouter,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
             } else if (awaitingTranscript) {
                 // A non-blank session with nothing loaded yet: the host has not
                 // answered this session's follow stream. Naming the connection
@@ -1622,6 +1628,27 @@ fun ChatScreen(vm: DshViewModel) {
                     ),
                 )
             }
+
+            // The floating bar, at the very bottom of the screen's column and below the
+            // composer, because it is the *destination* selector: the composer is where
+            // the reader writes, the bar is where they go.
+            //
+            // Not drawn on the hero, for the same reason the tab strip was not: a session
+            // with nothing in it has no Trajectory to show and no Shell to open, so two of
+            // the three destinations would be empty rooms. The bar appears once there is
+            // something to navigate.
+            //
+            // `ChatView.entries` is passed whole and never filtered — the item count is a
+            // constant. See the enum's own comment for why that is not negotiable.
+            if (!isHero) {
+                FloatingBottomBar(
+                    items = BOTTOM_BAR_ITEMS,
+                    selectedKey = view.name,
+                    onSelect = { key ->
+                        ChatView.entries.firstOrNull { it.name == key }?.let { view = it }
+                    },
+                )
+            }
         }
     }
 
@@ -1669,6 +1696,29 @@ fun ChatScreen(vm: DshViewModel) {
             sessionsLoading = ui.sessionsLoading,
             onUnarchive = vm::unarchiveSession,
         )
+    }
+
+    // The router panel, opened from its header seat. Composed here rather than in the
+    // body's view chain because it is a *panel* over the current view, not a view: the
+    // conversation stays behind it, which is what lets the reader compare the router's
+    // answer with the model they selected without losing their place.
+    //
+    // `routerTarget != null` is the gate twice over — the seat that opens it is only drawn
+    // while the gate is open, and the effect above closes the panel if the gate shuts while
+    // it is. Checking again here keeps the non-null contract of `RouterTab` true by
+    // construction rather than by argument.
+    if (showRouter) {
+        routerTarget?.let { target ->
+            RouterSheet(
+                target = target,
+                probe = ui.routerProbe,
+                // The model trigger's own label, so the panel cannot name the effort
+                // differently from the chip beside the composer.
+                effort = effortLabel(ui.selectedModel, ui.selectedEffort),
+                onCheck = vm::checkRouter,
+                onDismiss = { showRouter = false },
+            )
+        }
     }
 
     // Host-wide, so it is a sheet over whatever is open rather than a session view.
@@ -2100,14 +2150,17 @@ private fun ChatHeader(
     jobs: List<uk.xa0.dsh.model.JobItem> = emptyList(),
     jobsFinishedUnseen: Boolean = false,
     onJobs: () -> Unit = {},
-    view: ChatView = ChatView.CHAT,
-    onView: (ChatView) -> Unit = {},
     /**
-     * The tabs to draw, in order. Passed in rather than read off the enum because
-     * the Router tab is conditional on the session's selected model.
+     * Whether the router panel's seat is offered at all.
+     *
+     * Conditional for the same reason `filesAvailable` is: a session whose selected
+     * route is not local has no router behind it, so there is nothing for the panel to
+     * describe. This is a *seat* rather than a bar destination precisely because it can
+     * be absent — see the gate in `ChatScreen` for the whole argument.
      */
-    views: List<ChatView> = ChatView.entries,
-    showTabs: Boolean = false,
+    routerAvailable: Boolean = false,
+    routerOpen: Boolean = false,
+    onRouter: () -> Unit = {},
     filesOpen: Boolean = false,
     /**
      * Whether the Files seat is offered at all. A session is what the panel
@@ -2229,6 +2282,22 @@ private fun ChatHeader(
                 )
                 Spacer(Modifier.width(HEADER_SEAT_GAP))
             }
+            // The router panel's seat. Drawn before the jobs seat so the two cannot
+            // swap places as either one appears; both are conditional, and a fixed
+            // order is what keeps the cluster from reshuffling.
+            if (routerAvailable) {
+                Icon(
+                    Icons.Rounded.Hub,
+                    contentDescription = if (routerOpen) "Close router" else "Router",
+                    tint = if (routerOpen) colors.link else colors.labelSecondary,
+                    modifier = Modifier
+                        .size(HEADER_SEAT)
+                        .clip(CircleShape)
+                        .clickableNoRipple(onClick = onRouter)
+                        .padding(DshSpacing.md),
+                )
+                Spacer(Modifier.width(HEADER_SEAT_GAP))
+            }
             JobsSeat(jobs = jobs, finishedUnseen = jobsFinishedUnseen, onClick = onJobs)
             // No separate running-turn dot here on purpose. `JobsSeat` already
             // draws a `StateDot(ONGOING)` while a job runs, and this glyph is the
@@ -2240,9 +2309,6 @@ private fun ChatHeader(
             // running state is the sidebar row's status and the composer's own
             // stop affordance, both of which this app already has.
             Spacer(Modifier.width(HEADER_SEAT_GAP))
-        }
-        if (showTabs) {
-            ViewTabs(selected = view, views = views, onSelect = onView)
         }
         Box(
             Modifier
@@ -2265,86 +2331,30 @@ private fun ChatHeader(
 private enum class ChatView(val label: String) {
     CHAT("Chat"),
     TRAJECTORY("Trajectory"),
-    // "Shell", not "Terminal": the tab hosts two seats — an unconfined host shell
-    // and this session's own confined terminal — so the accurate word is the
-    // general one, and the seat chips inside say which is which.
+    // "Shell", not "Terminal": the view hosts two seats — an unconfined host shell and
+    // this session's own confined terminal — so the accurate word is the general one,
+    // and the seat chips inside say which is which.
     TERMINAL("Shell"),
-    // The fourth tab, and the only conditional one. It describes the llama.cpp
-    // router behind the session's selected model, so it is offered only while that
-    // model belongs to a provider whose declared endpoint is this host's own
-    // loopback — and it goes away the moment a cloud model is selected. See
-    // `model/LlamaRouter.kt` for the gate and for the probe evidence behind
-    // what the tab does — and does not — claim.
-    //
-    // "Router", which is the user's own word and the accurate one: the thing behind
-    // a local route is a `llama-server` started with `--models-dir`, which holds
-    // several GGUFs and loads one on demand — its own `/props` answers
-    // `{"role":"router"}`. "Server" was never more than a placeholder for it, and
-    // mislabelled the surface as a single model process. "Health" would be worse
-    // still: it would promise a readout this client cannot obtain.
-    ROUTER("Router"),
+    // **Every value here is unconditional.** The bar draws `ChatView.entries` as a
+    // constant list, so a value whose availability depended on session state would
+    // change the bar's width at runtime — the one thing `docs/PHASE-2-PLAN.md` §2.4 says
+    // it must not do. The llama.cpp router panel used to be a fourth value here and is
+    // now a sheet behind a header seat; see the gate in `ChatScreen` for why.
 }
-
-/** The tabs every session is offered: everything except the conditional one. */
-private val BASE_VIEWS: List<ChatView> = ChatView.entries.filter { it != ChatView.ROUTER }
-
-/** Every tab, for a session whose selected route is local. */
-private val ALL_VIEWS: List<ChatView> = ChatView.entries.toList()
 
 /**
- * `.tabs` from the conversation header.
+ * What the floating bar draws — one entry per `ChatView`, in the enum's order.
  *
- * The web's active state is a 2px underline plus `state-business-primary` text,
- * not a pill; inactive labels are `label-tertiary` at 13px/16px weight 500. The
- * strip is `gap:36px; margin-top:10px; padding-left:8px`. 36px gaps would push
- * the second label off a narrow phone once both words are drawn, so the gap is
- * tightened — the only deliberate divergence, and it costs nothing to read.
+ * A constant, and that is the point: `docs/PHASE-2-PLAN.md` §2.4 requires a bar whose item
+ * count cannot change while the reader is looking at it. The icons are Material's, because
+ * miuix's icon set is not yet in use anywhere else and mixing the two sets on one bar would
+ * be a visual decision nobody has made.
  */
-@Composable
-private fun ViewTabs(selected: ChatView, views: List<ChatView>, onSelect: (ChatView) -> Unit) {
-    val colors = DshTheme.colors
-    // Four labels — Chat / Trajectory / Shell / Router — do not fit a narrow phone
-    // at 36px gaps, and "Trajectory" is the width that decides it. The gap is
-    // tightened only when the fourth tab is actually drawn, so the ordinary
-    // three-tab strip is untouched.
-    val gap = if (views.size > 3) DshSpacing.xl else DshSpacing.xxl
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = DshSpacing.md, end = DshSpacing.md, top = DshSpacing.md),
-        horizontalArrangement = Arrangement.spacedBy(gap),
-    ) {
-        views.forEach { entry ->
-            val active = entry == selected
-            // `IntrinsicSize.Max` is what keeps the underline as wide as the label:
-            // a plain `fillMaxWidth()` inside the Row measures against the *row*,
-            // so the first tab would stretch across the strip and push the second
-            // one off the screen.
-            Column(
-                Modifier
-                    .width(IntrinsicSize.Max)
-                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .clickableNoRipple { onSelect(entry) }
-                    .padding(horizontal = DshSpacing.xs, vertical = DshSpacing.md),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = entry.label,
-                    style = DshType.micro.copy(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
-                    color = if (active) colors.link else colors.labelTertiary,
-                )
-                Spacer(Modifier.height(DshSpacing.md))
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(if (active) colors.link else Color.Transparent),
-                )
-            }
-        }
-    }
-}
+private val BOTTOM_BAR_ITEMS: List<BottomBarItem> = listOf(
+    BottomBarItem(ChatView.CHAT.name, ChatView.CHAT.label, Icons.Rounded.ChatBubble),
+    BottomBarItem(ChatView.TRAJECTORY.name, ChatView.TRAJECTORY.label, Icons.Rounded.Timeline),
+    BottomBarItem(ChatView.TERMINAL.name, ChatView.TERMINAL.label, Icons.Rounded.Terminal),
+)
 
 /**
  * The `files` surface of the web's right panel, full-body on a phone.

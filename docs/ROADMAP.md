@@ -66,7 +66,7 @@
 | # | 任务 | 产出 | 验收 | 依赖 |
 |---|---|---|---|---|
 | 2.1 | 浮动底栏：`MiuixIcons` + 自绘玻璃层（`Modifier.blur` API31+/描边高光；API<31 纯色）**或** 直接用 `FloatingNavigationBar` | 组件 | 三档设备均正常 | 0.5.3 |
-| 2.2 | 4 目的地 pager（Chat/Trajectory/Files/Settings），宽屏切 `NavigationRail` | 导航 | 切页弹簧流畅，旋转后状态保持 | 2.1 |
+| 2.2 | 3 目的地 pager（Chat/Trajectory/Shell），宽屏切 `NavigationRail`。**原文写的「4 目的地（Chat/Trajectory/Files/Settings）」与代码不符**：Files 是 `showFiles` 面板、Settings 是 `showSettings` 的 sheet，都不是目的地；ROUTER 已在 2.4 移出目的地列表（条件性项进底栏会让项数在运行中变化）。要补第 4 项应先把 `showFiles` 提升成 `ChatView.FILES`，那是独立 PR | 导航 | 切页弹簧流畅，旋转后状态保持 | 2.1 |
 | 2.3 | TopBar 折叠 + 状态胶囊（连接/运行/待审批） | 组件 | 滚动折叠无跳变 | 2.1 |
 | 2.4 | 抽屉换装（搜索栏/分段列表/分组排序/归档） | 界面 | 分组排序可用，截图无回归 | 2.2 |
 | 2.5 | 设置页 + 关于页换装 | 界面 | 视觉对齐参考；项全部可达 | 1.3 |

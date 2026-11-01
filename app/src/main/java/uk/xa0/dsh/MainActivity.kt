@@ -27,6 +27,7 @@ import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.markdown.LocalImageBytes
 import uk.xa0.dsh.ui.theme.DshTheme
+import uk.xa0.dsh.ui.theme.SystemBars
 import uk.xa0.dsh.ui.theme.WindowBackground
 
 import android.net.Uri
@@ -63,6 +64,7 @@ class MainActivity : ComponentActivity() {
         maybeAskForNotifications()
         reserveLeftEdgeForDrawer()
         paintWindowForStoredAppearance()
+        paintSystemBarsForStoredAppearance()
 
         setContent {
             val vm: DshViewModel = viewModel()
@@ -75,6 +77,11 @@ class MainActivity : ComponentActivity() {
             val systemDark = isSystemInDarkTheme()
             LaunchedEffect(ui.themeMode, systemDark) {
                 WindowBackground.apply(this@MainActivity, ui.themeMode, systemDark)
+                // The bars' icon appearance is decided by the same palette, so it moves
+                // with the appearance for the same reason and at the same moment. Left
+                // to `enableEdgeToEdge()` it follows the *system's* night setting
+                // instead — see `SystemBars` for the four appearances that gets wrong.
+                SystemBars.apply(this@MainActivity, ui.themeMode, systemDark)
             }
 
             LaunchedEffect(provisioning.value) {
@@ -186,6 +193,20 @@ class MainActivity : ComponentActivity() {
     private fun paintWindowForStoredAppearance() {
         val store = (application as? DshApplication)?.configStore ?: return
         WindowBackground.apply(this, store.themeMode)
+    }
+
+    /**
+     * The system bars' icon appearance, resolved before Compose exists.
+     *
+     * Same source and same reason as [paintWindowForStoredAppearance]: the stored
+     * appearance is what the reader chose, and the first frame should already agree with
+     * it. Without this the first frame draws status-bar icons for the *system's* night
+     * setting — the light-on-white or dark-on-black flash the window repaint above was
+     * added to stop, one layer up.
+     */
+    private fun paintSystemBarsForStoredAppearance() {
+        val store = (application as? DshApplication)?.configStore ?: return
+        SystemBars.apply(this, store.themeMode)
     }
 
     /**

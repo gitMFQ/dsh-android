@@ -13,8 +13,21 @@
     -->
     <style name="Theme.DSH" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/dsh_window_bg</item>
+        <!--
+          Transparent, because the app draws behind the bars: MainActivity's root Box
+          paints the palette's bgBase and each screen applies statusBarsPadding(). Since
+          API 35 the platform ignores statusBarColor entirely, so this is a no-op that
+          documents the intent rather than the mechanism.
+        -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!--
+          The *icon* colour, and the one value here that cannot be right: it is a single
+          static boolean and the app has seven appearances. It is deliberately left at the
+          dark-palette answer (light icons) so the resource is a sane fallback for the
+          instant before the activity exists; ui/theme/SystemBars.kt overwrites it in
+          MainActivity.onCreate from the appearance the reader actually chose.
+        -->
         <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

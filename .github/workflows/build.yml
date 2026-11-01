@@ -44,7 +44,14 @@ jobs:
       - name: Toolchain versions
         id: toolchain
         run: |
-          echo "jdk=17" >> "$GITHUB_OUTPUT"
+          # 21, not 17, and for the same reason verify.yml / screenshots.yml were
+          # raised: miuix 0.9.4 ships Java 21 bytecode (class file 65). This job ran
+          # 17 until 2.4 moved the palette adapter into :design, which put miuix on
+          # *that* module's test classpath — the build then died with
+          # NoClassDefFoundError inside :design:testDebugUnitTest, 25 tests all
+          # failing at once. D8 never had a problem; only the JVM loading the test
+          # classes does, and it is the same fix.
+          echo "jdk=21" >> "$GITHUB_OUTPUT"
           echo "gradle=9.5.0" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK
@@ -57,6 +64,12 @@ jobs:
       # `.toolchain/jdk-17.0.20.1+1`, so both paths have to exist. The JDK is
       # symlinked rather than copied: build.sh only needs a valid JAVA_HOME, and
       # a copy would double the job's disk for nothing.
+      #
+      # The directory *name* still says 17 while the JDK behind it is 21. That is
+      # deliberate: the name is the path build.sh hard-codes, and renaming it would
+      # mean editing build.sh, verify.yml and screenshots.yml in the same commit as
+      # the version bump. The name is a path, not a version claim — see the
+      # "Toolchain versions" step above for the version that actually runs.
       - name: Lay out .toolchain for build.sh
         run: |
           set -euo pipefail

@@ -12,11 +12,16 @@
 
 **阶段 1 已完成**。`:design` 顺带交付了 **7 档外观**（Light / Dark / System / AMOLED / Monet ×3），测试总数 **1116 → 1123**。
 
-**阶段 2 已开工（2026-11-01）**：2.0（窗口底色跟随外观）、2.1（删 `KsuTokens.Space`）、2.2a/b/c（基线 4 → 8 张 + 抽 `TerminalPanel`）、**2.3（miuix 闸门 —— 结论是可以，见下）** 全部合入。当前 **`tests=1136` + `screenshots=9`**。下一步是 **2.4 浮动底栏**。
+**阶段 2 已开工（2026-11-01）**：2.0（窗口底色跟随外观）、2.1（删 `KsuTokens.Space`）、2.2a/b/c（基线 4 → 8 张 + 抽 `TerminalPanel`）、2.3（miuix 闸门 —— 结论是可以）、**2.4（浮动底栏 + 调色板适配器 + 状态栏 + ROUTER 出目的地列表）** 全部合入。下一步是 **2.5 pager 导航**。
+
+> **2.4 交付了什么，接手的先看 `docs/PHASE-2-PLAN.md` §2.4 的三个结论**：
+> 1. **调色板适配器已存在**（`design/.../MiuixPalette.kt`，53 角色），且 `DshTheme` 在根部就套好了 `MiuixTheme` —— 后续 miuix 屏**不需要**再各写一遍适配器，直接摆组件即可。
+> 2. **状态栏现在跟 7 档外观走**（`design/.../SystemBars.kt`）。之前 `enableEdgeToEdge()` 跟的是系统夜间模式，四档外观的图标是错的。
+> 3. **底栏恒 3 项**（Chat / Trajectory / Shell），ROUTER 改成头部 seat + sheet。要第 4 项得先把 `showFiles` 提升成 `ChatView.FILES`，独立 PR。
 
 > **2.3 闸门的结论，接手的人必须先看这两条**：
 > 1. **miuix 能画** —— 但它的 0.9.4 是 **Java 21 字节码**，测试 JVM 已从 17 升到 21（`verify.yml` / `screenshots.yml`）。APK 侧 D8 一直没问题。
-> 2. **调色板不会自动同步** —— miuix 默认强调色 `#3482FF` ≠ 本 app 的 `#4176E6`。**每个 miuix 屏都要先写一个 `DshColors → miuix Colors` 的适配器**，否则会做出「配色不跟 7 档外观走、而且不报错」的屏。
+> 2. **调色板不会自动同步** —— miuix 默认强调色 `#3482FF` ≠ 本 app 的 `#4176E6`。**2.4 已经把适配器写好了**（`design/.../MiuixPalette.kt`）并接在 `DshTheme` 根部，所以后续 miuix 屏**不必**再各写一遍 —— 但也不要绕过 `DshTheme` 自己 `MiuixTheme(colors = miuixLight())`，那会退回到「配色不跟外观走、而且不报错」。
 
 ## 2. 已完成（L1–L4，全部合入 master）
 

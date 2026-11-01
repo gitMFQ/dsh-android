@@ -98,7 +98,7 @@ private enum class ChatView(val label: String) {
 | **2.2b** ✅ | `refactor/terminal-stateless` | **已交付（PR #14）**。`TerminalScreen` 的树抽成 `internal fun TerminalPanel(state, emulator, …)`，8 处 `vm::x` 换成参数；`TerminalScreen` 保留 `StateFlow`/RPC/离场 hook，成为唯一调用方。**纯搬运**，不加测试 | `tests=1136` / `screenshots=7` 均不变（实测 = 搬运没改树） | 低 |
 | **2.2c** ✅ | `test/baseline-terminal` | **已交付（PR #15）**。给 `TerminalPanel` 录 `terminal.png`（80×24、running、十几行输出） | `screenshots=8`（实测）；原有 7 张 sha256 逐字节相同 | 低（纯测试） |
 | **2.3** ✅ | `spike/miuix-adoption` | **已交付（PR #16）—— 结论：行。** 一个 `SwitchPreference` 套在 `DshTheme` 里，实测能画。两个必须带进后续 PR 的结论见 §2.2 下方 | `tests=1136`（不变）/ `screenshots=9` | 已完成 |
-| **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs`。**⚠️ 第一件事是写 `DshColors → miuix Colors` 适配器**（2.3 结论 §2.2：不写就是两个强调色同屏且不报错）。**⚠️ 先定 `ROUTER` 去留**（§1.3：条件性项目进底栏会让项数在运行中变化） | 底栏 4 项；基线新增底栏屏；原有 9 张仅被底栏实际挤到的变动 | 中 |
+| **2.4** | `feat/floating-bottom-bar` | 浮动底栏（自绘玻璃层，**不引 miuix-blur**——它 minSdk 33）：API 31+ `Modifier.blur`，<31 纯色 + 描边。替换顶部 `ViewTabs`。**调色板适配器先落地**（`design/.../MiuixPalette.kt` + `DshTheme` 根部提供 `MiuixTheme`），**状态栏跟随 7 档外观**（`SystemBars.kt`），**ROUTER 移出目的地列表**（见 §2.4 结论）。底栏 **3 项固定**：Chat / Trajectory / Shell | 基线新增底栏 2 张；原有 9 张不变；`tests` 原数不减 + 新增 | 中 |
 | **2.5** | `feat/pager-navigation` | 4 目的地 pager + 弹簧切页；宽屏切 `NavigationRail` | 切页流畅；旋转保持 | 中 |
 | **2.6** | `feat/topbar-collapse` | TopBar 折叠 + 状态胶囊 | 滚动折叠无跳变 | 中 |
 | **2.7** | `feat/drawer-reskin` | 抽屉换装（搜索栏 / 分段列表 / 分组排序） | 基线 diff 符合预期 | 中 |
@@ -122,6 +122,62 @@ private enum class ChatView(val label: String) {
 > 另：JDK 17→21 升级本身已验证是**版本下限调整、不是渲染变更** —— 升完重录，另外 8 张基线 sha256 逐字节相同。
 
 > **流程坑（已踩）**：`Screenshots` workflow **用的是被 checkout 那个分支上的 workflow 文件**。`gh workflow run screenshots.yml --ref master -f branch=feat/x` 跑的是 **master 的**那个文件（JDK 17），不是 feat/x 的。要录一个改了 workflow 的分支，必须 `--ref feat/x`。
+
+### 2.4 的三个结论（2026-11-01）
+
+#### (1) 调色板适配器：先写它，而且它抓到了两个真 bug
+
+`design/src/main/java/uk/xa0/dsh/ui/theme/MiuixPalette.kt` —— `DshColors.toMiuixColors()`，53 个角色。`DshTheme` 在根部 `remember(palette)` 后套 `MiuixTheme(colors = …)`，于是**任何 miuix 组件不传参数也拿到本 app 的配色**，「两个强调色同屏」在结构上不可能再发生。
+
+两个只有写出来才会暴露的问题（都由测试抓到，不是肉眼）：
+
+| 问题 | 现象 | 修法 |
+|---|---|---|
+| `disabledSecondary` 用 `borderL3.copy(alpha = 0.5f)` | `borderL3` 本身是半透明（12%），`copy` 是**替换** alpha 而非相乘 → 禁用轨道比启用轨道还重 3~4 倍（亮 #7F7F7F vs #E0E0E0） | 先压平再减半：`opaque(opaque(borderL3, base).copy(alpha = 0.5f), base)` |
+| `onError` 借用 `sendGlyph` | 该 token 跟着强调色走，**Monet 下跟着壁纸**，实测 3.99:1 | 改成按对比度在「亮墨 / 纯黑」里选（`inkOn()`），七档外观全部 ≥ 4.5:1 |
+
+> 顺带记一条**关于 token 本身**的事实：亮色调色板的 `error = #EC1313` 对**白字**只有 **4.4976:1**，够不到 4.5。这不是适配器的错，是 `LightColors.error` 的天花板；动它等于重刷全 app 的错误面，不属本 PR。
+
+#### (2) 状态栏：`enableEdgeToEdge()` 跟的是**系统**夜间模式，不是外观
+
+这是本次发现的一个真缺陷。`enableEdgeToEdge()` 无参调用的 `SystemBarStyle.auto` 用 `Configuration.UI_MODE_NIGHT_MASK` 决定图标明暗，而 app 有 7 档外观。四档是错的：
+
+| 外观 | 系统为亮时 | 结果 |
+|---|---|---|
+| AMOLED / Dark | 亮 | **深色图标画在 #151517 上** |
+| Light / Monet light | 暗 | **浅色图标画在白色上** |
+
+修法：`design/.../SystemBars.kt`，用同一个 `dshPalette` 推出 `iconsAreLight`，经 `WindowCompat` 写 `isAppearanceLightStatusBars` / `…NavigationBars`；`MainActivity` 在 `onCreate`（Compose 之前）和 `LaunchedEffect(themeMode, systemDark)` 里各调一次。**颜色不用设**：API 35+ `setStatusBarColor` 已是 no-op，而 app 根部 `Box` 本来就铺 `bgBase` + `statusBarsPadding()`，状态栏显示的已经是调色板底色。
+
+
+> **补记（审计后追加）**：上面这条在 API 26–28 上**不止图标**，导航栏的**底色**也一样错 —— 那三档平台用 `auto(DefaultLightScrim, DefaultDarkScrim)` 按**系统**夜间设置算 scrim，于是强制 Dark + 系统亮 → 近白条（`0xE6FFFFFF`）配浅色图标，还是同一个 bug 换了个位置。29+ 上 `nightMode == 0` 让 `getScrimWithEnforcedContrast` 直接返回 0，所以上面那几档是透明的、图标标志才是唯一权威。修法：`SystemBars` 在 `SDK_INT < Q` 时显式写 `window.navigationBarColor = palette.bgBase`（`themes.xml` 救不了，`enableEdgeToEdge` 会在 `onCreate` 里覆盖它）。
+>
+> 另外 `SystemBars.apply` **不传** `monetPalette`：`ThemeMode.isDark` 只由外观决定、`toMonet` 从不改 `isDark`，传壁纸色只会在 `onCreate` 主线程白建一次 `dynamicColorScheme`。`WindowBackground.apply` 则确实需要它（它画的是 Monet **颜色**）—— 这就是两个调用唯一的差别。
+> 基线看不到它 —— 状态栏不是 Compose 树的一部分，和 2.0 的窗口是同一个结构性盲区。所以补的是 `SystemBarsTest`，不是截图。
+
+#### (3) ROUTER 去留：**移出目的地列表，改成头部 seat + sheet**
+
+判据不是「能省多少行」，而是**条件该放在哪里**：头部那排 seat 本来就是变宽右对齐的簇，三个成员（lineage / Files / Jobs）**全是条件性的**；底栏是定数等宽项行。同一个条件放前者零成本，放后者是结构性的。
+
+- `RouterTab(target: RouterTarget)` 是**非空签名**、18 处解引用 —— 做成永久第 4 项就要改可空性并新写第 4 种「没有 router」措辞，还推翻 `LlamaRouter.kt:138-147` 写明的「the tab cannot appear for a cloud route」。
+- 冷启动时 `localProviders` 先是空 Map，**即便本机用户也是「先 3 项后 4 项」** —— 项数变化是真实存在的，不是理论担忧。
+- `DshViewModel` / `RouterTab.kt` / `LlamaRouter.kt` **零改动**，可逆性极高。
+
+结果：`ChatView` 只剩 CHAT / TRAJECTORY / TERMINAL，底栏恒 3 项；`shownView` 及其 12 处下游、`BASE_VIEWS`/`ALL_VIEWS`、`ViewTabs` 整体删除（净减约 75 行）。
+
+> **与 ROADMAP §阶段 2 的对账**：那里写「4 目的地 pager（Chat/Trajectory/Files/Settings）」是**待修正的笔误** —— 代码里 Files 是 `showFiles` 面板、Settings 是 `showSettings` 的 sheet，都不是目的地。第 4 项若要补，正确候选是把 `showFiles` 提升成 `ChatView.FILES`，**那是独立 PR**（本 PR 保持 3 项固定，不混两个变量）。
+
+
+#### (4) CI 抓到的两件事，本机抓不到
+
+这台机器编不了 `:app` 的测试源码（aapt2，`BUILD-AND-CI.md` §0），所以第一版是带着未验证的 `SystemBarsTest` 推上去的。CI 红了，而且红得对：
+
+| 缺陷 | 表现 | 根因 |
+|---|---|---|
+| `SystemBars` 的极性反了 | `SystemBarsTest` 6/9 失败 | `isAppearanceLightStatusBars = true` 说的是**「这条栏是浅色，所以图标画深色」** —— 它描述的是**背景**。按「图标是浅色」去理解就会把调色板取反，于是修出了**方向相反的同一个 bug**。现已改名 `lightBackground`，把语义放进名字，并逐档断言方向而不是让它隐含 |
+| `build.yml` 还在 JDK 17 | Debug APK 任务里 `:design:testDebugUnitTest` **25 个测试全挂**，`NoClassDefFoundError` | 2.4 把适配器搬进 `:design`，miuix 的 Java 21 字节码就上了**那个模块**的测试类路径。症状像「测试文件写坏了」，实际是 JDK 版本。已升 21；`release.yml` 留 17 并写明原因（它只 `assembleRelease`，D8 吃 21 字节码没问题） |
+
+> **可复用的判据**：一个测试类**整片**因 `NoClassDefFoundError` / `ExceptionInInitializerError` 挂掉时，先看 JDK 版本，再看测试本身。而「6 个测试按同一个方向失败」几乎总是**命名与语义反向**，不是六个独立的 bug。
 
 ### 2.1 执行中修正的四件事（2026-11-01）
 
