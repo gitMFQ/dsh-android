@@ -34,7 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import uk.xa0.dsh.ui.components.BottomBarItem
+import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
