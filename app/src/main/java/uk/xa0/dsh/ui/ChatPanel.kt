@@ -149,6 +149,7 @@ import uk.xa0.dsh.ui.components.ApprovalCard
 import uk.xa0.dsh.ui.components.AssistantMessageRow
 import uk.xa0.dsh.ui.glass.glassBarLayer
 import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
+import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.CommandEntry
 import uk.xa0.dsh.ui.components.CommandMenu
@@ -1149,6 +1150,18 @@ internal fun ChatPanel(
             // trade-off that buys. On the three other destinations nothing changed: a rightward
             // swipe still goes back a page, which is what the reader asked for by being there,
             // and the drawer stays reachable from the header's menu seat.
+            // The pager and the bar share one box, and the bar is *over* the pager rather than
+            // below it. Two reasons, both of them the difference between a floating surface and
+            // a row of chrome:
+            //
+            //  - **The glass needs something behind it.** In a flow column the bar sat on the
+            //    page's flat background, so "liquid glass" refracted nothing. Overlaying puts
+            //    whatever the page paints at its bottom edge behind the material.
+            //  - **A capsule must be centred by its container.** The vendored bar sizes itself
+            //    to its content (`width(IntrinsicSize.Min)`) and its own root aligns to the
+            //    start, so in a Column it sat hard against the left edge — which is exactly what
+            //    it looked like on the device.
+            Box(Modifier.weight(1f)) {
             HorizontalPager(
                 state = destinationState,
                 // Keyed per destination so each page keeps its own vertical scroll
@@ -1160,7 +1173,14 @@ internal fun ChatPanel(
                 // On the pager rather than on the Column because the *bar itself* must not
                 // be part of what the bar blurs: the pager is the content behind it, and
                 // nothing else in this column is.
-                modifier = Modifier.weight(1f).glassBarLayer(glassBackdrop),
+                // The pages stop above the bar. `BarHeight` is read from the bar itself rather
+                // than copied, so the reserved strip cannot drift away from what is drawn in
+                // it: the overlay takes the bottom of the page, and this is what keeps the
+                // composer, the pills and every other page's last row out from under it.
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = BAR_OVERLAY)
+                    .glassBarLayer(glassBackdrop),
                 // Deliberately no `beyondViewportPageCount`: a page off screen is not
                 // composed. Shell holds a live terminal canvas and Trajectory a full
                 // derivation of the transcript; paying for both while the reader looks
@@ -1838,9 +1858,7 @@ internal fun ChatPanel(
             }
         }
 
-            // The floating bar, at the very bottom of the screen's column and below the
-            // composer, because it is the *destination* selector: the composer is where
-            // the reader writes, the bar is where they go.
+            // The destination selector, floating over the content rather than below it.
             //
             // **No longer gated on the hero** (3.3). The old bar was withheld when the
             // session was empty, because two of its three items (Trajectory, Shell) would
@@ -1855,6 +1873,9 @@ internal fun ChatPanel(
             // same destinations twice, one of them in the wrong place for the hand — so
             // the choice is made once, here, and both branches read the same
             // `destination` and call the same `goToDestination`.
+            //
+            // `align(BottomCenter)` is what centres the capsule: the bar sizes itself to its
+            // content, and the box is the thing that decides where that content sits.
             if (!wide) {
                 FloatingBottomBar(
                     items = DESTINATION_ITEMS,
@@ -1863,7 +1884,11 @@ internal fun ChatPanel(
                         Destination.entries.firstOrNull { it.name == key }?.let(goToDestination)
                     },
                     backdrop = glassBackdrop,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = DshSpacing.md),
                 )
+            }
             }
         }
         }
@@ -3049,6 +3074,16 @@ private const val MAX_RAIL_TICKS = 22
 
 /** The web's rail frame is 28px wide; the ticks are right-aligned inside it. */
 private val RAIL_WIDTH = 22.dp
+
+/**
+ * How much of the screen bottom the floating bar owns.
+ *
+ * The bar's height comes from the bar (`:design`'s `BarHeight`) and the gap is the one the
+ * call site pads it by; together they are what the pager must leave clear. Stated once so
+ * the two cannot disagree — the failure mode is a composer sitting under the glass, which
+ * reads as a rendering bug rather than as a missing padding.
+ */
+private val BAR_OVERLAY = BarHeight + DshSpacing.md
 
 /** Sidebar width; `drawerDrag` needs it to know what a full travel is. */
 private val DRAWER_WIDTH = 300.dp
