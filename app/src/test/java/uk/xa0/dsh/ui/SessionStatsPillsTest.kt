@@ -66,7 +66,7 @@ class SessionStatsPillsTest {
 
         /**
          * A session that has closed steps *and* been billed: 209 tok/s from the
-         * host's own decode counters, 99% of the prompt served from cache.
+         * host's own decode counters, 99.6% of the prompt served from cache.
          */
         val BOTH_READINGS = TOKEN_STRIP_ONLY.copy(
             hasStats = true,
@@ -133,7 +133,7 @@ class SessionStatsPillsTest {
         rule.onNodeWithTag(STATS_SPEED_PILL_TAG).assertExists()
         rule.onNodeWithTag(STATS_CACHE_PILL_TAG).assertExists()
         rule.onNodeWithText("209 tok/s", useUnmergedTree = true).assertExists()
-        rule.onNodeWithText("Cache 99.5%", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("Cache 99.6%", useUnmergedTree = true).assertExists()
     }
 
     @Test
