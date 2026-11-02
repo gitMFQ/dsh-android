@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Description
@@ -46,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.KeyEventType
@@ -62,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -75,8 +78,8 @@ import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
 
 /**
- * What an expanded composer bar draws: the text, its attachments, and the one action the
- * bar keeps for itself — send (or stop while a turn runs).
+ * What an expanded composer bar draws: the `+`, the text, its attachments, and send (or
+ * stop while a turn runs).
  *
  * ## Why this is only the inside now
  *
@@ -87,6 +90,11 @@ import uk.xa0.dsh.ui.theme.DshType
  * pill each, and this composable is the bar's *content*: the caller supplies the glass
  * surface, because the same content is drawn in two shapes — a 56dp circle when the
  * composer is collapsed and a wide capsule when it is open (see [ComposerDock]).
+ *
+ * The `+` came back inside the bar in round 2. It is the exception to "controls left the
+ * card" because it is the only one whose *purpose* is to write into this field — the
+ * command menu it opens seeds tokens for this text — and with the toolbar gone it costs
+ * the text one 28dp button rather than a share of the action row.
  *
  * Keeping the surface out of here is also what lets the wide layout reuse the same row at
  * full width without a second, drifting copy of the text-field wiring.
@@ -122,6 +130,10 @@ fun ComposerContent(
     /** Send with one explicit delivery mode, bypassing the preference. */
     onSendMode: (String) -> Unit = {},
     onToggleBusyEnter: () -> Unit = {},
+    /** The `+` inside the bar: commands, the attachment picker and the model/permission rows. */
+    onToggleCommands: () -> Unit = {},
+    /** Whether the `+` is offered at all; false for a surface that cannot take files. */
+    showAttach: Boolean = true,
     /**
      * Asked for focus by the caller that opened the bar. Null in a composition that is
      * already expanded and should not steal focus (the wide layout, a baseline).
@@ -162,9 +174,27 @@ fun ComposerContent(
                 // inside it; a single line of 14/24 text leaves the send circle room to
                 // centre, so the minimum is met without a second padding constant.
                 .defaultMinSize(minHeight = 56.dp)
-                .padding(start = 14.dp, end = 8.dp, top = DshSpacing.xs, bottom = DshSpacing.xs),
+                .padding(start = 8.dp, end = 8.dp, top = DshSpacing.xs, bottom = DshSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // The `+` lives *inside* the bar again. It is the one control that belongs
+            // next to the text — it opens the command menu that writes into this field —
+            // and with the toolbar gone it costs the text 34dp rather than the whole
+            // row it used to share.
+            if (showAttach) {
+                CircleIconButton(
+                    icon = Icons.Rounded.Add,
+                    // The web's `+` is the command menu, not an attachment button:
+                    // `input.commands` = "Add files or run commands".
+                    contentDescription = "Add files or run commands",
+                    onClick = onToggleCommands,
+                    size = 28.dp,
+                    background = colors.selector,
+                    tint = colors.labelPrimary,
+                    iconSize = 15.dp,
+                )
+                Spacer(Modifier.width(DshSpacing.sm))
+            }
             Box(
                 Modifier
                     .weight(1f)
@@ -497,5 +527,33 @@ private fun AttachmentRail(
                 )
             }
         }
+    }
+}
+
+/**
+ * A small circular icon button: the composer's `+` (and the shape the old action row
+ * used for it). Its tap target is the circle, so `size` is both the draw size and the
+ * target.
+ */
+@Composable
+private fun CircleIconButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    size: Dp,
+    background: Color,
+    tint: Color,
+    iconSize: Dp = size * 0.5f,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(background)
+            .clickableNoRipple(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(iconSize))
     }
 }

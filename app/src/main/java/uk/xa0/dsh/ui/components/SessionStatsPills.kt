@@ -2,7 +2,6 @@ package uk.xa0.dsh.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,11 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -40,188 +36,156 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
-import uk.xa0.dsh.model.PRICE_SOURCE
 import uk.xa0.dsh.model.FamilyUsage
-import uk.xa0.dsh.model.TokenRates
+import uk.xa0.dsh.model.PRICE_SOURCE
 import uk.xa0.dsh.model.SessionStats
-import uk.xa0.dsh.model.formatCompactDuration
+import uk.xa0.dsh.model.TokenRates
 import uk.xa0.dsh.model.costRange
+import uk.xa0.dsh.model.formatCompactDuration
 import uk.xa0.dsh.model.formatCostRange
-import uk.xa0.dsh.model.formatCompactTokens
 import uk.xa0.dsh.model.formatExactTokens
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
 
-/** The two readings in the row, and which one currently owns the open panel. */
-private enum class StatPill { TIME, USAGE }
+/** Test addresses for the two readings in the rail. */
+const val STATS_SPEED_PILL_TAG = "stats-pill-speed"
+const val STATS_CACHE_PILL_TAG = "stats-pill-cache"
 
 /**
- * Test addresses for the row's two chips.
+ * The session's two readings, as rail pills: output speed and cache-hit share.
  *
- * Public rather than internal because the unit-test source set is not a friend of
- * `main`: an `internal` symbol is unresolved from a test, whatever its package.
- * They address the chips *as placed* — the direct children of the row — so a test
- * compares a chip's end with the row's own, not with the text inside it.
+ * ## Why only one figure each
+ *
+ * The old row drew a whole sentence per chip — `25 turns 416 steps · 123.4 tok/s` and
+ * `16.3K tok · Cache 48%` — because it was the composer card's footer and had room
+ * for sentences. The control rail is a row of one-idea pills: the two readings a
+ * reader glances at are the speed and the cache share, and the full figures — turns,
+ * steps, LLM/tool time, TTFT, the token breakdown, the priced estimate, the subagent
+ * family, the balance door — are one tap away in the same panels as before.
+ *
+ * ## Why pills rather than chips
+ *
+ * They sit in [ComposerAccessoryRail], the same liquid-glass vocabulary as the
+ * composer's other controls. A transparent chip among glass pills read as a disabled
+ * control; both readings now wear [GlassPill].
+ *
+ * ## Independence
+ *
+ * Each pill gates on its own reading, so a host block that carries `tokenUsage` and no
+ * `sessionStats` (a real shape — the connected host serves it) draws the cache pill
+ * alone, and a session with closed steps but no billing draws the speed pill alone.
+ * Neither loses its position to the other: the rail is a scroll, not two anchored ends.
  */
-const val STATS_COUNTS_CHIP_TAG = "stats-chip-counts"
-const val STATS_USAGE_CHIP_TAG = "stats-chip-usage"
 
 /**
- * The web's session-stat pills (`ui-chat/src/client/chat/StatsPills.tsx`):
- * a gauge pill carrying turn/step counts and output speed, and a database pill
- * carrying the whole-log token total and cache-hit share.
+ * Output speed, e.g. `123.4 tok/s`.
  *
- * **Placement.** The web mounts this on `conversation.composer.dock`, so it
- * lives *inside the conversation scrollport directly under the composer* and
- * scrolls with it — not in the header, and not in the trajectory view. Hosts
- * call it right below their composer row.
- *
- * Deviations from the web, all forced by touch:
- *  - the portal panel becomes a [Popup] anchored above its pill (the web's
- *    panel is a fixed-position portal with an anchored clamp),
- *  - a pill whose reading opens a panel is always styled as interactive rather
- *    than only on hover, since there is no hover to reveal the affordance.
- *
- * @param stats the parsed projections, or null while the host has not sent them
- * @param modifier slot for the host's own padding. The web's `.root` pads
- *   `4px [composer-side-clearance + 16px] 0`, but that 4px is the dock's share
- *   of the composer-to-pills gap, not a property of this row:
- *   `ui-conversation/.../InputBar.module.css` drops the composer root's own
- *   `8px` bottom clearance to `4px` while the row is mounted
- *   (`.root:has([data-composer-stats])`), so the web's gap stays a constant
- *   `8px`. Here the dock *is* the host's composer padding, so adding the web's
- *   4px on top of it made the gap `8 + 4 = 12dp` against the row's own `6dp`
- *   bottom margin. This row therefore adds no vertical space of its own, and
- *   the host pads the composer's bottom edge by that same `6dp` so the gaps
- *   above and below match. The sides remain the host's `16dp`, matching the
- *   composer card's edges.
+ * Gated on `decodeMs > 0`, which is what makes the figure exist at all: an untimed
+ * session has no speed to show, and an empty pill claiming `0 tok/s` would be a
+ * measurement the host never took.
  */
 @Composable
-fun SessionStatsPills(
+fun SessionSpeedPill(
     stats: SessionStats?,
-    /**
-     * The published rates for the session's current route, or null when this app has
-     * no price for it — a local model, or a provider whose list it does not have. Null
-     * means the panel draws no cost row at all rather than a number from another
-     * provider's prices.
-     */
-    rates: TokenRates? = null,
-    /**
-     * The open session's whole subagent family, or null when there is no open session. A
-     * family with no members draws no block at all, which is what keeps "this session has
-     * no subagents" from reading like "its subagents' usage has not arrived": the block
-     * exists exactly when there is a family to report, and when it exists it always says
-     * how many of that family its figures cover. See [FamilyUsage].
-     */
-    family: FamilyUsage? = null,
-    /** Opens the account balance and top-up screen, from the usage panel. */
-    onBalance: () -> Unit = {},
+    backdrop: GlassBarBackdrop?,
     modifier: Modifier = Modifier,
 ) {
     if (stats == null || !stats.visible) return
-    // One exclusive slot for both panels: opening either closes the other, as
-    // the web's single `openPill` state does.
-    var open by remember { mutableStateOf<StatPill?>(null) }
+    val speed = stats.tokensPerSecondText ?: return
+    var open by remember { mutableStateOf(false) }
 
-    // One row, always.
-    //
-    // This was a `FlowRow`, which fixed a real bug — as a plain `Row` the second
-    // chip was clipped at the screen edge and its cache-hit figure was
-    // unreachable — by letting the two wrap. On a phone that is worse than the
-    // disease: two chips on two lines read as a broken footer rather than as a
-    // composer dock, and the row's height then moved with the readings.
-    //
-    // So: a plain `Row` (which cannot wrap), the copy and the type shrunk to fit
-    // it, and *natural* widths rather than an equal split. An equal split is the
-    // trap here: measured from the font's advance widths (Roboto, kerning
-    // ignored, so these are conservative), "128 turns 512 steps · 123.4 tok/s" is
-    // ~196dp against the ~176dp half a 393dp phone would give it — it would
-    // ellipsise exactly when a session gets long enough to be interesting. Left
-    // at their natural widths the two chips come to ~343dp of the ~361dp row at
-    // that size, and the counts chip is never the one squeezed.
-    //
-    // If a reading ever does outgrow the row, the *last* chip is measured against
-    // what is left and its text ellipsises; the panel behind a tap still holds
-    // every figure, which is what keeps that degradation honest. "Cache hit" is
-    // abbreviated to "Cache" for the same reason — 20dp of headroom — and the
-    // panel spells the full wording out.
-    //
-    // Each chip is also pinned to its own end of the card, and stays there
-    // whichever of the two is drawn: the counts chip begins at the composer
-    // card's left edge and the usage chip ends at its right edge, with the slack
-    // absorbed between them. Two chips left-aligned with dead space to their right
-    // read as a stranded pair rather than as the card's own footer, and centring
-    // the pair was measured worse still — ~103dp of dead space on each side.
-    //
-    // The slack is one flexible slot and it belongs to the usage chip's side of
-    // the row, so it is drawn whenever *that* chip is — with or without the counts
-    // chip in front of it. It used to be drawn only while both chips existed,
-    // which left a lone counts chip at the left edge (correct) but pushed a lone
-    // usage chip there as well: a session with billing and no counts reading drew
-    // "16.3K tok · Cache 48%" at the counts chip's end, which reads as the wrong
-    // pill rather than as one pill. That pairing is not hypothetical — the counts
-    // chip's gate is `steps > 0`, and the connected host serves blocks with a
-    // settled `tokenUsage` and no `sessionStats` at all: session `395fa4c3`'s live
-    // row carries 21,096 billed tokens and no statistics block, and its projection
-    // cache holds 18 rows and no `sessionStats` row where 2,659 of the host's 2,668
-    // hold one. Anchoring each chip to its own end makes the two positions
-    // independent, so neither moves when the other appears or vanishes.
-    val showCounts = stats.steps > 0
-    val showUsage = stats.hasTokenActivity
-    Row(
-        modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(DshSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showCounts) {
-            val counts = "${stats.turns} turns ${stats.steps} steps"
-            val speed = stats.tokensPerSecondText
-            StatPillButton(
-                icon = Icons.Rounded.Speed,
-                label = counts,
-                suffix = speed?.let { "$it tok/s" },
-                expandable = stats.hasTiming,
-                expanded = open == StatPill.TIME,
-                onToggle = { open = if (open == StatPill.TIME) null else StatPill.TIME },
-                modifier = Modifier.testTag(STATS_COUNTS_CHIP_TAG),
-            ) {
+    Box(modifier.testTag(STATS_SPEED_PILL_TAG)) {
+        GlassPill(
+            backdrop = backdrop,
+            onClick = if (stats.hasTiming) ({ open = !open }) else null,
+            pillDescription = "Output speed, $speed tokens per second",
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Speed,
+                contentDescription = null,
+                tint = DshTheme.colors.labelCaption,
+                modifier = Modifier.size(13.dp),
+            )
+            Spacer(Modifier.width(DshSpacing.sm))
+            Text(
+                text = "$speed tok/s",
+                style = DshType.bodyMedium,
+                color = DshTheme.colors.labelSecondary,
+                maxLines = 1,
+            )
+        }
+        if (open) {
+            PillPopover(onDismiss = { open = false }) {
                 StatPanel(title = "Session statistics") {
-                    // A row is absent, not zeroed: an untimed figure is not the
-                    // same fact as a figure that measured zero.
+                    // A row is absent, not zeroed: an untimed figure is not the same
+                    // fact as a figure that measured zero.
                     if (stats.llmMs > 0) StatRow("LLM time", formatCompactDuration(stats.llmMs))
                     if (stats.toolMs > 0) StatRow("Tool time", formatCompactDuration(stats.toolMs))
                     stats.averageTtftMs?.let {
                         StatRow("Avg time to first token (TTFT)", formatCompactDuration(it))
                     }
                     if (stats.decodeMs > 0) {
-                        StatRow("Tokens per second (TPS)", "${speed.orEmpty()} tok/s")
+                        StatRow("Tokens per second (TPS)", "$speed tok/s")
                     }
+                    if (stats.turns > 0) StatRow("Turns", stats.turns.toString())
+                    if (stats.steps > 0) StatRow("Steps", stats.steps.toString())
                 }
             }
         }
-        if (showUsage) {
-            // The slack comes *before* the chip it belongs to, so the chip lands
-            // on the card's right edge whether or not a counts chip precedes it.
-            Spacer(Modifier.weight(1f))
-            val cacheHit = stats.cacheHitPercent
-            StatPillButton(
-                icon = Icons.Rounded.Storage,
-                label = "${formatCompactTokens(stats.totalTokens)} tok",
-                // "Cache hit" is the panel's wording; the row cannot hold it.
-                suffix = cacheHit?.let { "Cache $it%" },
-                expandable = true,
-                expanded = open == StatPill.USAGE,
-                onToggle = { open = if (open == StatPill.USAGE) null else StatPill.USAGE },
-                modifier = Modifier.testTag(STATS_USAGE_CHIP_TAG),
-            ) {
+    }
+}
+
+/**
+ * Whole-log cache-hit share, e.g. `Cache 99%`.
+ *
+ * The full token panel stays behind the tap: billed/uncached/cached/write/output
+ * rows, the session's own priced estimate, the subagent family when there is one, and
+ * the door to the account balance.
+ */
+@Composable
+fun SessionCachePill(
+    stats: SessionStats?,
+    backdrop: GlassBarBackdrop?,
+    rates: TokenRates? = null,
+    family: FamilyUsage? = null,
+    onBalance: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    if (stats == null || !stats.visible || !stats.hasTokenActivity) return
+    val cacheHit = stats.cacheHitPercent ?: return
+    var open by remember { mutableStateOf(false) }
+
+    Box(modifier.testTag(STATS_CACHE_PILL_TAG)) {
+        GlassPill(
+            backdrop = backdrop,
+            onClick = { open = !open },
+            pillDescription = "Token usage, $cacheHit percent served from cache",
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Storage,
+                contentDescription = null,
+                tint = DshTheme.colors.labelCaption,
+                modifier = Modifier.size(13.dp),
+            )
+            Spacer(Modifier.width(DshSpacing.sm))
+            Text(
+                text = "Cache $cacheHit%",
+                style = DshType.bodyMedium,
+                color = DshTheme.colors.labelSecondary,
+                maxLines = 1,
+            )
+        }
+        if (open) {
+            PillPopover(onDismiss = { open = false }) {
                 StatPanel(
                     title = "Token usage",
                     headline = "${formatExactTokens(stats.totalTokens)} tok",
                 ) {
-                    cacheHit?.let { StatRow("Cache hit", "$it%") }
+                    StatRow("Cache hit", "$cacheHit%")
                     StatRow("Uncached input", exactCount(stats.uncachedInputTokens))
                     StatRow("Cached input", exactCount(stats.cacheReadTokens))
                     // A session that never wrote cache drops the row.
@@ -231,8 +195,7 @@ fun SessionStatsPills(
                     StatRow("Output", exactCount(stats.outputTokens))
                     // The session's own estimate: the rows above are what the host
                     // counted, this one is arithmetic on a published price list that can
-                    // change. Drawn for the session alone, before the family below, so
-                    // the two figures are never mistaken for one another.
+                    // change.
                     val priced = rates?.let {
                         costRange(
                             cacheHitTokens = stats.cacheReadTokens,
@@ -246,25 +209,16 @@ fun SessionStatsPills(
                     if (priced != null) StatRow("Cost (off-peak – peak)", formatCostRange(priced))
 
                     // The family, under the session's own rows and never in place of
-                    // them: the rows above are the host's count for *this* log, and the
-                    // web has no such reading at all. Only drawn when there is a family.
+                    // them. Only drawn when there is a family.
                     if (family != null && family.members > 0) {
-                        // Named for what it is rather than for how big the family is: the
-                        // sum is of what the host reported, and a figure that claimed to
-                        // be the family's own work would be wrong whenever a member was
-                        // forked. See [uk.xa0.dsh.model.FamilyUsage].
                         StatRow(family.label, exactCount(family.tokens))
-                        // Always drawn, and always present-tense about coverage: "3 of 4"
-                        // is how the reader learns the figure has a boundary at all.
                         StatRow("Subagents", family.memberCountText)
                         family.cost?.let { StatRow("Family cost (off-peak – peak)", formatCostRange(it)) }
                         family.notes.forEach { StatNote(it) }
                     }
 
                     if (priced != null) StatNote(PRICE_SOURCE)
-                    // The way up from a session's cost to the account's balance, which
-                    // is the same question one level out. Shown whether or not a price
-                    // table matched: topping up is useful even for an unpriced route.
+                    // The way up from a session's cost to the account's balance.
                     BalanceAction(onClick = onBalance)
                 }
             }
@@ -272,105 +226,40 @@ fun SessionStatsPills(
     }
 }
 
+/**
+ * The popover a reading opens: anchored above its pill, clamped to the window,
+ * dismissed by an outside tap. The same shape the old chips used.
+ */
+@Composable
+private fun PillPopover(onDismiss: () -> Unit, panel: @Composable () -> Unit) {
+    Popup(
+        onDismissRequest = onDismiss,
+        popupPositionProvider = remember {
+            object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize,
+                ): IntOffset = IntOffset(
+                    // Centred on the pill and sitting just above it, clamped so the
+                    // panel keeps a viewport margin at either edge.
+                    x = (anchorBounds.center.x - popupContentSize.width / 2)
+                        .coerceIn(8, (windowSize.width - popupContentSize.width - 8).coerceAtLeast(8)),
+                    y = (anchorBounds.top - popupContentSize.height - 8).coerceAtLeast(8),
+                )
+            }
+        },
+    ) { panel() }
+}
+
 /** Web `message.turnUsage.count`: `{count} tok`. */
 private fun exactCount(value: Long): String = "${formatExactTokens(value)} tok"
 
 /**
- * One 24dp-radius chip: a 14dp glyph, the reading, and — when the reading has a
- * second figure — its separated suffix. A chip with no panel to open stays a
- * plain reading instead of a button, matching the web's static-span form.
- */
-@Composable
-private fun StatPillButton(
-    icon: ImageVector,
-    label: String,
-    suffix: String?,
-    expandable: Boolean,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier,
-    panel: @Composable () -> Unit,
-) {
-    val colors = DshTheme.colors
-    val shape = RoundedCornerShape(DshRadius.pill)
-    // The chip's *placement* modifier, not its content's: the host `Row` hands
-    // down `weight(1f)`, and that has to land on the direct child of that row —
-    // this chip row, or the popup-anchor Box below when the chip opens a panel.
-    val pill: @Composable (Modifier) -> Unit = { placement ->
-        Row(
-            placement
-                .clip(shape)
-                .then(if (expandable || expanded) Modifier.clickableNoRipple(onClick = onToggle) else Modifier)
-                .background(if (expanded) colors.hover else Color.Transparent)
-                .padding(horizontal = DshSpacing.sm, vertical = 1.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (expanded) colors.labelSecondary else colors.labelTertiary,
-                modifier = Modifier.size(12.dp),
-            )
-            Spacer(Modifier.width(DshSpacing.sm))
-            Text(
-                text = label,
-                style = DshType.bodySmall,
-                color = if (expanded) colors.labelSecondary else colors.labelTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (suffix != null) {
-                Text(
-                    text = "·",
-                    style = DshType.bodySmall,
-                    color = colors.borderL3,
-                    modifier = Modifier.padding(horizontal = DshSpacing.xs),
-                )
-                Text(
-                    text = suffix,
-                    style = DshType.bodySmall,
-                    color = if (expanded) colors.labelSecondary else colors.labelTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-
-    if (!expandable) {
-        pill(modifier)
-        return
-    }
-    Box(modifier) {
-        pill(Modifier)
-        if (expanded) {
-            Popup(
-                onDismissRequest = onToggle,
-                popupPositionProvider = remember {
-                    object : PopupPositionProvider {
-                        override fun calculatePosition(
-                            anchorBounds: IntRect,
-                            windowSize: IntSize,
-                            layoutDirection: LayoutDirection,
-                            popupContentSize: IntSize,
-                        ): IntOffset = IntOffset(
-                            // Centred on the pill and sitting just above it, clamped
-                            // so the panel keeps a viewport margin at either edge.
-                            x = (anchorBounds.center.x - popupContentSize.width / 2)
-                                .coerceIn(8, (windowSize.width - popupContentSize.width - 8).coerceAtLeast(8)),
-                            y = (anchorBounds.top - popupContentSize.height - 8).coerceAtLeast(8),
-                        )
-                    }
-                },
-            ) { panel() }
-        }
-    }
-}
-
-/**
  * The shared stat-panel skin (`stat-dialog.module.css`): menu surface, 12dp
- * radius, prominent shadow, a heading with an optional right-hand headline
- * value, a hairline rule, then the label/value rows.
+ * radius, prominent shadow, a heading with an optional right-hand headline value, a
+ * hairline rule, then the label/value rows.
  */
 @Composable
 private fun StatPanel(
@@ -397,8 +286,6 @@ private fun StatPanel(
                 modifier = Modifier.weight(1f),
             )
             if (headline != null) {
-                // No fixed gap is needed: the title takes the slack, so a wide
-                // panel keeps the two apart without a hard column split.
                 Text(
                     text = headline,
                     style = DshType.bodySmall.copy(fontWeight = FontWeight.Medium),
@@ -444,13 +331,7 @@ private fun StatRow(label: String, value: String) {
     }
 }
 
-/**
- * A footnote under the rows: where a figure came from, or what it is not.
- *
- * Its own composable rather than a [StatRow] because it is prose, not a reading — it
- * wraps, it has no value column, and it sits closer to the row above it than the
- * panel's `8dp` row rhythm.
- */
+/** A footnote under the rows: where a figure came from, or what it is not. */
 @Composable
 private fun StatNote(text: String) {
     Text(
@@ -463,12 +344,7 @@ private fun StatNote(text: String) {
     )
 }
 
-/**
- * `Balance & top up` as a panel row.
- *
- * A row rather than a second chip: the pills are readings, and this is a door out of
- * the panel to the account behind them.
- */
+/** `Balance & top up` as a panel row. */
 @Composable
 private fun BalanceAction(onClick: () -> Unit) {
     val colors = DshTheme.colors

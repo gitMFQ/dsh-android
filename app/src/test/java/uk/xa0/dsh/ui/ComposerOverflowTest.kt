@@ -120,6 +120,8 @@ class ComposerOverflowTest {
     fun `send is whole at the narrowest bar`() {
         composeBar()
         assertSendIsWhole("the resting bar")
+        // The `+` is part of the bar now, and it must survive the same squeeze.
+        rule.onNodeWithContentDescription("Add files or run commands").assertIsDisplayed()
     }
 
     @Test
