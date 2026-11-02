@@ -70,6 +70,7 @@ import uk.xa0.dsh.ui.DESTINATION_ITEMS
 import uk.xa0.dsh.ui.Destination
 import uk.xa0.dsh.ui.ChatPanel
 import uk.xa0.dsh.ui.ChatUiState
+import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.ME_ENTRIES
 import uk.xa0.dsh.ui.MeSubPage
@@ -174,7 +175,29 @@ class ScreenBaselineTest {
                 // liquid tier's verification is a device at API 33+ (see the PR that
                 // wired it). The switch lives on the surface, mirroring
                 // `LocalAnimatedDots` — which exists for the same class of problem.
-                CompositionLocalProvider(LocalGlassEnabled provides false) {
+                CompositionLocalProvider(
+                    LocalGlassEnabled provides false,
+                    // miuix's `Card` paints a squircle through an AGSL runtime shader
+                    // whenever `isRuntimeShaderSupported()` says the platform has one — and
+                    // that is a plain `SDK_INT >= 33` compare, so Robolectric answers "yes"
+                    // and then hands the shader source to its own native compiler, which
+                    // rejects AGSL outright:
+                    //
+                    //   IllegalArgumentException: 'color' is not a valid layout qualifier
+                    //     at ShadowNativeRuntimeShader.nativeCreateBuilder
+                    //     at SquircleShaderBrush.<init>
+                    //
+                    // This is the same class of problem `LocalGlassEnabled` exists for, and
+                    // it takes the whole screen down *during composition* rather than merely
+                    // drawing something different. It surfaced only now because the vendored
+                    // `SegmentedColumn` (3.5a) had no baseline until the Me pages used it:
+                    // every earlier capture drew Material or hand-built rows.
+                    //
+                    // miuix ships this opt-out for exactly this reason, and its documented
+                    // fallback is the matching `RoundedCornerShape` — so the capture is the
+                    // flat tier of the same layout, not a different layout.
+                    LocalSquircleEnabled provides false,
+                ) {
                 Column(
                     Modifier
                         .fillMaxSize()

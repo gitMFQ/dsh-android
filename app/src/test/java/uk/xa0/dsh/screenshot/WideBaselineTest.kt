@@ -25,6 +25,7 @@ import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.ui.ChatActions
 import uk.xa0.dsh.ui.ChatPanel
 import uk.xa0.dsh.ui.ChatUiState
+import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -85,7 +86,13 @@ class WideBaselineTest {
                 // wide window the bar is replaced by the rail, but the pager still
                 // records into the layer the bar would have sampled. See
                 // `ScreenBaselineTest.capture` for why the switch exists at all.
-                CompositionLocalProvider(LocalGlassEnabled provides false) {
+                CompositionLocalProvider(
+                    LocalGlassEnabled provides false,
+                    // Same reason as the phone fixture: miuix's squircle shader is
+                    // `SDK_INT >= 33`-gated, and Robolectric cannot compile AGSL. See
+                    // `ScreenBaselineTest.capture` for the measured failure.
+                    LocalSquircleEnabled provides false,
+                ) {
                 Box(
                     Modifier
                         .fillMaxSize()
