@@ -82,11 +82,13 @@ class ComposerDockTest {
         rule.onNodeWithContentDescription("Collapse the message box").performClick()
         rule.waitForIdle()
 
-        // Resting: a circle that offers to write, and no send control anywhere.
-        rule.onNodeWithContentDescription("Write a message").assertIsDisplayed()
+        // Resting: a circle that offers to write, and no send control anywhere. The
+        // "hello" draft is still held, so the circle says so — that is the state a
+        // reader who collapsed mid-message sees.
+        rule.onNodeWithContentDescription("Write a message, draft kept").assertIsDisplayed()
         rule.onNodeWithContentDescription("Send and queue").assertDoesNotExist()
 
-        rule.onNodeWithContentDescription("Write a message").performClick()
+        rule.onNodeWithContentDescription("Write a message, draft kept").performClick()
         rule.waitForIdle()
 
         rule.onNodeWithContentDescription("Send and queue").assertIsDisplayed()

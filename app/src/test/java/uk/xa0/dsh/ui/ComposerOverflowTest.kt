@@ -65,6 +65,7 @@ class ComposerOverflowTest {
 
     private fun composeBar(
         running: Boolean = false,
+        text: String = "hello",
         attachments: List<PendingAttachment> = emptyList(),
         width: () -> Dp? = { null },
     ) {
@@ -79,7 +80,7 @@ class ComposerOverflowTest {
                         (if (fixed != null) Modifier.width(fixed) else Modifier.fillMaxWidth())
                             .testTag(SLOT),
                     ) {
-                        val state = remember { TextFieldState("hello") }
+                        val state = remember { TextFieldState(text) }
                         ComposerContent(
                             state = state,
                             onSend = {},
@@ -136,9 +137,14 @@ class ComposerOverflowTest {
         assertSendIsWhole("a long attachment chip")
     }
 
+    /**
+     * Stop is the substitute only while the box is *empty*: a running turn with a draft
+     * still offers Send (that is what the steer/queue menu hangs off), so the blank
+     * draft is part of the state being pinned rather than an incidental fixture value.
+     */
     @Test
-    fun `a running turn swaps send for stop and keeps it whole`() {
-        composeBar(running = true)
+    fun `a running turn swaps send for stop while the box is empty`() {
+        composeBar(running = true, text = "")
         assertSendIsWhole("the running bar", description = "Stop")
     }
 
