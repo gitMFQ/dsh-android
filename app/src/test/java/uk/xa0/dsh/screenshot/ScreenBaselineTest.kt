@@ -1,6 +1,7 @@
 package uk.xa0.dsh.screenshot
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -295,7 +296,13 @@ class ScreenBaselineTest {
     fun composer() {
         capture("composer") {
             val state = remember { TextFieldState("Re-skin the shell, one screen at a time.") }
-            Column(Modifier.padding(vertical = DshSpacing.md)) {
+            // Anchored to the bottom, where the dock actually lives: a capture that put
+            // it at the top would be a diagram of the parts rather than the screen's
+            // bottom edge, and the empty 700dp below it would teach the baseline nothing.
+            Column(
+                Modifier.fillMaxSize().padding(bottom = DshSpacing.xxl),
+                verticalArrangement = Arrangement.Bottom,
+            ) {
                 ComposerAccessoryRail(
                     backdrop = null,
                     onToggleCommands = {},
