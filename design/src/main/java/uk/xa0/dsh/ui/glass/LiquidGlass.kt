@@ -15,7 +15,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -97,4 +101,39 @@ fun Modifier.glassSurface(shape: Shape): Modifier {
  */
 @Composable
 fun rememberGlassEnabled(): Boolean = remember { supportsLiquidGlass }
+/**
+ * The lift a floating glass pane wears: a soft shadow *below* it, never under it.
+ *
+ * ## Why the offset is the whole point (measured, light appearance)
+ *
+ * The shadow used to be drawn centred (`offset = DpOffset.Zero`) at a 10dp radius. That is
+ * right for an opaque pane and wrong for a translucent one: the shadow lands *inside* the
+ * pane's footprint and shows straight through the fill. Measured off a recorded baseline — a
+ * light appearance on a `#FFFFFF` page — the capsule's interior sampled **`#F8F8F8`**, which is
+ * exactly the arithmetic: a 10%-black shadow over white is `#E6E6E6`, and a 72%-white fill over
+ * that is `#F8F8F8`. A grey bar, produced by a shadow that was never meant to be visible there.
+ *
+ * Pushing it down and shortening its radius moves the shadow's mass out from under the pane, so
+ * the middle keeps the fill's own colour and only the lower edge carries the separation. On a
+ * dark appearance the same bleed existed and was invisible, which is why it took a light
+ * appearance and a pixel probe to find it.
+ *
+ * One function rather than a copy per bar because the bar and the composer are the same material
+ * at two places on one screen; a divergence between them is the kind of thing nobody notices
+ * until a screenshot compares the two.
+ */
+@Composable
+fun Modifier.glassLift(shape: Shape): Modifier = dropShadow(
+    shape = shape,
+    shadow = Shadow(
+        radius = 6.dp,
+        // Down, not centred: see above.
+        offset = DpOffset(0.dp, 4.dp),
+        color = Color.Black,
+        // Lighter on a light appearance, where a shadow reads as dirt faster than it reads as
+        // depth; denser on the dark one, where it is also what separates the pane from a
+        // near-black page.
+        alpha = if (DshTheme.colors.isDark) 0.22f else 0.12f,
+    ),
+)
 

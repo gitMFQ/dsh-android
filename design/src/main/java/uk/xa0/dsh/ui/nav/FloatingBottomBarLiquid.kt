@@ -46,6 +46,7 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.sensor.rememberDeviceTilt
 import uk.xa0.dsh.ui.glass.InnerShadow
+import uk.xa0.dsh.ui.glass.glassLift
 import uk.xa0.dsh.ui.glass.innerShadow
 import uk.xa0.dsh.ui.glass.lens
 import uk.xa0.dsh.ui.glass.rememberCombinedBackdrop
@@ -198,14 +199,10 @@ internal fun LiquidBottomBar(
             Modifier
                 .onGloballyPositioned { coords -> state.onBarMeasured(coords.size.width) }
                 .graphicsLayer { translationX = state.panelOffset }
-                .dropShadow(
-                    shape = pillShape,
-                    shadow = Shadow(
-                        radius = 10.dp,
-                        color = Color.Black,
-                        alpha = if (isInDark) 0.2f else 0.1f,
-                    ),
-                )
+                // Same lift as the flat bar's, for the same measured reason: a centred
+                // shadow under a translucent pane shows through it. `glassLift` carries the
+                // arithmetic and the offset.
+                .glassLift(pillShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

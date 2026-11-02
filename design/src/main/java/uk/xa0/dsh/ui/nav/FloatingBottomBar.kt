@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.GlassTier
 import uk.xa0.dsh.ui.glass.currentGlassTier
+import uk.xa0.dsh.ui.glass.glassLift
 import uk.xa0.dsh.ui.glass.glassSurface
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -189,14 +190,10 @@ private fun FlatBottomBar(
                 // The shadow is drawn on every tier: it is a Compose-drawn shadow, not a
                 // platform effect, and without it the capsule has no separation from the
                 // transcript behind it on a light appearance.
-                .dropShadow(
-                    shape = shape,
-                    shadow = Shadow(
-                        radius = 10.dp,
-                        color = Color.Black,
-                        alpha = if (colors.isDark) 0.2f else 0.1f,
-                    ),
-                )
+                // `glassLift` and not a shadow written here: drawn centred, the shadow sits
+                // under the translucent fill and shows through it, which measured as a grey
+                // capsule on a white page. See `glassLift` for the arithmetic.
+                .glassLift(shape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
