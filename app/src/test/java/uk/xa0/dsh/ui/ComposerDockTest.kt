@@ -49,16 +49,12 @@ class ComposerDockTest {
         rule.setContent {
             DshTheme {
                 var expanded by remember { mutableStateOf(true) }
-                var imeRequests by remember { mutableStateOf(0) }
                 val state = remember { TextFieldState("hello") }
                 Box(Modifier.fillMaxWidth()) {
                     ComposerDock(
                         state = state,
                         expanded = expanded,
-                        onExpand = {
-                            expanded = true
-                            imeRequests++
-                        },
+                        onExpand = { expanded = true },
                         onCollapse = { expanded = false },
                         onSend = {},
                         onStop = {},
@@ -69,7 +65,6 @@ class ComposerDockTest {
                         selectedKey = Destination.CHAT.name,
                         onSelect = {},
                         backdrop = null,
-                        imeRequest = imeRequests,
                     )
                 }
             }
