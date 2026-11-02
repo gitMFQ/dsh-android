@@ -12,8 +12,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +33,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -110,6 +115,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
@@ -158,6 +168,7 @@ import uk.xa0.dsh.ui.components.CommandEntry
 import uk.xa0.dsh.ui.components.CommandMenu
 import uk.xa0.dsh.ui.components.ComposerAccessoryRail
 import uk.xa0.dsh.ui.components.ComposerDock
+import uk.xa0.dsh.ui.components.FullScreenComposer
 import uk.xa0.dsh.ui.components.DeliverableRow
 import uk.xa0.dsh.ui.components.DotState
 import uk.xa0.dsh.ui.components.DshMark
@@ -704,16 +715,19 @@ internal fun ChatPanel(
         }
     }
 
-    // The composer's open/closed shape, and the keyboard request that only a *gesture*
-    // raises (see `ComposerDock.imeRequest`).
+    // The composer's open/closed shape. The dock never raises the keyboard by itself;
+    // only a tap on the text field does (see `ComposerDock`).
     //
     // **Open by default** (round 2): the message bar is the dock's resting pane and the
     // four destination icons are folded into the current page's circle behind it. Typing
     // is the thing a conversation screen is for; navigation is a detour, so it is the
-    // detour that takes the extra tap. The keyboard does not follow — it is requested
-    // only by a gesture, so arriving on a session does not throw the transcript away.
+    // detour that takes the extra tap. The keyboard does not follow: neither arriving on a
+    // session nor opening the bar with its circle raises it — only a tap on the text field
+    // does, so a shape gesture never throws a keyboard over the transcript.
     var composerExpanded by rememberSaveable(ui.currentSessionId) { mutableStateOf(true) }
-    var composerImeRequest by remember { mutableIntStateOf(0) }
+    // The full-screen writing surface offered by the selection toolbar. A dialog rather
+    // than a route: the draft, the session and the send path stay exactly where they are.
+    var fullScreenComposer by rememberSaveable(ui.currentSessionId) { mutableStateOf(false) }
 
     // Back walks *up* the screen before it is allowed anywhere near the close gate.
     //
@@ -817,7 +831,6 @@ internal fun ChatPanel(
                 // what makes the seeded token visible rather than a draft the circle
                 // only marks with a dot.
                 composerExpanded = true
-                composerImeRequest++
             } else {
                 draft.edit { consumeTrigger(token) }
                 actions.executeCommand("/${entry.name}")
@@ -935,12 +948,32 @@ internal fun ChatPanel(
     // the transcript's bottom padding both have to follow.
     var dockAreaPx by remember { mutableIntStateOf(0) }
     val dockAreaDp = with(LocalDensity.current) { dockAreaPx.toDp() }
+
+    // One send path for the bar and the full-screen surface: the text is taken from the
+    // draft exactly once, the follow is re-armed, and the hero's first turn keeps its
+    // deferred delivery.
+    val sendFromComposer: () -> Unit = {
+        val text = takeDraftForSend()
+        followFrom++
+        if (isHero) actions.sendDeferred(text) else actions.send(text, actions.submitMode())
+    }
+    val sendFromComposerWithMode: (String) -> Unit = { mode ->
+        val text = takeDraftForSend()
+        followFrom++
+        actions.send(text, mode)
+    }
+    val toggleBusyEnter: () -> Unit = {
+        actions.updateBusyEnter(
+            if (ui.busyEnter == BusyEnter.STEER) BusyEnter.QUEUE else BusyEnter.STEER,
+        )
+    }
     // Leaving the conversation, or a subagent claiming the seat, puts the bar away; coming
     // back re-opens it, because "open" is this dock's resting shape rather than a mode the
     // reader has to remember. A deliberate collapse is not undone: the effect only runs when
     // the page or the read-only seat changes, not when the reader taps the dock's circle.
     LaunchedEffect(destination, readOnlyReason) {
         composerExpanded = destination == Destination.CHAT && readOnlyReason == null
+        if (destination != Destination.CHAT || readOnlyReason != null) fullScreenComposer = false
     }
 
     ModalNavigationDrawer(
@@ -1094,10 +1127,21 @@ internal fun ChatPanel(
                     drawerState = drawerState,
                     width = DRAWER_WIDTH,
                     edgeClaim = { destinationState.currentPage == Destination.CHAT.ordinal },
+                    // The dock's measured height: a swipe that starts on the bar (or the
+                    // rail above it) belongs to the dock, not to the drawer.
+                    blockedBottomPx = { dockAreaPx.toFloat() },
                 )
                 .background(DshTheme.colors.bgBase)
                 .statusBarsPadding()
-                .navigationBarsPadding()
+                // **No `navigationBarsPadding()` on the screen.**
+                //
+                // It used to be here, which ended the transcript exactly where the system
+                // navigation bar starts: the conversation could not scroll into that strip
+                // at all, whatever the bar's colour, so "the bar is transparent" bought
+                // nothing. The pager now runs to the bottom of the window and the
+                // navigation bar's inset is paid by the dock instead (see the overlay
+                // below), so rows pass under the system bar while scrolling and are visible
+                // through it. See `docs/DESIGN.md`'s edge-to-edge note.
                 .imePadding(),
         ) {
         val wide = maxWidth >= WIDE_LAYOUT
@@ -1245,7 +1289,7 @@ internal fun ChatPanel(
                     // place (3.3). The surface is the one 2.4's panel already drew, so
                     // this step is a *move* — same tree, one level up — and the work
                     // left for its own PR is the VSCode-shaped explorer.
-                    Destination.FILES -> Column(Modifier.fillMaxSize()) {
+                    Destination.FILES -> Column(Modifier.fillMaxSize().navigationBarsPadding()) {
                 // Derived on demand: the transcript can hold a thousand rows and
                 // neither scan is worth paying for while the panel is closed.
                 val files = remember(entries) { SessionFiles.derive(entries) }
@@ -1287,12 +1331,18 @@ internal fun ChatPanel(
                         summary = "Plugin surfaces will live here. The panel and block " +
                             "protocol already exist; this page is where they land.",
                         icon = Icons.Rounded.Extension,
+                        modifier = Modifier.navigationBarsPadding(),
                     )
 
-                    Destination.ME -> MeDestination(
-                        username = ui.username,
-                        balance = ui.balance,
-                    )
+                    // The conversation page is the one that runs behind the system
+                    // navigation bar (its transcript is the content worth showing through
+                    // it); the other destinations keep their own bottom edge clear.
+                    Destination.ME -> Box(Modifier.fillMaxSize().navigationBarsPadding()) {
+                        MeDestination(
+                            username = ui.username,
+                            balance = ui.balance,
+                        )
+                    }
 
                     // The conversation: three readings of one session, chosen by the
                     // pill under the header rather than by the bar below (3.3).
@@ -1378,7 +1428,7 @@ internal fun ChatPanel(
                     Box(
                         Modifier
                             .weight(1f)
-                            .padding(bottom = dockAreaDp + BAR_BOTTOM_GAP),
+                            .padding(bottom = dockAreaDp),
                     ) {
                         HeroBody(
                             modifier = Modifier.fillMaxSize(),
@@ -1646,7 +1696,11 @@ internal fun ChatPanel(
                                 activeIndex = activeTarget,
                                 onJump = { index ->
                                     ScrollDiag.prog("chat", "rail")
-                                    scope.launch { listState.animateScrollToItem(index) }
+                                    // Instant, not animated: a jump is a destination, and
+                                    // an animation can be interrupted or cancelled by the
+                                    // follow, which is exactly what "the ticks do nothing"
+                                    // looked like. `scrollToItem` takes the mutex and lands.
+                                    scope.launch { listState.scrollToItem(index) }
                                 },
                                 // Flush to the edge and only as wide as the ticks: the
                                 // rail owns the whole column for pointer input, so any
@@ -1678,7 +1732,7 @@ internal fun ChatPanel(
                             // padding (as it was) the list reserved the cards only and the
                             // last row sat behind the dock, which is the reported defect.
                             .onSizeChanged { composerStackPx = it.height }
-                            .padding(bottom = dockAreaDp + BAR_BOTTOM_GAP),
+                            .padding(bottom = dockAreaDp),
                     ) {
 
                     if (ui.approval != null) {
@@ -1735,6 +1789,7 @@ internal fun ChatPanel(
                         onEdit = actions.editQueueItem,
                         onRemove = actions.removeQueueItem,
                         onSteer = actions.steerQueueItem,
+                        backdrop = glassBackdrop,
                         modifier = Modifier
                             .padding(horizontal = DshSpacing.xl + DshSpacing.md)
                             .fillMaxWidth(),
@@ -1772,8 +1827,22 @@ internal fun ChatPanel(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .padding(bottom = BAR_BOTTOM_GAP)
-                        .onSizeChanged { dockAreaPx = it.height },
+                        // The dock is the one surface that still has to sit above the
+                        // system navigation bar: it is a set of controls, not content.
+                        // The measurement sits **outside** both bottom insets, so
+                        // `dockAreaPx` is the whole distance from the window's bottom edge
+                        // to the top of the dock; everything that must clear the dock adds
+                        // it once, with no second gap to drift.
+                        .onSizeChanged { dockAreaPx = it.height }
+                        // The navigation inset **minus what the IME already covers**:
+                        // the screen applies `imePadding` at its root, so adding the
+                        // navigation bar on top of an open keyboard would lift the dock by
+                        // both at once. With the keyboard shut, the IME inset is zero and
+                        // this is the ordinary bar inset.
+                        .windowInsetsPadding(
+                            WindowInsets.navigationBars.exclude(WindowInsets.ime),
+                        )
+                        .padding(bottom = BAR_BOTTOM_GAP),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     if (destination == Destination.CHAT) {
@@ -1845,42 +1914,18 @@ internal fun ChatPanel(
                     ComposerDock(
                         state = draft,
                         expanded = destination == Destination.CHAT && (composerExpanded || wide),
-                        onExpand = {
-                            composerExpanded = true
-                            // Bumped per gesture so a wide window, which is always open,
-                            // never steals focus when the screen recomposes.
-                            composerImeRequest++
-                        },
+                        onExpand = { composerExpanded = true },
                         onCollapse = { composerExpanded = false },
-                        onSend = {
-                            val text = takeDraftForSend()
-                            // Sending is one of the two moments that mean "follow again",
-                            // wherever the reader had got to.
-                            followFrom++
-                            if (isHero) {
-                                // The hero send is the deferred one: a hero turn has never
-                                // run, so there is no busy policy to honour yet.
-                                actions.sendDeferred(text)
-                            } else {
-                                actions.send(text, actions.submitMode())
-                            }
-                        },
+                        onSend = sendFromComposer,
                         onStop = actions.stop,
                         running = ui.running,
                         attachments = ui.attachments,
                         onRemoveAttachment = actions.removeAttachment,
                         busyEnter = ui.busyEnter,
-                        onSendMode = { mode ->
-                            val text = takeDraftForSend()
-                            followFrom++
-                            actions.send(text, mode)
-                        },
-                        onToggleBusyEnter = {
-                            actions.updateBusyEnter(
-                                if (ui.busyEnter == BusyEnter.STEER) BusyEnter.QUEUE else BusyEnter.STEER,
-                            )
-                        },
+                        onSendMode = sendFromComposerWithMode,
+                        onToggleBusyEnter = toggleBusyEnter,
                         onToggleCommands = { menuOpen = !menuOpen },
+                        onFullscreen = { fullScreenComposer = true },
                         items = DESTINATION_ITEMS,
                         selectedKey = destination.name,
                         onSelect = { key ->
@@ -1889,7 +1934,6 @@ internal fun ChatPanel(
                         backdrop = glassBackdrop,
                         showNavigation = !wide,
                         showInput = destination == Destination.CHAT && readOnlyReason == null,
-                        imeRequest = composerImeRequest,
                     )
                 }
             }
@@ -1915,13 +1959,48 @@ internal fun ChatPanel(
                         .align(Alignment.BottomEnd)
                         .padding(
                             end = DshSpacing.xl,
-                            bottom = dockAreaDp + BAR_BOTTOM_GAP + DshSpacing.md,
+                            bottom = dockAreaDp + DshSpacing.md,
                         ),
                 )
             }
             }
         }
         }
+        }
+    }
+
+    // Full-screen writing, offered from the selection toolbar. A dialog window: it
+    // covers the chrome, keeps the draft's own state, and Back closes it before anything
+    // underneath hears the press.
+    if (fullScreenComposer) {
+        Dialog(
+            onDismissRequest = { fullScreenComposer = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            FullScreenComposer(
+                state = draft,
+                running = ui.running,
+                attachments = ui.attachments,
+                onRemoveAttachment = actions.removeAttachment,
+                onToggleCommands = { menuOpen = !menuOpen },
+                onSend = {
+                    sendFromComposer()
+                    fullScreenComposer = false
+                },
+                onStop = actions.stop,
+                onClose = { fullScreenComposer = false },
+                busyEnter = ui.busyEnter,
+                onSendMode = { mode ->
+                    sendFromComposerWithMode(mode)
+                    fullScreenComposer = false
+                },
+                onToggleBusyEnter = toggleBusyEnter,
+            )
         }
     }
 
@@ -2949,51 +3028,30 @@ private fun TurnRail(
             .clip(railShape)
             .then(if (pressed) Modifier.background(colors.tip).border(0.5.dp, colors.borderL1, railShape) else Modifier)
             .padding(horizontal = pad, vertical = pad)
-            .pointerInput(shown.size) {
-                awaitEachGesture {
-                    // Observe the rail, never claim the gesture.
-                    //
-                    // This used to consume the down. The rail's box is the width of
-                    // its ticks by up to 280dp tall, and consuming there meant a
-                    // vertical drag that started on that strip never reached the
-                    // transcript at all — a 22dp-wide hole in the list along the
-                    // right edge, over the half of the screen a thumb rests on. A
-                    // scrub is a *tap*; a drag belongs to whatever it is over.
-                    //
-                    // Nothing is consumed here, so a tap's owner is decided the way
-                    // it is everywhere else: if a row's own control consumed the
-                    // gesture, that control wins and the rail stays quiet.
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    pressed = true
-                    hovered = shown.indexOfAt(down.position.y, ladder)
-                    var travel = 0f
-                    var last = down.position
-                    var claimed = down.isConsumed
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val pointer = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (pointer.isConsumed) claimed = true
-                        travel += abs(pointer.position.y - last.y) + abs(pointer.position.x - last.x)
-                        last = pointer.position
-                        if (!pointer.pressed) {
-                            // Release is the commit: the web's onClick lands here too.
-                            if (!claimed && travel <= viewConfiguration.touchSlop) {
-                                hovered?.let { if (it in shown.indices) onJump(shown[it].index) }
-                            }
-                            break
+            .pointerInput(shown.size, ladder) {
+                // A tap, expressed as a tap.
+                //
+                // This was a hand-rolled awaitEachGesture loop that observed without
+                // consuming and committed on release. On the device the ticks did nothing:
+                // the loop's "claimed" test (a down/up carrying `isConsumed`) is not a
+                // reliable description of a tap once a scrollable and a row's controls
+                // share the same hit path, and the commit path was guarded by it. The
+                // canonical detector answers exactly the question being asked — a press
+                // that stays put and lifts is a tap, a press the list claims is a scroll —
+                // and the rail keeps its own tap target.
+                detectTapGestures(
+                    onPress = { offset ->
+                        pressed = true
+                        hovered = shown.indexOfAt(offset.y, ladder)
+                        // `tryAwaitRelease` is the whole state machine: true when the
+                        // finger lifts inside the rail without the list taking the gesture.
+                        if (tryAwaitRelease()) {
+                            hovered?.let { if (it in shown.indices) onJump(shown[it].index) }
                         }
-                        if (travel > viewConfiguration.touchSlop) {
-                            // The finger is scrolling. Let go of the rail the moment
-                            // it does, so the preview does not ride along with it.
-                            pressed = false
-                            hovered = null
-                        } else {
-                            hovered = shown.indexOfAt(pointer.position.y, ladder)
-                        }
-                    }
-                    pressed = false
-                    hovered = null
-                }
+                        pressed = false
+                        hovered = null
+                    },
+                )
             },
     ) {
         Column(
@@ -3141,48 +3199,43 @@ private val HEADER_SEAT = 40.dp
 private val HEADER_SEAT_GAP = DshSpacing.xs
 
 /**
- * A drawer swipe with a threshold that suits a thumb.
+ * The drawer's edge drag, on the screen **and** on the sheet.
  *
- * Material's own gesture commits only once the panel has travelled half its
- * width — 150dp here — so an ordinary swipe shows a peek and springs back, which
- * reads as "it will not open". This replaces it (`gesturesEnabled = false`):
- * a rightward swipe opens and a leftward one closes from a modest travel or a
- * fling, while a vertical drag is handed straight back to the list, which is
- * what keeps transcript scrolling and the sidebar's own list usable.
+ * ## It follows the finger
  *
- * A closed drawer only listens near the left edge, so a horizontal drag inside
- * the transcript is not stolen. Material 1.2 exposes no finger-following
- * `dragTo`, so the panel animates the rest of the way once the swipe commits.
+ * The public [DrawerState] surface only offers "settle to an anchor" (`open`/`close`), so
+ * an earlier version could only decide the drawer's fate on release: the sheet sat still
+ * under the thumb and then slid. Material's own draggable is what normally moves it, but
+ * this detector consumes the gesture in the **Initial** pass (which is what keeps the
+ * pager from claiming a rightward drag at page 0), so Material never sees it.
  *
- * ## Two passes, because "the child had it first" cannot decide this alone (3.7a)
+ * The fix is to drive the drawer's offset ourselves through the anchored-draggable state
+ * the state object already wraps: every move dispatches its horizontal delta, so the sheet
+ * and the scrim track the finger exactly; release settles to the nearer anchor with the
+ * app's own commit rule (40dp of travel or a 200dp/s fling — Material's modal drawer would
+ * want half the panel width). The property is `internal` to Material3; the suppression is
+ * deliberate and local, and the compile-time check is what keeps it honest across a
+ * library bump.
  *
- * The gesture is read in the **Initial** pass and, when nothing claims it early,
- * finished in the **Main** pass. That order is the whole fix for a measured defect:
+ * ## The dock keeps its own gestures (round 3)
  *
- * **Reported from a device**: a rightward swipe from the screen's left edge opened the
- * drawer *sometimes* and the rest of the time slid the first page right instead. Both
- * outcomes are one race. The pager is a horizontal scrollable and a child of this
- * modifier, and a child gets the Main pass first; at page 0 a rightward drag has nowhere
- * to go, but the pager still claims it while clamping, so by the time this node looked it
- * saw a consumed change and stood down. Which way that race went depended on the timing
- * of the slop being crossed — hence "sometimes".
+ * The destination bar has horizontal gestures of its own (dragging the selection between
+ * tabs), so a rightward swipe on it must not open the drawer. Material's drawer draggable
+ * is a single root gesture — it cannot be told to ignore a region — so this detector
+ * consumes the gesture **in the Main pass, after the dock's children have seen it**, for
+ * downs that start inside the dock's measured area. Consuming an ancestor's Main pass is
+ * exactly enough to make the root draggable stand down without taking the swipe from the
+ * bar itself.
  *
- * So the edge case is decided where an ancestor can still win: in the Initial pass, on a
- * gesture that started inside the band, is rightward, and is on a page with nothing to the
- * left. Consuming there means the pager never sees an unconsumed drag to claim. The
- * predicate is passed in as [edgeClaim] rather than hard-coded, because "is there anything
- * to the left of this page" is the caller's question, not the drawer's.
+ * ## Soft case retained
  *
- * The Main pass is not redundant. It is what keeps the original rule for every *other*
- * gesture — a sideways scroll inside a bash output block that starts within the band still
- * belongs to the block, and the check that makes that true is "did the child consume it",
- * which is only answerable after the child has had its turn.
- *
- * The cost of the hard claim, stated so it is not a surprise later: on the first page a
- * **rightward** drag starting within `DRAWER_EDGE` goes to the drawer even if it began on
- * a horizontally scrollable code block. Leftward drags are untouched, which is the
- * direction a reader is overwhelmingly more likely to want inside a code block.
+ * A horizontally scrollable child inside the edge band still wins: if the child consumed
+ * the move, the drawer stands down, which is why a code block's long line can be scrolled
+ * sideways.
  */
+@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
+private fun DrawerState.dragState(): AnchoredDraggableState<DrawerValue> = anchoredDraggableState
+
 @Composable
 private fun Modifier.drawerDrag(
     drawerState: DrawerState,
@@ -3193,9 +3246,16 @@ private fun Modifier.drawerDrag(
      * between two swipes is seen immediately.
      */
     edgeClaim: () -> Boolean = { false },
+    /**
+     * Height, in pixels, of the bottom region whose gestures belong to the dock. A down
+     * inside it never opens the drawer; the dock's own controls still receive the gesture
+     * because the suppression happens after them, in the Main pass.
+     */
+    blockedBottomPx: () -> Float = { 0f },
 ): Modifier {
     val density = LocalDensity.current
     val viewConfiguration = LocalViewConfiguration.current
+    val layoutDirection = LocalLayoutDirection.current
     val scope = rememberCoroutineScope()
     val edgePx = with(density) { DRAWER_EDGE.toPx() }
     val commitPx = with(density) { DRAWER_COMMIT.toPx() }
@@ -3203,17 +3263,36 @@ private fun Modifier.drawerDrag(
     // The panel's own width only matters to keep the parameter honest about what
     // "travel" means; the commit threshold above is absolute.
     val widthPx = with(density) { width.toPx() }
+    // The state's offsets are in pixels with the closed anchor at `-width`; a rightward
+    // drag adds to it in LTR and subtracts in RTL, matching `reverseDirection` in Material's
+    // own draggable.
+    val direction = if (layoutDirection == LayoutDirection.Rtl) -1f else 1f
 
-    // Keyed on the drawer and the width only. A new `edgeClaim` lambda each composition must
-    // NOT restart the gesture detector: it is read at use, not captured, so the running
-    // gesture keeps seeing the current page.
+    // Keyed on the drawer only. A new `edgeClaim` (or a dock height that changed because
+    // the composer grew) must NOT restart the gesture detector: both are read at use, so a
+    // running gesture keeps seeing the current answer.
     return pointerInput(drawerState, widthPx) {
         awaitEachGesture {
             // Read in the **Initial** pass: an ancestor sees the down before its children,
             // which is what makes the hard claim below possible at all.
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val down = awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
+
+            // Dock region: stand down for the drawer only. The loop reads Main, which bubbles
+            // up after the dock's own rows/controls; consuming there stops Material's root
+            // draggable without stealing the tap or drag from the bar.
+            if (down.position.y >= size.height - blockedBottomPx()) {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Main)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    change.consume()
+                    if (!change.pressed) break
+                }
+                return@awaitEachGesture
+            }
+
             val fromEdge = down.position.x <= edgePx
-            if (!drawerState.isOpen && !fromEdge) return@awaitEachGesture
+            val wasOpen = drawerState.isOpen
+            if (!wasOpen && !fromEdge) return@awaitEachGesture
 
             val tracker = VelocityTracker()
             tracker.addPosition(down.uptimeMillis, down.position)
@@ -3222,16 +3301,17 @@ private fun Modifier.drawerDrag(
             var last = down.position
             var dragging = false
             // Set once this gesture has been taken ahead of the children. From then on the
-            // loop stays in the Initial pass and consumes every move, so the pager never gets
-            // an unconsumed drag to claim - which is the difference between "the drawer opens"
-            // and "sometimes it opens and sometimes the first page slides right".
+            // loop stays in the Initial pass, consumes every move, and feeds the drawer's
+            // offset — so the pager never gets an unconsumed drag to claim, and the sheet
+            // moves under the finger.
             var claimed = false
 
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                 if (!change.pressed) break
-                totalX += change.position.x - last.x
+                val dx = change.position.x - last.x
+                totalX += dx
                 totalY += change.position.y - last.y
                 last = change.position
                 tracker.addPosition(change.uptimeMillis, change.position)
@@ -3245,34 +3325,47 @@ private fun Modifier.drawerDrag(
                 }
                 if (!dragging) continue
 
-                // The hard case: a rightward drag from the edge, on a page with nothing to
-                // its left. `edgeClaim()` is asked here rather than once at the down, because
-                // it is the caller's answer about *this* gesture.
-                if (!claimed && !drawerState.isOpen && fromEdge && totalX > 0f && edgeClaim()) {
-                    claimed = true
+                if (!claimed) {
+                    // An open drawer can be pushed either way; a closed one only opens, and
+                    // only from the edge with nowhere left for the pager to go.
+                    claimed = wasOpen || (fromEdge && totalX > 0f && edgeClaim())
                 }
                 if (claimed) {
                     change.consume()
+                    drawerState.dragState().dispatchRawDelta(dx * direction)
                     continue
                 }
 
-                // The soft case, unchanged in spirit: give the child its turn and stand down
-                // if it took the gesture. The obvious child is a horizontally scrollable bash
-                // output block, whose text starts about 46dp from the screen edge and so sits
-                // inside the drawer's 96dp band; claiming it anyway was why long lines could
-                // not be scrolled sideways.
+                // The soft case: give the child its turn and stand down if it took the
+                // gesture. The obvious child is a horizontally scrollable bash output block.
                 val afterChild = awaitPointerEvent(PointerEventPass.Main)
                 val childChange = afterChild.changes.firstOrNull { it.id == down.id }
                 if (childChange == null || childChange.isConsumed) return@awaitEachGesture
+                // The child did not want the edge swipe after all: take the gesture live from
+                // here, replaying the travel that began before the claim so the sheet does
+                // not lag the thumb.
+                if (!wasOpen && fromEdge && totalX > 0f && edgeClaim()) {
+                    claimed = true
+                    childChange.consume()
+                    drawerState.dragState().dispatchRawDelta(totalX * direction)
+                    continue
+                }
                 childChange.consume()
             }
 
             if (!dragging) return@awaitEachGesture
             val velocity = tracker.calculateVelocity().x
-            val open = when {
-                velocity > flingPx -> true
-                velocity < -flingPx -> false
-                else -> totalX > commitPx
+            // The offset has already moved with the finger; this only picks the anchor it
+            // settles to. An open drawer needs the opposite question from a closed one:
+            // "did the reader pull it far enough shut", not "did they pull it open".
+            val open = if (wasOpen) {
+                !(velocity < -flingPx || totalX < -commitPx)
+            } else {
+                when {
+                    velocity > flingPx -> true
+                    velocity < -flingPx -> false
+                    else -> totalX > commitPx
+                }
             }
             scope.launch { if (open) drawerState.open() else drawerState.close() }
         }

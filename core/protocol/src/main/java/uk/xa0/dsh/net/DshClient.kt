@@ -6,11 +6,13 @@ import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,6 +65,50 @@ fun gatewayAnswerText(body: String): String {
         trimmed.startsWith("<") ||
         trimmed.contains("<html", ignoreCase = true)
     return if (markup) "the host did not answer; its web server replied instead" else trimmed.take(200)
+}
+
+/**
+ * Decides what a failed gateway call raises, given whether its caller still exists.
+ *
+ * Every failure [DshClient.rpcRaw] reports is a verdict *about the answer*: the
+ * host rejected the call, a page came back instead of an envelope, the socket
+ * dropped. A caller that is still running must see that verdict unchanged.
+ *
+ * But an RPC is often the last suspension a coroutine makes before its owner goes
+ * away — a screen is popped, the view model is cleared, the reader switches
+ * session — and the answer can land at the same moment the cancellation does.
+ * When the coroutine is no longer active its job has already entered `Cancelling`,
+ * and a non-cancellation exception thrown now does **not** read as "the screen
+ * went away". kotlinx.coroutines makes the first non-cancellation exception in a
+ * job's exception list that job's completion cause (`JobSupport.getFinalRootCause`
+ * skips `CancellationException` and returns the rest), so the `DshRpcException`
+ * would be reported through the unhandled-exception path. On a `viewModelScope`
+ * launch that is a process crash, with the cancellation attached only as a
+ * suppressed `DiagnosticCoroutineContextException`.
+ *
+ * So cancellation wins. The verdict is not *lost*: it is the `cause` of the
+ * cancellation, which is where a caller that still wants to know why can read it.
+ * The type a cancelled caller sees is the one the coroutine machinery expects, so
+ * no exception handler is asked to make sense of an RPC failure nobody is waiting
+ * for.
+ *
+ * A `CancellationException` is returned as it is, never re-wrapped: it already has
+ * the right type and its own cause, and wrapping it would put a second cancellation
+ * between a caller and the reason it was cancelled.
+ *
+ * Deliberately pure and free of coroutine machinery so the decision can be tested
+ * without a host: [rpcRaw] supplies `coroutineActive` from its own job at the
+ * moment the failure is caught, *after* the verdict was formed. Checking only
+ * before a throw is not enough — cancellation can land in the statements between
+ * an `ensureActive()` and the `throw` it was meant to guard — and this function is
+ * what closes that window.
+ */
+internal fun rpcFailureForCaller(failure: Throwable, coroutineActive: Boolean): Throwable {
+    if (failure is CancellationException) return failure
+    if (coroutineActive) return failure
+    return CancellationException(
+        "The caller of this request was cancelled before its answer could be delivered",
+    ).apply { initCause(failure) }
 }
 
 /**
@@ -968,84 +1014,117 @@ class DshClient(context: Context) {
         args: JSONObject = JSONObject(),
     ): Any? =
         withContext(Dispatchers.IO) {
-            val envelope = JSONObject()
-                .put("type", "client-request")
-                .put("rpcId", UUID.randomUUID().toString())
-                .put("method", method)
-                .put("payload", JSONObject().put("args", args))
-
-            val request = Request.Builder()
-                .url(apiUrl(method))
-                .post(envelope.toString().toRequestBody(JSON))
-                .build()
-
-            clients.unary.newCall(request).execute().use { response ->
-                val text = response.body?.string().orEmpty()
+            try {
+                rawCall(method, args)
+            } catch (failure: Throwable) {
                 // ## Cancellation wins over a verdict
                 //
-                // Everything below throws, and each throw is a *fact about the answer*.
-                // But this call is the last thing many coroutines do before their owner
-                // goes away — a screen is popped, the view model is cleared, the reader
-                // switches session — and when the answer and the cancellation arrive
-                // together, a thrown [DshRpcException] replaces the cancellation.
+                // Everything [rawCall] throws is a *fact about the answer* — 401/403,
+                // an empty body, markup instead of an envelope, `ok:false`, a
+                // malformed envelope — and a caller that is still running must see
+                // it. But this call is the last thing many coroutines do before their
+                // owner goes away (a screen is popped, the view model is cleared, the
+                // reader switches session), and when the answer and the cancellation
+                // arrive together a thrown [DshRpcException] used to replace the
+                // cancellation.
                 //
-                // That is not a handled failure. A coroutine that was *cancelling* then
-                // completes exceptionally with an unrelated exception, and `viewModelScope`
-                // installs no `CoroutineExceptionHandler`, so the process dies. Measured
-                // from a device report: a bare `DshRpcException("the host did not answer;
-                // its web server replied instead") whose only frames were coroutine-dispatch
-                // ones, inside a `StandaloneCoroutine{Cancelling}`, with the exception also
-                // attached as a *suppressed* `DiagnosticCoroutineContextException` — the
-                // signature of an exception delivered to an already-cancelled job.
+                // That is not a handled failure. kotlinx.coroutines makes the first
+                // non-cancellation exception in a cancelling job's exception list that
+                // job's completion cause, so a `DshRpcException` thrown here after the
+                // job entered `Cancelling` was reported through the unhandled path; on
+                // a `viewModelScope` launch that is the device crash this exists for: a
+                // bare `DshRpcException("the host did not answer; its web server replied
+                // instead")` whose frames were only coroutine dispatch ones, inside a
+                // `StandaloneCoroutine{Cancelling}`, with the exception also attached as
+                // a suppressed `DiagnosticCoroutineContextException` — the signature of
+                // an exception delivered to an already-cancelled job.
                 //
-                // So: if this coroutine was cancelled while the call was in flight, say
-                // that instead. The callers that matter already rethrow
-                // `CancellationException`, and the ones that catch `Throwable` treat it as
-                // "the screen went away", which is what happened.
+                // An `ensureActive()` before each throw is not enough on its own: the
+                // cancellation can land in the statements between that check and the
+                // throw it guards, which is exactly the race that survived the first
+                // attempt at this fix. This `catch` decides *after* the verdict was
+                // formed, which is the earliest point at which the coroutine's own
+                // state is authoritative. It covers the transport failures
+                // `execute()`/`string()` raise as well.
                 //
-                // Placed after the request rather than before it: the call is still worth
-                // finishing on a cancellation, because abandoning a response mid-read is
-                // what leaves a socket half-consumed.
-                ensureActive()
-                if (response.code == 401 || response.code == 403) {
-                    throw DshAuthException("Session expired (HTTP ${response.code})")
-                }
-                if (text.isBlank()) throw DshRpcException("http/${response.code}", "Empty response from host", null)
-
-                val parsed = runCatching { JSONObject(text) }.getOrElse {
-                    // Content that is not JSON. Whether that is a verdict on the
-                    // door or the host's own surface failing the call is what the
-                    // status says; see [doorFaultForAnswer]. A captive portal
-                    // answers its page with 200, which is the case the verdict is
-                    // for; a 502 from the auth gate while the carrier restarts is
-                    // not, and treating it as one set the LAN door aside until the
-                    // network changed.
-                    onRouteFailure(doorFaultForAnswer(response.code))
-                    throw DshRpcException(
-                        "http/${response.code}",
-                        gatewayAnswerText(text),
-                        null,
-                    )
-                }
-                val result = parsed.optJSONObject("result")
-                    ?: run {
-                        // JSON, but not this protocol's envelope — the same question
-                        // as above, answered the same way.
-                        onRouteFailure(doorFaultForAnswer(response.code))
-                        throw DshRpcException("protocol", "Malformed response envelope", null)
-                    }
-
-                if (!result.optBoolean("ok")) {
-                    val error = result.optJSONObject("error")
-                    throw DshRpcException(
-                        code = error?.optString("code").orEmpty().ifEmpty { "unknown" },
-                        message = error?.optString("message").orEmpty().ifEmpty { "Host rejected the call" },
-                        details = error?.optJSONObject("details"),
-                    )
-                }
-                result.opt("value")?.takeIf { it != JSONObject.NULL }
+                // Converted, not dropped: the verdict rides along as the
+                // cancellation's cause, so a caller that does want to know why can
+                // still read it. See [rpcFailureForCaller], the tested form of this
+                // decision, and [rawCall] for the wire work.
+                throw rpcFailureForCaller(failure, coroutineContext[Job]?.isActive == true)
             }
         }
+
+    /**
+     * [rpcRaw]'s wire work, without the cancellation decision around it.
+     *
+     * Kept separate so that rule has exactly one home — the `catch` in [rpcRaw] —
+     * instead of being repeated beside every throw below. The one check left here is
+     * [ensureActive] after the response is read: the cheap exit for the common case,
+     * an answer arriving long after its screen went away, while the `catch` above is
+     * what makes the guarantee at the boundary.
+     *
+     * The read finishes before that check on purpose: abandoning a response mid-read
+     * is what leaves a socket half-consumed.
+     */
+    private suspend fun rawCall(method: String, args: JSONObject): Any? {
+        val envelope = JSONObject()
+            .put("type", "client-request")
+            .put("rpcId", UUID.randomUUID().toString())
+            .put("method", method)
+            .put("payload", JSONObject().put("args", args))
+
+        val request = Request.Builder()
+            .url(apiUrl(method))
+            .post(envelope.toString().toRequestBody(JSON))
+            .build()
+
+        clients.unary.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            // The cheap half of the cancellation rule; the guarantee is the
+            // `catch` in [rpcRaw], which decides after these throws rather than
+            // before them. See there for why a check at this exact point cannot
+            // be the guarantee: cancellation can land between it and the throw.
+            currentCoroutineContext().ensureActive()
+            if (response.code == 401 || response.code == 403) {
+                throw DshAuthException("Session expired (HTTP ${response.code})")
+            }
+            if (text.isBlank()) throw DshRpcException("http/${response.code}", "Empty response from host", null)
+
+            val parsed = runCatching { JSONObject(text) }.getOrElse {
+                // Content that is not JSON. Whether that is a verdict on the
+                // door or the host's own surface failing the call is what the
+                // status says; see [doorFaultForAnswer]. A captive portal
+                // answers its page with 200, which is the case the verdict is
+                // for; a 502 from the auth gate while the carrier restarts is
+                // not, and treating it as one set the LAN door aside until the
+                // network changed.
+                onRouteFailure(doorFaultForAnswer(response.code))
+                throw DshRpcException(
+                    "http/${response.code}",
+                    gatewayAnswerText(text),
+                    null,
+                )
+            }
+            val result = parsed.optJSONObject("result")
+                ?: run {
+                    // JSON, but not this protocol's envelope — the same question
+                    // as above, answered the same way.
+                    onRouteFailure(doorFaultForAnswer(response.code))
+                    throw DshRpcException("protocol", "Malformed response envelope", null)
+                }
+
+            if (!result.optBoolean("ok")) {
+                val error = result.optJSONObject("error")
+                throw DshRpcException(
+                    code = error?.optString("code").orEmpty().ifEmpty { "unknown" },
+                    message = error?.optString("message").orEmpty().ifEmpty { "Host rejected the call" },
+                    details = error?.optJSONObject("details"),
+                )
+            }
+            return result.opt("value")?.takeIf { it != JSONObject.NULL }
+        }
+    }
 
     /**
      * One unary gateway call whose answer is **not** JSON.
@@ -1063,40 +1142,58 @@ class DshClient(context: Context) {
      */
     suspend fun rpcBytes(method: String, args: JSONObject = JSONObject()): ByteArray =
         withContext(Dispatchers.IO) {
-            val envelope = JSONObject()
-                .put("type", "client-request")
-                .put("rpcId", UUID.randomUUID().toString())
-                .put("method", method)
-                .put("payload", JSONObject().put("args", args))
-
-            val request = Request.Builder()
-                .url(apiUrl(method))
-                .post(envelope.toString().toRequestBody(JSON))
-                .build()
-
-            clients.unary.newCall(request).execute().use { response ->
-                val type = response.header("content-type").orEmpty()
-                if (response.code == 401 || response.code == 403) {
-                    throw DshAuthException("Session expired (HTTP ${response.code})")
-                }
-                val body = response.body?.bytes() ?: ByteArray(0)
-                if (type.contains("json", ignoreCase = true)) {
-                    val text = body.toString(Charsets.UTF_8)
-                    val parsed = runCatching { JSONObject(text) }.getOrNull()
-                    val result = parsed?.optJSONObject("result")
-                    if (result != null && !result.optBoolean("ok")) {
-                        val error = result.optJSONObject("error")
-                        throw DshRpcException(
-                            code = error?.optString("code").orEmpty().ifEmpty { "unknown" },
-                            message = error?.optString("message").orEmpty().ifEmpty { "Host rejected the call" },
-                            details = error?.optJSONObject("details"),
-                        )
-                    }
-                    throw DshRpcException("protocol", "Expected bytes, got JSON", null)
-                }
-                body
+            try {
+                rawBytesCall(method, args)
+            } catch (failure: Throwable) {
+                // The same rule as [rpcRaw]: a verdict about the answer must not
+                // replace a cancellation that has already been requested. See
+                // [rpcFailureForCaller].
+                throw rpcFailureForCaller(failure, coroutineContext[Job]?.isActive == true)
             }
         }
+
+    /**
+     * [rpcBytes]'s wire work, without the cancellation decision around it.
+     *
+     * No [ensureActive] check here: unlike [rawCall] there is no response to parse
+     * into a verdict before the body is returned, so the `catch` in [rpcBytes] is
+     * both the cheap exit and the guarantee.
+     */
+    private suspend fun rawBytesCall(method: String, args: JSONObject): ByteArray {
+        val envelope = JSONObject()
+            .put("type", "client-request")
+            .put("rpcId", UUID.randomUUID().toString())
+            .put("method", method)
+            .put("payload", JSONObject().put("args", args))
+
+        val request = Request.Builder()
+            .url(apiUrl(method))
+            .post(envelope.toString().toRequestBody(JSON))
+            .build()
+
+        clients.unary.newCall(request).execute().use { response ->
+            val type = response.header("content-type").orEmpty()
+            if (response.code == 401 || response.code == 403) {
+                throw DshAuthException("Session expired (HTTP ${response.code})")
+            }
+            val body = response.body?.bytes() ?: ByteArray(0)
+            if (type.contains("json", ignoreCase = true)) {
+                val text = body.toString(Charsets.UTF_8)
+                val parsed = runCatching { JSONObject(text) }.getOrNull()
+                val result = parsed?.optJSONObject("result")
+                if (result != null && !result.optBoolean("ok")) {
+                    val error = result.optJSONObject("error")
+                    throw DshRpcException(
+                        code = error?.optString("code").orEmpty().ifEmpty { "unknown" },
+                        message = error?.optString("message").orEmpty().ifEmpty { "Host rejected the call" },
+                        details = error?.optJSONObject("details"),
+                    )
+                }
+                throw DshRpcException("protocol", "Expected bytes, got JSON", null)
+            }
+            return body
+        }
+    }
 
     /**
      * The chosen door failed in use — in the way [kind] names, which decides how it

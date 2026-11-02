@@ -43,8 +43,16 @@ class DshApplication : Application() {
      */
     val widgets by lazy { WidgetPublisher(this) }
 
+    @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+    @Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
     override fun onCreate() {
         super.onCreate()
+        // The composer's selection menu is a custom `LocalTextToolbar` (it carries the
+        // full-screen row); Compose's newer context menu is a different surface that
+        // bypasses that seam. Pinned to the legacy path process-wide, before any text
+        // field is composed. The flag is a public static in foundation's internal flags
+        // object, hence the suppression.
+        androidx.compose.foundation.ComposeFoundationFlags.isNewContextMenuEnabled = false
         configStore = ConfigStore(this)
         client = DshClient(this)
         val config = configStore.load()

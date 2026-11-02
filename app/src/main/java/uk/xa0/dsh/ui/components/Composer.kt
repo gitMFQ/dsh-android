@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -134,6 +136,8 @@ fun ComposerContent(
     onToggleCommands: () -> Unit = {},
     /** Whether the `+` is offered at all; false for a surface that cannot take files. */
     showAttach: Boolean = true,
+    /** Asked by the selection toolbar's "Full screen" row. */
+    onFullscreen: () -> Unit = {},
     /**
      * Asked for focus by the caller that opened the bar. Null in a composition that is
      * already expanded and should not steal focus (the wide layout, a baseline).
@@ -142,6 +146,8 @@ fun ComposerContent(
 ) {
     val colors = DshTheme.colors
     val focusManager = LocalFocusManager.current
+    // The field's selection toolbar, replaced so it can carry the full-screen door.
+    val textToolbar = remember { ComposerTextToolbar() }
     // One read of the state's text, shared by the placeholder and the stop/send swap.
     // It is also what subscribes this composable to the field, so each keystroke
     // recomposes the row with the current text.
@@ -212,6 +218,7 @@ fun ComposerContent(
                     )
                 }
                 ComposerImeUndo(state) {
+                    CompositionLocalProvider(LocalTextToolbar provides textToolbar) {
                     BasicTextField(
                         state = state,
                         textStyle = DshType.messageBody.copy(color = colors.labelPrimary),
@@ -247,6 +254,7 @@ fun ComposerContent(
                                 true
                             },
                     )
+                    }
                 }
             }
 
@@ -269,6 +277,9 @@ fun ComposerContent(
                 onToggleBusyEnter = onToggleBusyEnter,
             )
         }
+
+        // Window-level, so it escapes the bar's clip and sits above the selection.
+        ComposerSelectionMenu(textToolbar, onFullscreen)
     }
 }
 
@@ -284,7 +295,7 @@ fun ComposerContent(
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SendButton(
+internal fun SendButton(
     canSend: Boolean,
     running: Boolean,
     draftBlank: Boolean,
@@ -474,7 +485,7 @@ private fun SendModeRow(
 
 /** Compact attachment chips; the web UI uses 64dp thumbnails, which is too wide here. */
 @Composable
-private fun AttachmentRail(
+internal fun AttachmentRail(
     attachments: List<PendingAttachment>,
     onRemove: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -536,7 +547,7 @@ private fun AttachmentRail(
  * target.
  */
 @Composable
-private fun CircleIconButton(
+internal fun CircleIconButton(
     icon: ImageVector,
     contentDescription: String?,
     onClick: () -> Unit,
