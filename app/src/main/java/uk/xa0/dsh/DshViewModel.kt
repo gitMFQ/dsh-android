@@ -8,12 +8,15 @@ import android.util.Base64
 import android.util.Log
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -1118,6 +1121,62 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
+    /**
+     * What to do with an exception that escaped a coroutine of this view model.
+     *
+     * This exists because the view model's scope cannot carry a handler:
+     * `viewModelScope`'s context is fixed to `SupervisorJob() + Dispatchers.Main.immediate`,
+     * so a `launch` whose body completed exceptionally *while it was already being
+     * cancelled* had nothing between it and the process's uncaught-exception
+     * handler. That is the device crash this is for — a `DshRpcException` from an
+     * in-flight gateway call (most often "the host did not answer; its web server
+     * replied instead") whose answer landed at the same moment the screen went
+     * away. kotlinx.coroutines makes the first non-cancellation exception in a
+     * cancelling job's exception list that job's completion cause, and a `launch`
+     * has no caller to hand it to.
+     *
+     * The protocol layer converts that verdict to a cancellation at its source now
+     * (see `DshClient.rpcRaw` and `rpcFailureForCaller` in `:core:protocol`), which
+     * is the real fix: a cancelled caller should see a cancellation. This handler
+     * covers the irreducible remainder — the cancellation can be requested between
+     * the `catch` that makes that decision and the job's own finalisation, and no
+     * code inside the call stack can change the type of the exception after that.
+     *
+     * The two cases are kept apart on purpose:
+     *  * the coroutine is no longer active: the failure belongs to a screen the
+     *    reader has already left. It is logged at debug and nothing is painted —
+     *    a banner about the previous screen over the next one is noise, not news;
+     *  * the coroutine is still active: that is an actual bug (an unguarded call,
+     *    a malformed answer reaching a `!!`). It is logged at error *and* routed
+     *    through the ordinary banner, so it is neither a process death nor silent.
+     */
+    private val unhandledFailureHandler = CoroutineExceptionHandler { context, failure ->
+        val job = context[Job]
+        if (job != null && !job.isActive) {
+            Log.d(
+                TAG,
+                "dropped ${failure.javaClass.simpleName} from a cancelled coroutine: ${failure.message}",
+            )
+            return@CoroutineExceptionHandler
+        }
+        Log.e(TAG, "unhandled coroutine failure", failure)
+        runCatching { showFailure(failure, "unhandled coroutine") }
+            .onFailure { Log.e(TAG, "could not surface an unhandled failure: ${it.message}") }
+    }
+
+    /**
+     * The scope this view model's work runs in, in place of `viewModelScope`.
+     *
+     * Same job and dispatcher as `viewModelScope` (`SupervisorJob()` +
+     * `Dispatchers.Main.immediate`) plus [unhandledFailureHandler], and cancelled
+     * from [onCleared] exactly where `viewModelScope` used to be cancelled. The
+     * handler is the only difference — `viewModelScope` is an extension property
+     * on `ViewModel` and its context cannot be extended.
+     */
+    private val uiScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate + unhandledFailureHandler,
+    )
+
     // The transcript is published on its own flow and throttled, because a busy
     // turn can emit hundreds of token deltas per second.
     private val reducer = TranscriptReducer()
@@ -1409,7 +1468,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      * See `net/RouterReadoutTransport.kt` for the protocol and the measured latencies.
      */
     private val routerReadout by lazy {
-        RouterReadoutTransport(viewModelScope, terminalClient)
+        RouterReadoutTransport(uiScope, terminalClient)
     }
 
     /**
@@ -1538,7 +1597,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             phase = TerminalPhase.CONNECTING, active = info, writable = false,
             error = null, issue = null, limit = null,
         )
-        terminalJob = viewModelScope.launch {
+        terminalJob = uiScope.launch {
             try {
                 val environment = _terminal.value.environment ?: terminalClient.environment(agentId)
                 attachTerminal(agentId, info, environment)
@@ -1565,7 +1624,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         terminalId = null
         val remaining = _terminal.value.terminals.filterNot { it.id == id }
         publishTerminal(phase = TerminalPhase.CLOSING, writable = false, error = null, issue = null)
-        viewModelScope.launch {
+        uiScope.launch {
             try {
                 terminalClient.close(agentId, id)
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -1682,7 +1741,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun enqueueTerminalWrite(block: suspend () -> Unit) {
         val previous = terminalWriteChain
-        terminalWriteChain = viewModelScope.launch {
+        terminalWriteChain = uiScope.launch {
             previous?.join()
             try {
                 block()
@@ -1728,7 +1787,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             phase = TerminalPhase.LOADING, active = null, writable = false,
             error = null, issue = null, limit = null, hostShellIssue = null,
         )
-        terminalJob = viewModelScope.launch {
+        terminalJob = uiScope.launch {
             try {
                 val agentId = resolveTerminalAgent(sessionId, seat) ?: return@launch
                 // The bootstrap may have just written the mapping, and that is what
@@ -2571,7 +2630,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             scheduleHistoryTaskId = null,
             scheduleHistory = ScheduleHistoryState.Idle,
         )
-        schedulePageJob = viewModelScope.launch { readSchedulePage(generation) }
+        schedulePageJob = uiScope.launch { readSchedulePage(generation) }
     }
 
     /** The sheet's Retry control. Same read, from the beginning of the list. */
@@ -2668,7 +2727,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             scheduleHistory = ScheduleHistoryState.Loading,
             scheduleActionError = null,
         )
-        scheduleHistoryJob = viewModelScope.launch {
+        scheduleHistoryJob = uiScope.launch {
             readScheduleHistoryPage(entry, before = null, generation = generation)
         }
     }
@@ -2682,7 +2741,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         _ui.value = _ui.value.copy(
             scheduleHistory = current.copy(loadingMore = true, moreError = null),
         )
-        scheduleHistoryJob = viewModelScope.launch {
+        scheduleHistoryJob = uiScope.launch {
             readScheduleHistoryPage(entry, before, generation)
         }
     }
@@ -2797,7 +2856,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             scheduleActionError = null,
             scheduleNotice = null,
         )
-        viewModelScope.launch {
+        uiScope.launch {
             try {
                 // Named, not flat: `schedule/delete` declares one wire argument,
                 // `request`, and the gateway rejects both missing and extra fields.
@@ -3037,7 +3096,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             acceptedCerts = config.acceptedCerts,
         )
 
-        viewModelScope.launch {
+        uiScope.launch {
             transcriptTick.sample(60).collect { publishTranscript() }
         }
 
@@ -3131,7 +3190,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         // this event for exactly that purpose and the web refreshes on it, so a local
         // router that comes up is not invisible until the next reconnect.
         app.attention.onAdaptersUpdated = {
-            viewModelScope.launch {
+            uiScope.launch {
                 // `loadModels` re-derives the chip from the host's catalog default and
                 // the session's own projection, so re-reading the list is enough: a
                 // provider that has just appeared or gone is reflected without the
@@ -3147,18 +3206,18 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         // Held, not fire-and-forget: a rewire cancels these before it starts the
         // next set. See [muxWiringJobs] for why that matters.
         muxWiringJobs = listOf(
-            viewModelScope.launch {
+            uiScope.launch {
                 // The UI is a view of the centre's pending state, not its owner.
                 app.attention.approval.collect { pending ->
                     if (_ui.value.approval != pending) _ui.value = _ui.value.copy(approval = pending)
                 }
             },
-            viewModelScope.launch {
+            uiScope.launch {
                 app.attention.questions.collect { pending ->
                     if (_ui.value.questions != pending) _ui.value = _ui.value.copy(questions = pending)
                 }
             },
-            viewModelScope.launch {
+            uiScope.launch {
                 // The drawer's per-session status source; a session parked on an
                 // approval or a question is not idle and must not be painted as running.
                 app.attention.pendingBySession.collect { pending ->
@@ -3167,7 +3226,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             },
-            viewModelScope.launch {
+            uiScope.launch {
                 while (true) {
                     val state = runCatching { client.mux().state.value }.getOrDefault(MuxState.IDLE)
                     val open = state == MuxState.OPEN
@@ -3308,7 +3367,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             hostShellSessions = config.hostShellSessions,
             acceptedCerts = config.acceptedCerts,
         )
-        viewModelScope.launch {
+        uiScope.launch {
             // A setup save is a person's own action, so it may lift a door hold;
             // and the client's multiplexer has just gone, so the wiring is rebuilt
             // whatever the route turns out to be.
@@ -3346,7 +3405,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             )
             return
         }
-        viewModelScope.launch {
+        uiScope.launch {
             _ui.value = _ui.value.copy(certChecking = true, certError = null)
             val result = CertProbe.probe(target)
             _ui.value = _ui.value.copy(
@@ -3433,7 +3492,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         if (_ui.value.phase != AppPhase.READY) return
         if (!configStore.load().isConfigured) return
         Log.d(TAG, "route changed: now ${client.baseUrl()}")
-        viewModelScope.launch {
+        uiScope.launch {
             publishRoute()
             rewireMux()
             runCatching { client.mux().ensureConnected() }
@@ -3473,7 +3532,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun loadHostSettings() {
         if (settingsJob?.isActive == true) return
-        settingsJob = viewModelScope.launch {
+        settingsJob = uiScope.launch {
             _ui.value = _ui.value.copy(hostSettingsLoading = true, hostSettingsError = null)
             val described = describeHostSettings()
             _ui.value = _ui.value.copy(
@@ -3564,7 +3623,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     fun checkRouter() {
         if (routerProbeJob?.isActive == true) return
         val target = _ui.value.routerTarget ?: return
-        routerProbeJob = viewModelScope.launch {
+        routerProbeJob = uiScope.launch {
             _ui.value = _ui.value.copy(
                 routerProbeRecord = RouterProbeRecord(
                     provider = target.provider.id,
@@ -3694,7 +3753,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val held = _ui.value.hostSettings ?: return
         val target = held.field(ns, name) ?: return
         if (!held.writable || !target.editable || _ui.value.settingsSaving != null) return
-        viewModelScope.launch {
+        uiScope.launch {
             val plan = SettingsWritePlan(ns, name, value)
             _ui.value = _ui.value.copy(settingsSaving = plan.key, settingsWriteError = null)
             var request: JSONObject? = plan.request(target)
@@ -3807,7 +3866,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun signOut() {
-        viewModelScope.launch {
+        uiScope.launch {
             // There is no logout endpoint — browser auth is a signed cookie, so
             // dropping it locally is the whole of signing out.
             client.cookieJar.clear()
@@ -3992,7 +4051,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      * into a login loop.
      */
     private fun onAuthFailure(source: String, cause: Throwable?, allowHeal: Boolean = true) {
-        viewModelScope.launch { handleAuthFailure(source, cause, allowHeal) }
+        uiScope.launch { handleAuthFailure(source, cause, allowHeal) }
     }
 
     private suspend fun handleAuthFailure(source: String, cause: Throwable?, allowHeal: Boolean) {
@@ -4054,7 +4113,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             attemptConnect()
             return
         }
-        viewModelScope.launch {
+        uiScope.launch {
             // The socket may have died at its handshake; ask for it now rather
             // than waiting out the supervisor's backoff.
             runCatching { client.mux().ensureConnected() }
@@ -4149,7 +4208,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         if (_ui.value.phase != AppPhase.READY) return
         if (resumeResyncInFlight) return
         resumeResyncInFlight = true
-        viewModelScope.launch {
+        uiScope.launch {
             try {
                 Log.d(TAG, "resume: re-checking the connection")
                 // The route is the one thing a frozen process cannot have kept up
@@ -4247,7 +4306,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     private fun scheduleReconnect() {
         if (connectRetries >= MAX_CONNECT_RETRIES) return
         connectRetries += 1
-        viewModelScope.launch {
+        uiScope.launch {
             delay(RECONNECT_BASE_DELAY_MS * connectRetries)
             if (configStore.load().isConfigured) attemptConnect()
         }
@@ -4347,7 +4406,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             rosterDebounce = null
         }
         rosterRefreshOnOpen = false
-        viewModelScope.launch {
+        uiScope.launch {
             Log.d(TAG, "restart: tearing the connection down")
             // The seat a reader is on, and what they had staged in it. The connect
             // path re-opens that session, and opening a session deliberately drops
@@ -4462,7 +4521,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      * be, so the wiring cannot be left to a route *move* to rebuild.
      */
     private fun reconnect(rebuildWiring: Boolean) {
-        viewModelScope.launch { reconnectNow(rebuildWiring) }
+        uiScope.launch { reconnectNow(rebuildWiring) }
     }
 
     /**
@@ -4485,7 +4544,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun attemptConnect(rebuildWiring: Boolean = false) {
-        viewModelScope.launch { attemptConnectNow(rebuildWiring) }
+        uiScope.launch { attemptConnectNow(rebuildWiring) }
     }
 
     /**
@@ -4648,7 +4707,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun ensureControlStream() {
         if (controlJob?.isActive == true) return
-        controlJob = viewModelScope.launch {
+        controlJob = uiScope.launch {
             client.mux().openStream("session/control", JSONObject()).collect { event ->
                 when (event) {
                     is StreamEvent.Item -> runCatching { handleControlFrame(event.value) }
@@ -4836,7 +4895,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             recordJobsFrame(sessionId = null, items = emptyList())
             return
         }
-        jobsWatchJob = viewModelScope.launch {
+        jobsWatchJob = uiScope.launch {
             jobClient.list(sessionId).collect { event ->
                 when (event) {
                     is StreamEvent.Item -> {
@@ -4959,7 +5018,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             ?: JobObservation(jobId = jobId)
         publishJobsForCurrent()
         val sessionId = _ui.value.currentSessionId
-        jobFollowJob = viewModelScope.launch {
+        jobFollowJob = uiScope.launch {
             jobClient.follow(sessionId, jobId, previous?.cursor).collect { event ->
                 when (event) {
                     is StreamEvent.Item -> applyFollowFrame(jobId, event.value)
@@ -5035,7 +5094,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun killJob(jobId: String) {
         val sessionId = _ui.value.currentSessionId ?: return
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching { jobClient.kill(sessionId, jobId) }
                 .onFailure { Log.w(TAG, "job/kill $jobId failed: ${it.message}") }
         }
@@ -5067,7 +5126,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val sessionId = _ui.value.currentSessionId ?: return
         referenceJob?.cancel()
         val generation = ++referenceGeneration
-        referenceJob = viewModelScope.launch {
+        referenceJob = uiScope.launch {
             delay(REFERENCE_DEBOUNCE_MS)
             val filesJob = async { fileReferences(sessionId, query) }
             val sessionsJob = async { sessionReferences(sessionId, query) }
@@ -5190,7 +5249,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     // --------------------------------------------------------------- sessions
 
     fun archiveSession(sessionId: String) {
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 client.rpc(
                     "workspace/archiveSession",
@@ -5205,7 +5264,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun unarchiveSession(sessionId: String) {
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 client.rpc(
                     "workspace/unarchiveSession",
@@ -5246,7 +5305,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun forkSessionAt(sessionId: String, atSeq: Int?) {
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 client.rpc(
                     "session/fork",
@@ -5322,7 +5381,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     private fun openSessionCarryingModelPick(sessionId: String) {
         val pick = pendingModelPick()
         openSession(sessionId)
-        if (pick != null) viewModelScope.launch { applyPendingModelPick(sessionId, pick) }
+        if (pick != null) uiScope.launch { applyPendingModelPick(sessionId, pick) }
     }
 
     /**
@@ -5365,7 +5424,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         // recorded, and it moves when *any* session or client selects — asynchronously,
         // measured at 0.4-2 s on 0.2.0-rc.2. The one catalog read from connect is
         // therefore not enough on this seat: re-read it on the way in.
-        viewModelScope.launch { runCatching { loadModels() } }
+        uiScope.launch { runCatching { loadModels() } }
         // No session is open, so the seat publishes an empty list and no dot. The
         // jobs the session being left had, and its marker, stay keyed to it.
         // The roster stream goes with it: nothing is on screen to keep current, and
@@ -5467,7 +5526,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      * the roster promised could be adopted.
      */
     private fun adoptSession(sessionId: String, workspaceId: String) {
-        viewModelScope.launch {
+        uiScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null, errorNeedsSignIn = false)
             val modelPick = pendingModelPick()
             runCatching { adoptSessionNow(sessionId, workspaceId) }
@@ -5524,7 +5583,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun ensureWorkspaceStream() {
         if (workspacesJob?.isActive == true) return
-        workspacesJob = viewModelScope.launch {
+        workspacesJob = uiScope.launch {
             client.mux().openStream("workspace/follow", JSONObject()).collect { event ->
                 if (event is StreamEvent.Failure) {
                     // The registry stream used to swallow its errors entirely: a
@@ -5631,7 +5690,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val generation = ++directoryGeneration
         _directoryLoading.value = true
         _directoryError.value = null
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 val args = JSONObject()
                 if (path != null) args.put("path", path)
@@ -5660,7 +5719,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun createDirectory(path: String, name: String, onCreated: (String) -> Unit = {}) {
         _directoryBusy.value = true
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 val result = client.rpcRaw(
                     "directoryPicker/createDirectory",
@@ -5692,7 +5751,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun addWorkspace(path: String, onAdded: (String) -> Unit = {}) {
         _directoryBusy.value = true
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 client.rpc("workspace/create", JSONObject().put("request", JSONObject().put("path", path)))
             }.onSuccess { value ->
@@ -5751,7 +5810,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val request = ++workspaceOrderRequest
         val frame = workspaceOrderFrame
         _ui.value = _ui.value.copy(workspaces = optimistic, workspaceOrderError = null)
-        viewModelScope.launch {
+        uiScope.launch {
             try {
                 val args = JSONObject().put("workspaceId", workspaceId)
                 if (beforeWorkspaceId != null) args.put("beforeWorkspaceId", beforeWorkspaceId)
@@ -5855,7 +5914,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         }
         val request = if (path.isEmpty()) "." else path
         val generation = ++explorerGeneration
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 val args = JSONObject()
                     // The wire spelling of the scope lookup: the session id, not a
@@ -6300,7 +6359,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshSessions() {
-        viewModelScope.launch {
+        uiScope.launch {
             _ui.value = _ui.value.copy(sessionsLoading = true)
             refreshRoster("refresh")
         }
@@ -6320,7 +6379,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      * visible either way.
      */
     fun refreshSidebar() {
-        viewModelScope.launch {
+        uiScope.launch {
             val startedAt = System.currentTimeMillis()
             _ui.value = _ui.value.copy(sessionsLoading = true)
             runCatching { client.mux().ensureConnected() }
@@ -6369,7 +6428,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             sessionSearchHasMore = false,
         )
         sessionSearchJob?.cancel()
-        sessionSearchJob = viewModelScope.launch {
+        sessionSearchJob = uiScope.launch {
             delay(SEARCH_DEBOUNCE_MS)
             val answer = runCatching { client.rpc("session/search", SessionSearch.args(normalized)) }
             if (sessionSearchQuery != normalized) return@launch
@@ -6420,7 +6479,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         // a drawer that never refreshed again while the connection looked healthy.
         synchronized(refreshLock) {
             if (rosterDebounce?.isActive == true) return
-            rosterDebounce = viewModelScope.launch {
+            rosterDebounce = uiScope.launch {
                 delay(500)
                 refreshRoster("streams")
             }
@@ -6755,7 +6814,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             // The job is registered before the body can remove it: a `delay` is
             // this coroutine's first suspension, so the body cannot reach its own
             // cleanup between `launch` and the put below.
-            subagentCatalogDebounce[parentSessionId] = viewModelScope.launch {
+            subagentCatalogDebounce[parentSessionId] = uiScope.launch {
                 delay(CATALOG_DEBOUNCE_MS)
                 synchronized(subagentCatalogLock) { subagentCatalogDebounce.remove(parentSessionId) }
                 refreshSubagentCatalog(parentSessionId)
@@ -6828,7 +6887,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val through = reducer.throughSeq()
         if (through <= 0) return
 
-        historyJob = viewModelScope.launch {
+        historyJob = uiScope.launch {
             _loadingHistory.value = true
             runCatching {
                 client.rpc(
@@ -6973,7 +7032,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     /** Opens one `session/follow` stream. Assigns [followJob]. */
     private fun startFollow(sessionId: String) {
         followJob?.cancel()
-        followJob = viewModelScope.launch {
+        followJob = uiScope.launch {
             val args = JSONObject().put(
                 "request",
                 JSONObject()
@@ -7130,7 +7189,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The unconditional `session/create`, launched. The only code that can add a row. */
     private fun createSessionNow(cwd: String?, preset: String?, workspaceId: String?) {
-        viewModelScope.launch {
+        uiScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null, errorNeedsSignIn = false)
             val modelPick = pendingModelPick()
             runCatching { createSessionRequest(cwd, preset, workspaceId) }
@@ -7226,7 +7285,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun renameSession(sessionId: String, title: String) {
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 client.rpc(
                     "session/rename",
@@ -7307,7 +7366,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (_ui.value.balance is BalanceState.Loading) return
         _ui.value = _ui.value.copy(balance = BalanceState.Loading)
-        viewModelScope.launch {
+        uiScope.launch {
             val next = try {
                 BalanceState.Ready(deepseekAccount.balance(key))
             } catch (error: BalanceFailure) {
@@ -7377,7 +7436,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         riding: List<PendingAttachment>,
         mode: String,
     ) {
-        viewModelScope.launch {
+        uiScope.launch {
             val id = materializePending(pending)
             if (id == null) {
                 // `materializePending` has already published the banner; the one
@@ -7466,7 +7525,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             // nowhere. The echo is retired by the row's `rpcId` (see dockRows).
             addPendingSubmission(sessionId, requestId, text, riding)
         }
-        viewModelScope.launch {
+        uiScope.launch {
             // Do NOT reset the reducer here. The session/follow stream stays open
             // and is not re-snapshotted, so clearing it would blank the transcript
             // and leave only the events that arrive afterwards. The host echoes the
@@ -7568,7 +7627,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun queueAction(itemId: String, action: JSONObject, failure: String, optimistic: () -> Unit) {
         val sessionId = _ui.value.currentSessionId ?: return
-        viewModelScope.launch {
+        uiScope.launch {
             _ui.value = _ui.value.copy(queueBusy = itemId)
             runCatching {
                 client.rpc(
@@ -7676,7 +7735,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         // between the tap and the host's admission, so the prompt became a turn
         // of its own and no queue row will ever carry this id. Long enough that a
         // merely slow control frame still wins the race.
-        viewModelScope.launch {
+        uiScope.launch {
             delay(PENDING_ECHO_TIMEOUT_MS)
             if (retirePendingSubmission(sessionId, requestId)) publishQueue()
         }
@@ -7725,7 +7784,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     fun stop() {
         val sessionId = _ui.value.currentSessionId ?: return
         val child = addressedChild(sessionId)
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 // A child's stop is parent-authorized, and that authority is what
                 // still reaches a live child whose parent Agent is offline — the
@@ -7851,7 +7910,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         updateModelSelection { it.withInFlight(ref) }
-        viewModelScope.launch { selectModelNow(sessionId, ref) }
+        uiScope.launch { selectModelNow(sessionId, ref) }
     }
 
     /**
@@ -8057,7 +8116,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     private fun goalAction(method: String, extra: JSONObject? = null) {
         val sessionId = _ui.value.currentSessionId ?: return
         val goal = _ui.value.goal ?: return
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 val args = JSONObject()
                     .put("agentId", sessionId)
@@ -8136,7 +8195,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Re-reads the roster: a preset authored while the app is open must show up. */
     fun refreshAgentPresets() {
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching { loadAgentPresets() }
                 .onFailure { if (it is DshAuthException) onAuthFailure("agentPresets/list", it) }
         }
@@ -8173,7 +8232,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             _ui.value = _ui.value.copy(error = "This session has already started; its agent preset is fixed.")
             return
         }
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 client.rpc(
                     "agentPresets/select",
@@ -8224,7 +8283,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshCommands() {
         val sessionId = _ui.value.currentSessionId ?: return
         _commands.value = emptyList()
-        viewModelScope.launch {
+        uiScope.launch {
             val parsed = runCatching {
                 val list = client.rpcRaw("commands/list", JSONObject().put("agentId", sessionId)) as? JSONArray
                     ?: JSONArray()
@@ -8300,7 +8359,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             )
             return
         }
-        viewModelScope.launch {
+        uiScope.launch {
             runCommand("/permission $preset")
                 .onSuccess {
                     _ui.value = _ui.value.copy(currentPermission = preset)
@@ -8328,7 +8387,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
                 setPermission(mode)
                 return
             }
-            viewModelScope.launch {
+            uiScope.launch {
                 val id = materializePending(pending) ?: return@launch
                 runCommandFor(id, line).onFailure {
                     showFailure(it, "commands/execute", "Command failed: ")
@@ -8336,7 +8395,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             }
             return
         }
-        viewModelScope.launch {
+        uiScope.launch {
             runCommand(line).onFailure {
                 showFailure(it, "commands/execute", "Command failed: ")
             }
@@ -8344,7 +8403,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun exitPlanMode() {
-        viewModelScope.launch {
+        uiScope.launch {
             runCommand("/plan off")
                 .onSuccess { _ui.value = _ui.value.copy(planActive = false) }
                 .onFailure {
@@ -8371,7 +8430,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val sessionId = _ui.value.currentSessionId
         if (sessionId == null) {
             val pending = _ui.value.pendingSession ?: return
-            viewModelScope.launch {
+            uiScope.launch {
                 val id = materializePending(pending) ?: return@launch
                 stageAttachment(id, uri)
             }
@@ -8389,7 +8448,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             attachments = _ui.value.attachments + PendingAttachment(id, name, 0, mediaType = mediaType),
         )
 
-        viewModelScope.launch {
+        uiScope.launch {
             runCatching {
                 val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw IllegalStateException("Could not read that file")
@@ -8808,6 +8867,10 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        // The one job `viewModelScope` used to end for us. Cancelled first, so no
+        // coroutine of this view model can outlive the teardown below and write to
+        // a UI that no longer exists.
+        uiScope.cancel()
         followJob?.cancel()
         teardownStreams()
         // Both hooks live on process-scoped objects; only drop our own.
