@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -234,7 +233,7 @@ class MeSettingsPageTest {
      * at the model's own bounds rather than at a second, hand-written pair of numbers.
      */
     @Test
-    fun `the terminal stepper moves one step and stops at the ends`() {
+    fun `the terminal stepper moves one step`() {
         val sizes = mutableListOf<Float>()
         page(
             id = "terminal",
@@ -244,9 +243,17 @@ class MeSettingsPageTest {
         rule.onNodeWithText("Text size").assertIsDisplayed()
         rule.onNodeWithContentDescription("Increase text size").performClick()
         assertEquals(listOf(11f), sizes)
+        rule.onNodeWithContentDescription("Decrease text size").performClick()
+        assertEquals(listOf(11f, 9f), sizes)
+    }
 
-        // At the largest size the increase arrow is dead.
-        sizes.clear()
+    /**
+     * At the model's own ends the arrows are dead, so no size the shell would refuse can be
+     * asked for. A second, hand-written pair of bounds is the bug this rules out.
+     */
+    @Test
+    fun `the terminal stepper is dead at the cell model's ends`() {
+        val sizes = mutableListOf<Float>()
         page(
             id = "terminal",
             state = MeSettingsState(terminalFontSp = uk.xa0.dsh.term.TerminalCellSize.MAX_FONT_SP),
