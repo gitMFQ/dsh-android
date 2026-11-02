@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -980,6 +981,32 @@ class DshClient(context: Context) {
 
             clients.unary.newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty()
+                // ## Cancellation wins over a verdict
+                //
+                // Everything below throws, and each throw is a *fact about the answer*.
+                // But this call is the last thing many coroutines do before their owner
+                // goes away — a screen is popped, the view model is cleared, the reader
+                // switches session — and when the answer and the cancellation arrive
+                // together, a thrown [DshRpcException] replaces the cancellation.
+                //
+                // That is not a handled failure. A coroutine that was *cancelling* then
+                // completes exceptionally with an unrelated exception, and `viewModelScope`
+                // installs no `CoroutineExceptionHandler`, so the process dies. Measured
+                // from a device report: a bare `DshRpcException("the host did not answer;
+                // its web server replied instead") whose only frames were coroutine-dispatch
+                // ones, inside a `StandaloneCoroutine{Cancelling}`, with the exception also
+                // attached as a *suppressed* `DiagnosticCoroutineContextException` — the
+                // signature of an exception delivered to an already-cancelled job.
+                //
+                // So: if this coroutine was cancelled while the call was in flight, say
+                // that instead. The callers that matter already rethrow
+                // `CancellationException`, and the ones that catch `Throwable` treat it as
+                // "the screen went away", which is what happened.
+                //
+                // Placed after the request rather than before it: the call is still worth
+                // finishing on a cancellation, because abandoning a response mid-read is
+                // what leaves a socket half-consumed.
+                ensureActive()
                 if (response.code == 401 || response.code == 403) {
                     throw DshAuthException("Session expired (HTTP ${response.code})")
                 }
