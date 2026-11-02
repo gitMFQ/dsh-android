@@ -126,6 +126,9 @@ fun ChatScreen(vm: DshViewModel) {
         // state, and a second subscription to it would be a second source of truth.
         draftRestore = ui.draftRestore,
         toolParents = vm.toolParents(),
+        // The Shell page's cell size: a preference the panel writes (Me page's Terminal
+        // tab and the shell's own A-/A+), so it travels with the state the panel draws.
+        terminalFontSp = ui.terminalFontSp,
     )
 
     ChatPanel(
@@ -214,6 +217,7 @@ fun ChatScreen(vm: DshViewModel) {
             trustCertificate = vm::trustCertificate,
             forgetCertificate = vm::forgetCertificate,
             writeHostSetting = vm::writeHostSetting,
+            setTerminalFont = vm::setTerminalFontSp,
         ),
         // The Shell page. Composed here rather than inside the panel because it enters
         // and leaves the terminal over RPC — the panel is handed the finished screen.

@@ -36,7 +36,15 @@ import uk.xa0.dsh.PermissionOption
 import uk.xa0.dsh.TerminalPhase
 import uk.xa0.dsh.TerminalUiState
 import uk.xa0.dsh.UiState
+import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.data.ThemeMode
+import uk.xa0.dsh.model.GeneralSettings
+import uk.xa0.dsh.model.HostSettings
+import uk.xa0.dsh.model.SettingsChoice
+import uk.xa0.dsh.model.SettingsField
+import uk.xa0.dsh.ui.settings.MeSettingsActions
+import uk.xa0.dsh.ui.settings.MeSettingsPage
+import uk.xa0.dsh.ui.settings.MeSettingsState
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.FileTouch
@@ -846,21 +854,52 @@ class ScreenBaselineTest {
     }
 
     /**
-     * A settings tab's own page: the back bar and, for now, a placeholder body (3.3).
+     * A settings tab's own page: the back bar and a real page body (3.5b).
      *
-     * Captured with [PlaceholderTab] rather than with a real tab's contents because the
-     * contents are the work of their own PRs. What this pins is the *frame* every tab
-     * will be drawn in — and, more usefully, it makes the placeholder visible so nobody
-     * ships believing the tabs are done.
+     * This used to capture [PlaceholderTab], on purpose — the tab contents were their own
+     * PRs, and a placeholder that nobody could see was one that rotted. The appearance page
+     * is the first real one, and it is the right one to pin: it is the only page whose rows
+     * are entirely client-owned (the seven shapes this device can draw), so the capture
+     * does not depend on what a host happened to answer when it was recorded.
      */
     @Test
     fun meSubPage() {
         capture("me-subpage") {
             MeSubPage(title = "Appearance", onBack = {}) {
-                PlaceholderTab(
-                    title = "Appearance",
-                    summary = "Theme, and the seven appearances it resolves to.",
-                    icon = Icons.Rounded.Palette,
+                MeSettingsPage(
+                    id = "appearance",
+                    state = MeSettingsState(themeMode = ThemeMode.LIGHT),
+                    actions = MeSettingsActions(),
+                )
+            }
+        }
+    }
+
+    /**
+     * General: the host-backed rows, with the host's own answers (3.5b).
+     *
+     * The one page whose every control is decided by a reply, so the fixture states a
+     * *writable* document with the web's own five fields. A read-only host would draw the
+     * same rows dead, and that difference is exactly what this capture would show if the
+     * write rules regressed — which is why it is a writable one, not a read-only one.
+     */
+    @Test
+    fun meGeneral() {
+        capture("me-general") {
+            MeSubPage(title = "General", onBack = {}) {
+                MeSettingsPage(
+                    id = "general",
+                    state = MeSettingsState(
+                        themeMode = ThemeMode.LIGHT,
+                        transcriptView = "compact",
+                        busyEnter = BusyEnter.QUEUE,
+                        permissionOptions = listOf(
+                            PermissionOption("default", "Default", "Ask before each tool"),
+                            PermissionOption(FULL_ACCESS_PRESET, "Full access", "No prompts"),
+                        ),
+                        hostSettings = hostSettingsFixture(),
+                    ),
+                    actions = MeSettingsActions(),
                 )
             }
         }
@@ -885,3 +924,75 @@ class ScreenBaselineTest {
         }
     }
 }
+/**
+ * A writable host settings document, with the web's own five General fields.
+ *
+ * Stated rather than parsed from a captured reply: the pages read [HostSettings] through
+ * field(ns, name), so what a fixture has to get right is the *shape the page consumes*, not
+ * the wire envelope — parseHostSettings owns that, and it has its own tests in :core:model.
+ *
+ * Everything is live, non-secret and inside its bounds, so every row on the General page
+ * draws a real control. A read-only document is the other state worth capturing, and it is
+ * the one this fixture deliberately is not: a page whose controls are all dead would hide
+ * whether the write rules still let a writable host through.
+ */
+private fun hostSettingsFixture(): HostSettings = HostSettings(
+    writable = true,
+    hasDocument = true,
+    fields = listOf(
+        SettingsField(
+            ns = GeneralSettings.PERMISSION_NS,
+            name = GeneralSettings.PERMISSION_FIELD,
+            revision = 3,
+            value = "default",
+            choices = listOf(
+                SettingsChoice("default", "Default"),
+                SettingsChoice(FULL_ACCESS_PRESET, "Full access"),
+            ),
+            live = true,
+        ),
+        SettingsField(
+            ns = GeneralSettings.THEME_NS,
+            name = GeneralSettings.THEME_PREFERENCE_FIELD,
+            revision = 3,
+            value = ThemeMode.LIGHT,
+            choices = listOf(
+                SettingsChoice(ThemeMode.LIGHT, "Light"),
+                SettingsChoice(ThemeMode.DARK, "Dark"),
+                SettingsChoice(ThemeMode.SYSTEM, "System"),
+            ),
+            live = true,
+        ),
+        SettingsField(
+            ns = GeneralSettings.THEME_NS,
+            name = GeneralSettings.THEME_FONT_SIZE_FIELD,
+            revision = 3,
+            value = "14",
+            min = 12,
+            max = 20,
+            live = true,
+        ),
+        SettingsField(
+            ns = GeneralSettings.CHAT_NS,
+            name = GeneralSettings.TRANSCRIPT_FIELD,
+            revision = 3,
+            value = "compact",
+            choices = listOf(
+                SettingsChoice("compact", "Compact"),
+                SettingsChoice("normal", "Normal"),
+            ),
+            live = true,
+        ),
+        SettingsField(
+            ns = GeneralSettings.CONVERSATION_NS,
+            name = GeneralSettings.BUSY_ENTER_FIELD,
+            revision = 3,
+            value = BusyEnter.QUEUE,
+            choices = listOf(
+                SettingsChoice(BusyEnter.QUEUE, "Queue"),
+                SettingsChoice(BusyEnter.STEER, "Steer"),
+            ),
+            live = true,
+        ),
+    ).associateBy { it.key },
+)
