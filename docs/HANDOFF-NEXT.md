@@ -1,132 +1,221 @@
 # 交接文档（给新会话）
 
-> 写于 2026-11-01 深夜（阶段 3 开工当天），本版为 **第六版**。
+> 写于 **2026-11-02 晚**（外壳改造第 1–3 轮合入之后），本版为 **第七版**。
 > 沿革：一版「接管 + 工具链全量升级」→ 二版「结构拆分」→ 三版「1.2b」→ 四版「阶段 1 完成」
-> → 五版「阶段 2.5 完成 + 2.6 清单」→ **本版「阶段 2.6 被 3.0 取代：整仓转 GPL-3.0 + 套件接管外壳」**。
+> → 五版「阶段 2.5 完成 + 2.6 清单」→ 六版「2.6 被 3.0 取代」→
+> **本版「输入框/底栏三轮重做 + 一次 RPC 取消崩溃修复之后」**。
 >
-> **新会话先读本文件，再读 [PHASE-3-PLAN.md](PHASE-3-PLAN.md)（唯一可执行计划）。**
-> 阶段 2 的历史结论留在 [PHASE-2-PLAN.md](PHASE-2-PLAN.md)，不要删，但**别再照着开工**。
+> **新会话先读本文件**，再读 [PHASE-3-PLAN.md](PHASE-3-PLAN.md)。注意：该计划的 §4 PR 表
+> **没有记录第 1–3 轮输入框改造**（那是计划写成之后按用户真机反馈做的），当前外壳状态以本文件为准。
 
 ## 1. 一句话现状
 
-仓库 <https://github.com/gitMFQ/dsh-android>（私有）是一个**已整仓转为 GPL-3.0** 的 DSH 原生安卓客户端。
-阶段 1（结构拆分，5 个模块）与阶段 2.0–2.5（窗口底色、基线、pager、宽屏 rail）**全部合入**；
-阶段 2.6 的原计划（TopBar 折叠）**被阶段 3 取代**。
+仓库 <https://github.com/gitMFQ/dsh-android>（私有）是整仓 GPL-3.0 的 **DSH 原生安卓客户端**。
+阶段 1、阶段 2.0–2.5、阶段 3 的 3.0–3.5a 全部合入；最近三天按真机反馈做了**输入框/底栏三轮重做**
+（PR #38 / #39 / #40），当前 master `050048c`。
 
-阶段 3 在做的事：**直接复用 `chenaizhang/KernelSU-Style-UI-Kit`（GPL-3.0）的代码，把外壳换成「液态玻璃 + 药丸导航」的 Miuix 观感**。
-
-**当前 master 实测**（2026-11-01 末）：`screenshots = 17`；CI 报 `tests=1166` / `screenshots=17`。
+**CI 实测（master `050048c`）**：`tests=1175 failures=0` / `screenshots=19` / Debug APK 绿。
+本机 aarch64 只能编译 Kotlin 和跑 `:design`/`:core:protocol` 测试，**测试真值以 CI 为准**。
 
 ## 2. 已合入（master）
 
-| PR | 内容 | 证据 |
+| PR | 内容 |
+|---|---|
+| #25 | 许可转 GPL-3.0 + `NOTICE.md` + 接 `miuix-blur`（`tools:overrideLibrary`，minSdk 仍 26）+ 玻璃基座 `ui/glass/` |
+| #26 | 底栏改 4 目的地（Chat / Files / Plugins / Me），会话三视图降为页内药丸 |
+| #27 | 移植套件玻璃底栏（8 文件）替换手写底栏 |
+| #28 | Me / Me 子页 / Plugins 三条基线 |
+| #30 | 修 CI：阿里云镜像不再排在官方源前面 |
+| #29 | 3.2b：backdrop 布线，液态档真正可达 |
+| #31 | 3.5a：移植 `overlay/` `list/` `feedback/` |
+| #38 | **输入框第 1 轮**：输入框变成底栏另一半——收起 `[导航栏][圆按钮]`、展开 `[当前页圆][消息条]`；控件搬成药丸行（`+`/权限/计划/模型/上下文）；新增 `liquidPane` |
+| #39 | **输入框第 2 轮**：默认改为**消息条展开**、导航折成当前页圆；`+` 进输入条；药丸行加**速度 / Cache** 两颗读数、权限/模型只留图标；To-dos/回到底部玻璃化；**修对话底部被底栏挡住**（栈高度量在 padding 内侧）；**修流式输出"一会抬一下"**（TailFollow 对 padding 边缘修正） |
+| #40 | **第 3 轮**：长按菜单加**全屏输入**；点铅笔/圆图标不弹键盘；turn rail 可跳转；收起态导航**拉伸填满**；**系统导航栏透明 + 对话滑到其后**；**抽屉跟手**、底栏不响应抽屉；修长按放大玻璃被裁；**液态档去描边**；排队消息条玻璃化；会话统计速度药丸常驻；**RPC 取消竞态闪退修复**；`localbuild.sh` 锁修复 |
+
+## 3. 当前外壳长什么样（接手 UI 必读）
+
+### 3.1 输入框 / 底栏
+
+- 默认状态：**消息条展开**，底栏左侧一个当前页圆图标；点圆图标 → 消息条收成圆形铅笔、四项导航回来；
+  再点铅笔 → 展开。
+- 收起态：导航条**拉伸到整行宽**（16dp 外边距），四格分宽度；铅笔圆独立在右。
+- 行宽不变：`[圆 56][间隔 8][消息条 余量]`；导航折叠用 `requiredWidth` + **只在折叠动画中裁切**，
+  静止不裁（否则长按放大会被裁掉）。
+- 输入条内：`+`、文字、发送/停止、附件条；**dock 从不主动弹键盘**，只有点文字框才弹。
+- 药丸行（始终可见）：权限（盾牌图标）、计划（仅在计划模式）、模型（脑图标）、上下文（环+%）、
+  **会话统计（恒显示 `xx tok/s`，无 decode 窗口时保留上次数值、首帧 0）**、**Token 用量（`Cache xx%`）**。
+  点速度/缓存各自开原来的完整弹层（含余额入口）。
+- 抽屉里的「会话统计 / Token 用量」旧 footer 行已删除，读数并入药丸行——**这是流式不跳的关键**：
+  药丸行固定高度，数字只改宽度。
+
+相关文件：
+
+| 文件 | 作用 |
+|---|---|
+| `app/ui/components/Composer.kt`（570 行） | `ComposerContent`：`+`、文本、附件、发送/停止、IME undo、自动换行上限 120dp；选择工具栏接入点 |
+| `app/ui/components/ComposerDock.kt`（488） | `ComposerDock`：导航折叠/展开、宽度动画、点击/滑动手势、输入条容器；`InputPane` / `NavigationPane` |
+| `app/ui/components/ComposerAccessories.kt`（409） | 药丸行 `ComposerAccessoryRail` + `GlassPill` + 上下文环/弹层 |
+| `app/ui/components/SessionStatsPills.kt` | 速度 / Cache 药丸与完整弹层（原 `SessionStatsPills` 行已删） |
+| `app/ui/components/ComposerFullScreen.kt`（370） | 自定义 `LocalTextToolbar`（全选/复制/剪切/粘贴 + **Full screen**）、`FullScreenComposer` 全屏写作面 |
+| `design/ui/glass/LiquidPane.kt`（100） | `Modifier.liquidPane`：液态 = vibrancy + blur 4dp + lens 24dp + 无描边；平档 = `glassSurface`（有 0.5dp 描边）；`glassLift` 由调用方加 |
+
+### 3.2 边到边与系统栏
+
+- `ChatPanel` 根布局**不再** `navigationBarsPadding()`：pager 跑到窗口底，对话可从透明系统导航栏后滑过。
+- dock 自己付导航栏 inset（`WindowInsets.navigationBars.exclude(WindowInsets.ime)`，键盘打开不叠加）；
+  Files/Plugins/Me 页各自补导航栏 inset。
+- `SystemBars`：导航栏颜色透明、API 29+ 关掉 `isNavigationBarContrastEnforced`；图标明暗仍跟调色板。
+- `onSizeChanged` 量在 dock 两处 inset **外侧**：`dockAreaPx` = 窗口底到 dock 顶的完整距离，
+  所有要避让 dock 的地方（聊天栈、hero、回到底部按钮）都用它一次，不要再加第二个 gap。
+
+### 3.3 抽屉 / turn rail / 列表跟随
+
+- `drawerDrag`：Initial pass 抢占边缘手势，**逐帧把位移喂给 Drawer 的 anchored offset**
+  （`DrawerState` 的 internal `anchoredDraggableState`，局部 `@Suppress`；松手仍按 40dp/200dp/s settle）。
+  顶栏右滑仍走 Material 根手势；**起手在 dock 区的向下手势在 Main pass、底栏孩子之后被消费**，
+  所以底栏不拉抽屉、底栏自己的 tab 拖动不受影响。
+- `TurnRail`：标准 `detectTapGestures` + 瞬时 `scrollToItem`；旧手写观察器的 `isConsumed` 判断会把 tap 吞掉。
+- `TailFollow`：尾部增长按**padding 后的内容边缘**（`viewportEndOffset - afterContentPadding`）修正，
+  每行只补它溢出的像素；列表底部内边距 = `md + composerStackPx`，而 `composerStackPx`
+  现在量的是「卡片 + dock 区 + gap」的完整占位（量在 padding 外侧）。有 `TailFollowMathTest` 4 条算术测试钉住。
+
+### 3.4 崩溃修复（#40 的协议部分）
+
+设备报告：`DshRpcException("the host did not answer…")` at `DshClient.kt:1024`，
+`StandaloneCoroutine{Cancelling}` + suppressed `DiagnosticCoroutineContextException`。
+根因：`JobSupport.getFinalRootCause` 取第一个非 CancellationException，取消与判决同时到达时 RPC 异常
+成为已取消 job 的完成原因 → 线程未捕获处理器 → 进程崩。
+
+- `DshClient`：`rpcRaw`/`rpcBytes` 的 wire 工作收进 `rawCall`/`rawBytesCall`，catch 后经
+  `rpcFailureForCaller(failure, coroutineActive)`：active → 原样抛；已取消 → `CancellationException`
+  （判决作 cause）；已有取消不再包。`ensureActive()` 只留作廉价早退。
+- `DshViewModel`：用 `CoroutineScope(SupervisorJob() + Main.immediate + CoroutineExceptionHandler)`（`uiScope`）
+  替代 `viewModelScope`（71 处 launch，同一 `onCleared` 取消点）。已失效 job 的异常 debug 丢弃；
+  仍 active 的 error 日志 + 现有错误横幅。
+- 新增 `core/protocol/src/test/.../RpcCancellationTest.kt` 6 条。
+
+## 4. 下一步（建议顺序）
+
+### 4.1 先做真机验收（第 1–3 轮的账还没结）
+
+截图基线都是 **FLAT 档**（Robolectric 无 GPU），液态档、手势、系统栏透明、IME 都只有真机能验。
+建议按下面清单过一遍，把问题记成下一轮的输入：
+
+1. **API 33+ 液态档**：药丸/输入条/To-dos/排队条/回到底部按钮的 blur+lens 是否与底栏同一观感；**没有描边**；
+   长按底栏 tab 的放大玻璃能画出容器、不被裁。
+2. **键盘**：点铅笔 / 当前页圆图标不弹键盘；点文字框才弹；全屏进入时弹键盘、返回收回。
+3. **全屏**：长按输入框 → 菜单有 Full screen；进去是同一个草稿（含附件），发送/关闭正常。
+4. **turn rail**：点刻度能跳到对应轮次（不是预览一下又弹回底部）。
+5. **收起态**：导航条填满整行（16dp 边距），四格文字不被裁；点 tab 的高亮/放大正常。
+6. **边到边**：对话能滑到透明系统导航栏后面并透出来；dock 浮在系统栏上方；键盘弹出时 dock 不被
+   叠加两层 inset（gap 不应明显变大）。
+7. **抽屉**：对话页左缘右滑**跟手**；顶栏右滑仍跟手；底栏右滑**不**拉抽屉；抽屉打开时在 sheet 上
+   左拖跟手关。
+8. **排队消息条**：繁忙时入队，条是液态玻璃、四角圆角，不再有旧的开口描边。
+9. **读数药丸**：速度常驻（新会话首帧 `0 tok/s`，流式中数字变化、不闪烁消失）；`Cache xx%` 点开完整面板。
+10. **闪退**：反复切会话/退出页面/重连（尤其弱网时网关返回 HTML），进程不应再被 RPC 取消竞态带走；
+    若出现真正的未处理异常，应看到错误横幅而不是闪退。
+
+### 4.2 然后回到 PHASE-3-PLAN 的未完成项
+
+| # | 内容 | 备注 |
 |---|---|---|
-| **#25** | 许可转 **GPL-3.0** + `NOTICE.md` + 接 `miuix-blur`（`tools:overrideLibrary`，minSdk 仍 26）+ 玻璃基座 `ui/glass/` | `tests=1166` / `screenshots=14` 均不变 |
-| **#26** | 底栏改 **4 目的地**（Chat / Files / Plugins / Me），会话三视图（Chat/Trajectory/Shell）降为**页头下的药丸**；`showFiles` 双源清除 | 11 张基线逐字节不变，3 张按预期移动 |
-| **#27** | 移植套件**玻璃底栏**（8 文件）+ 替换 2.4 手写底栏；旧 `components/FloatingBottomBar.kt` 删除 | `tests=1166` / `screenshots=14` |
-| **#28** | Me / Me 子页 / Plugins 三条基线 | 14 张逐字节不变，新增 3 张 |
-| **#30** | **修 CI 单点**：阿里云镜像不再排在官方源前面 | 见 §5 |
+| **3.5b** | 把 `SegmentedList` 接进 **Me 的各设置页签**（现在子页是占位）；`SettingsContent.kt` 段落提权成可独立进子页 | 下一步最自然的 UI 工作 |
+| 3.6 | Files 页从「复用面板」变成类 VSCode 树浏览器 | |
+| 3.7 | TopBar 折叠：**随页变，不随滚动** | 见 PHASE-3-PLAN §6 |
+| 3.8 | 状态胶囊（连接 / 运行 / 待审批） | |
+| 3.9 / 3.10 | Sheet/Dialog 与抽屉换装 | 依赖 3.5a 的 `overlay/` `list/` |
 
-### 2.1 阶段 3 的关键技术结论（踩过的坑）
+### 4.3 已知隐患 / 可选的收尾
 
-1. **`miuix-blur` 的 AAR 自己声明 minSdk 33**，本 app 是 26 → 靠 `tools:overrideLibrary` 接进来。
-   这条豁免的安全**全靠纪律**：`:app` 不得 naming 任何 `top.yukonga.miuix.kmp.blur.*` 类型，
-   只经 `:design` 的不透明句柄 `GlassBarBackdrop`（`rememberGlassBarBackdrop()` / `Modifier.glassBarLayer()`）布线。
-   细则见 [NOTICE.md](../NOTICE.md)。
-2. **约束的是「谁执行」不是「谁出现」**：依赖本身就打进 APK，类在任何设备上都存在；
-   API 26 上会崩的是「调用了只能在 33+ 跑的东西」，编译期看不出来。
-3. **三档降级**：33+ 液态（折射 + 高光）／31–32 半透明 + 描边／26–30 不透明。由 `currentGlassTier` 决定。
-4. **Robolectric 会「谎报」能力**：`@Config(sdk = [34])` 下 `glassBarSupported()` 返回 true，
-   但 shadow 没有 GPU 管线 —— 3.2b 首次接线时 `chat-hero` / `chat-transcript` **在 composition 阶段就炸了**
-   （`IllegalArgumentException at capture` → `IllegalStateException at InlineClassHelper`）。
-   解法是先例的第二个：`LocalGlassEnabled`（对标既有的 `LocalAnimatedDots`），两个 fixture 都 provide `false`。
-   **后果：液态档没有截图基线，它的验证在真机 API 33+。**
-5. **「三档一种设计」是结构性的**：`FloatingBarState` 被三档共用，画法不同、运动相同。
+- **`ComposeFoundationFlags.isNewContextMenuEnabled = false` 是全局固定 legacy 文本菜单**（在
+  `DshApplication.onCreate`），因为全屏入口要挂在 `LocalTextToolbar` 上，而 targetSdk 35+ 的新右键菜单
+  绕过这个接缝。等 Compose 提供可追加自定义项的新菜单 API，应迁移并删掉这行（否则所有输入框都用旧菜单）。
+- **`DrawerState.anchoredDraggableState` 是 Material3 internal**：靠局部 `@Suppress` + 编译期把关；
+  升 material3 若编不过，退路是自绘抽屉（`ModalDrawerSheet` 内容可复用）。
+- **抽屉在开/关动画途中被重新抓住**：目前直接 `dispatchRawDelta`，可能与 settle 动画抢同一个 offset；
+  真机若看到抖动，做法是在手势开始时先让当前动画停下（mutex/snap 处理）。
+- **性能**：液态档同时有 7 个玻璃面（导航、输入条、5 颗药丸）各自 blur+lens；中端机若掉帧，
+  优先把药丸降为 `glassSurface`（平档），而不是降底栏。
+- **< 360dp 屏**：收起态 `[四格导航 + 铅笔圆]` 在 320dp 上会溢出（当前按 360+ 设计）。
+- **全屏入口只在输入条工具栏**；全屏界面自身仍用平台 legacy 工具栏（不需要再嵌全屏）。
+- **`docs/BUILD-AND-CI.md` 的 §0.0 仍准确**：本机 aarch64 不能跑 aapt2，`:app` 测试源码编不了；
+  `:core:protocol` 测试要用本地 init script 跳过 resource-link（仅本地，不改仓库）。
 
-## 3. 阶段 3 的 PR 序列（完整版见 [PHASE-3-PLAN.md](PHASE-3-PLAN.md) §4）
-
-| # | 状态 | 内容 |
-|---|---|---|
-| 3.0 / 3.1 | ✅ #25 | 许可 + 闸门 + 玻璃基座 |
-| 3.2 | ✅ #27 | 玻璃底栏移植 + 接线 |
-| 3.3 | ✅ #26 | 4 目的地 IA + 页内药丸 |
-| 3.4 | ✅ #28 | 新页面基线 |
-| **3.2b** | ⏳ **PR #29** | backdrop 布线（液态档真正可达） |
-| **3.5a** | ⏳ **PR #31** | 移植 `overlay/` `list/` `feedback/`（Dialog / SegmentedList / SuperSearchBar / WarningCard / ScrollToTop） |
-| 3.5b | 下一步 | 把 `SegmentedList` 接进 **Me 的各设置页签**（现在子页是占位）；`SettingsContent.kt` 的段落要提权成可独立进子页 |
-| 3.6 | 待做 | Files 页从「复用面板」变成类 VSCode 树浏览器 |
-| 3.7 | 待做 | TopBar 折叠：**随页变，不随滚动**（见 PHASE-3-PLAN §6） |
-| 3.8 | 待做 | 状态胶囊（连接 / 运行 / 待审批） |
-| 3.9 / 3.10 | 待做 | Sheet/Dialog 与抽屉换装（依赖 3.5a 的 `overlay/` `list/`） |
-
-## 4. 关键约束（别再踩）
+## 5. 关键约束（别再踩）
 
 | 约束 | 原因 |
 |---|---|
-| **本机不能完整构建** | aarch64 + 无可用 aapt2。`assembleDebug` 会拖到 15 分钟以上且大概率 OOM（3.9 GB）。**验证走 CI**。 |
-| **本机能编译 Kotlin** | `tools/localbuild.sh . :app:compileDebugKotlin`（约 1.5–4.5 分钟）。**测试源码编不了**（`:app` 的挂 aapt2），`:design` 的测试可以跑。 |
-| **不要 `git stash -u`** | 2026-11-01 踩过：`-u` 会把队友的**未跟踪产出一起收走**，切分支后就从工作区消失（已从 stash 恢复，但浪费了一轮）。多人同时写时，切分支可以（`checkout -b` 会携带未跟踪文件），**stash / clean 不行**。 |
-| **杀 gradle 会留下 `*.btbak`** | `localbuild.sh` 用 `trap` 还原 `buildToolsVersion`，被 kill 时 trap 跑不到。收尾：删掉 `*.build.gradle.kts.btbak` 并 `git checkout --` 那 5 个 `build.gradle.kts`。 |
-| **`pluginManagement` 必须是 settings 的第一个语句** | 所以 `DSH_LOCAL_MIRRORS` 在两个块里各读一次，不能提成顶层 val。 |
+| **本机不能完整构建** | aarch64 + x86_64 aapt2。`assembleDebug` 会拖到 15 分钟以上且大概率 OOM（3.9 GB）。**打包/测试/截图全部走 CI**。 |
+| **本机能编译 Kotlin** | `tools/localbuild.sh . :app:compileDebugKotlin`（本轮实测 5–9 分钟）。`:app` 测试源码仍编不了。 |
+| **`localbuild.sh` 现在会把 flock 保持到 Gradle 退出** | #40 修过：原来在 `exec gradle` 前 `exec 9>&-`，实际提前释放锁，两个 agent 的构建互相覆盖 `buildToolsVersion`（报 "Failed to find Build Tools revision 37.0.0"）。仍建议一次只跑一个构建。 |
+| **杀 gradle 会留下 `*.btbak`** | `localbuild.sh` 用 `trap` 还原 `buildToolsVersion`，被 kill 时 trap 跑不到。收尾：删 `*.build.gradle.kts.btbak` 并 `git checkout --` 那 5 个 `build.gradle.kts`。 |
+| **不要 `git stash -u` / `git clean -fd`** | 会收走队友/其他 agent 的未跟踪产出。切分支可以（`checkout -b` 携带未跟踪文件）。 |
+| **跨模块 smart cast 编不过** | 先把属性读进局部变量再判断；别加 `!!`。 |
 | **AGP 9 不允许 `org.jetbrains.kotlin.android`** | 内置 Kotlin，应用该插件直接 build fail。 |
-| **跨模块 smart cast 编不过** | 先把属性读进局部变量再判断，别改 `var`、别加 `!!`。 |
-| **新增测试任务要写进两个 workflow** | 依赖一个模块**不会**跑它的测试，CI 会「绿着丢测试」。目前 6 个模块的名字都已在 `verify.yml` / `build.yml`。 |
-| **两个数字别合并** | `tests`（功能）与 `screenshots`（像素基线）。CI 分开打印。 |
-| **基线只手动录** | `gh workflow run screenshots.yml --ref master -f branch=<分支>`；下载 `roborazzi-baselines` 覆盖 `app/src/test/screenshots/` 后提交。**本机录不了。** |
+| **新增测试任务要写进 `verify.yml` / `build.yml`** | 依赖一个模块不会跑它的测试，CI 会「绿着丢测试」。 |
+| **`tests` 与 `screenshots` 是两个数** | CI 分开打印，不要合并引用。当前 `tests=1175` / `screenshots=19`。 |
+| **基线只手动录** | `gh workflow run screenshots.yml --ref <分支> -f branch=<分支>`；下载 `roborazzi-baselines` 覆盖 `app/src/test/screenshots/` 后提交。本机录不了。 |
+| **`pluginManagement` 必须是 settings 第一个语句** | 所以 `DSH_LOCAL_MIRRORS` 在两个块里各读一次。 |
+| **镜像顺序** | 默认官方源在前；`localbuild.sh` 才用 `DSH_LOCAL_MIRRORS=1` 把阿里云排前。 |
 
-## 5. CI 与那个被修掉的单点
+## 6. CI
 
 | 工作流 | 触发 | 作用 |
 |---|---|---|
-| `verify.yml` | push master + PR | `tests=` + `screenshots=` 像素比对 |
-| `build.yml` | 同上 | 出 debug APK |
-| `release.yml` | tag `v*` | 出 release APK |
-| `screenshots.yml` | 手动 | 在 CI 录基线并上传 artifact |
+| `verify.yml` | push master + PR | JVM tests + 截图像素比对（`tests=` + `screenshots=`） |
+| `build.yml` | 同上 | 出 debug APK（artifact 名 `dsh-android-debug-<sha>`） |
+| `release.yml` | tag `v*` | release APK |
+| `screenshots.yml` | 手动 dispatch | 在 CI 录基线并上传 artifact |
 
-**#30 修的坑（重要）**：`settings.gradle.kts` 曾把阿里云镜像排在官方源**前面**（为**本机**网络），
-但 Gradle **没有**「试一个仓库、失败就继续」：返回 5xx 的仓库会在**本次构建内被禁用**，
-于是一个 `502 Bad Gateway` 变成 43 个解析失败、一个与提交无关的红。
-现在**默认官方源在前**，`tools/localbuild.sh` 才导出 `DSH_LOCAL_MIRRORS=1` 把镜像排回前面。
+一轮 Verify ≈ 6–8 分钟，Build ≈ 9 分钟。PR 合入流程：push 分支 → 开 PR → verify 会因基线差异红 →
+dispatch screenshots → 下载覆盖基线 → 提交 → verify 绿 → merge（历史 PR 都由同一账号合并）。
 
-## 6. 仓库结构
+## 7. 仓库结构（只列本轮相关）
 
 ```
-app/                 主模块（476+ 功能测试 + 17 张截图基线）
+app/                 主模块（1175 项功能测试里的 app 部分；19 张截图基线）
   src/main/java/uk/xa0/dsh/
-    ui/ChatPanel.kt       3519+ 行，外壳与聊天树（最大的一块）
-    ui/ShellTabs.kt       Destination 枚举 / 4 项底栏 / ViewPill / MeTab / PlaceholderTab
-    ui/components/        行内组件（ChatRows 1856、JobsCard、FilesPanel …）
-    ui/glass/             （无）—— 玻璃在 :design
-core/model/           领域模型 50 文件 + 413 测试
-core/term/            终端 7 文件 + 186 测试（**纯 JVM，本机可跑**）
-core/config/          DshConfig + ThemeMode + AcceptedCert
-core/protocol/        net/ 14 文件 + 73 测试
-design/               主题 + 7 档外观 + **玻璃与套件移植层**
-  ui/theme/            DshTheme / MiuixPalette / SystemBars / WindowBackground
-  ui/glass/            LiquidGlass（三档裁决）/ InnerShadow / Lens / Vibrancy / GlassBarBackdrop
-  ui/nav/              玻璃底栏 + FloatingBarState + SideRail + 动画（8 文件）
-  ui/overlay list feedback/  3.5a 移植的组件（Dialog / SegmentedList / SuperSearchBar / WarningCard / ScrollToTop）
-tools/localbuild.sh    本机验证入口（JDK 21 + 临时 build-tools + DSH_LOCAL_MIRRORS=1）
-docs/                  规划文档；上游参考源码在 .work/ksu-kit（gitignored）
+    ui/ChatPanel.kt       3840 行，外壳 + 聊天树 + 底栏/抽屉/rail 手势（最大的一块）
+    ui/components/
+      Composer.kt / ComposerDock.kt / ComposerAccessories.kt / ComposerFullScreen.kt
+      SessionStatsPills.kt（速度/Cache 药丸） QueueDock.kt（液态玻璃） ChatRows.kt（TodoCard 玻璃）
+      ChatRows.kt / QueueDock.kt / FilesPanel.kt / Sheets.kt / …
+    ui/scroll/TailFollow.kt   尾部跟随（padding 边缘修正）
+    ui/theme/SystemBars.kt    （在 :design）透明导航栏 / 图标明暗
+  src/test/screenshots/      19 张 PNG（含 chat-transcript-collapsed、composer-fullscreen）
+  src/test/java/.../screenshot/ScreenBaselineTest.kt / WideBaselineTest.kt
+core/model/          领域模型 + 413 测试（CI 数）
+core/term/           终端（纯 JVM，本机可跑）
+core/config/         DshConfig + ThemeMode + AcceptedCert
+core/protocol/       net/ + 79 测试（含 RpcCancellationTest 6 条）
+design/              主题 + 7 档外观 + 玻璃与套件移植层
+  ui/glass/           LiquidGlass（三档）/ LiquidPane / Lens / Vibrancy / GlassBarBackdrop
+  ui/nav/             玻璃底栏 + FloatingBarState + SideRail
+  ui/theme/           DshTheme / MiuixPalette / SystemBars / WindowBackground
+tools/localbuild.sh  本机验证入口（JDK 21 + 临时 build-tools + 镜像开关 + 构建锁）
+docs/                规划与调研；上游参考源码在 .work/ksu-kit（gitignored）
 ```
 
-## 7. 文档地图
+## 8. 文档地图
 
 | 想知道 | 读 |
 |---|---|
-| **下一步做什么** | [PHASE-3-PLAN.md](PHASE-3-PLAN.md)（含 §4 PR 表、§5 移植清单、§6 折叠语义） |
+| **下一步做什么** | 本文件 §4；PHASE-3-PLAN §4 只覆盖到 3.5a，输入框三轮不在里面 |
+| 当前外壳的视觉/交互 | 本文件 §3、[DESIGN.md](DESIGN.md)、截图基线 |
 | 许可与来源规则 | [../NOTICE.md](../NOTICE.md) |
 | 阶段 2 历史结论 | [PHASE-2-PLAN.md](PHASE-2-PLAN.md) |
-| 版本为什么是这些 | [research/10-version-lock.md](research/10-version-lock.md) |
 | 构建/CI/本机限制 | [BUILD-AND-CI.md](BUILD-AND-CI.md) |
-| 设计规范 | [DESIGN-TOKENS.md](DESIGN-TOKENS.md) |
-| 模块拆分的可执行步骤 | [research/13-module-extraction.md](research/13-module-extraction.md) |
+| 设计 token | [DESIGN-TOKENS.md](DESIGN-TOKENS.md) |
+| 模块拆分步骤 | [research/13-module-extraction.md](research/13-module-extraction.md) |
 
-## 8. 给新会话的提醒
+## 9. 给新会话的提醒
 
-- **别重新调研**：`docs/research/` 有 13 份带 `path:line` 证据的文档。
-- **别信旧结论**：凡标注「已被 X 修正」的以修正后的为准；本版明确作废的是「阶段 2.6 = TopBar 折叠」与「不复制 GPL 代码」。
-- **单变量原则**：一个 PR 只改一件事，CI 绿了再进下一步。
-- **PR 描述必须写**：这一屏**故意**改成什么样、基线 diff 里哪几处是预期的、哪几处不是。
-- **真机上的第一件事**（阶段 2 遗留、至今未验证）：抽屉左缘右滑在 pager 之下是否仍能打开。若不能，修法是在 `DRAWER_EDGE` 内关掉 pager 的 `userScrollEnabled`。
-- **液态档的验收也只能在真机**：胶囊是否折射对话、首帧指示器是否有内容（录音层天然慢一帧）。
+- **别重新调研**：`docs/research/` 有 13 份带 `path:line` 证据的文档；上游参考在 `.work/ksu-kit`、BiliPai 参考在 `/tmp/BiliPai`（可能已被清理，需要时重新 clone）。
+- **别信旧结论**：标注「已被 X 修正」的以修正后为准；本版作废的旧话包括「输入框是底栏上方卡片」「默认是收起圆按钮」「药丸行只有卡片内控件」「液态档要画描边」。
+- **单变量原则**：一个 PR 尽量只做一件事；但用户一次提多条时，按上面的轮次整理成“一组相关修复 + 一次基线重录”也可以（#40 就是 12 条一起）。
+- **PR 描述必须写清**：这一轮**故意**改变什么、哪几张基线是预期变动、哪几张不是。
+- **UI 改动先想基线**：改 `ChatPanel` 底部/药丸/玻璃几乎必然动 `chat-transcript`、`chat-hero`、`chat-wide`、`chat-transcript-collapsed`；只改平面档规则时 `composer` 可能字节不变（#40 的描边改动就是如此）。
+- **液态档验收只能在真机**：截图基线固定 `LocalGlassEnabled=false`；`LocalTextToolbar` 的行为、系统栏 inset、手势跟手性也都只有真机能验。
+- **先跑一轮本机编译再 push**：`tools/localbuild.sh . :app:compileDebugKotlin`（10 分钟内），能省 CI 一轮。
+- **开新 PR 前确认没有并发构建**：看 `.build.lock` / 是否有人正在 CI；`localbuild.sh` 虽已修锁，但同一时间两个 gradle 在本机仍会争内存。
