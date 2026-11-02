@@ -17,6 +17,8 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.AgentPresetOption
 import uk.xa0.dsh.ModelOption
@@ -562,7 +565,7 @@ internal fun ArchivedSettingCards(state: MeSettingsState, actions: MeSettingsAct
             modifier = Modifier
                 .fillMaxWidth()
                 .clickableNoRipple { expanded = !expanded }
-                .padding(horizontal = DshSpacing.xl, vertical = DshSpacing.md),
+                .padding(horizontal = LocalSettingNoteInset.current, vertical = DshSpacing.md),
         )
     }
 }
@@ -619,11 +622,24 @@ private const val ARCHIVED_PAGE_SIZE = 8
 // ------------------------------------------------------------------- building
 
 /**
+ * How far a note is inset from the surface's own edge.
+ *
+ * A note has to land on the cards' *text* edge, which is 16dp inside a card. That distance
+ * differs by surface: the Settings sheet is flush to its sheet, so a note carries the whole
+ * 24dp (16 for the card plus the sheet's own 8); a Me tab is already inset 16dp by
+ * [MeSettingsPage], so its note needs only the remaining 16.
+ *
+ * A composition local rather than an argument on every card: the inset is a fact about the
+ * *surface*, and threading it through nine cards would put the same value in nine
+ * signatures. The page provides it once; the sheet leaves the default.
+ */
+internal val LocalSettingNoteInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { DshSpacing.xxl }
+
+/**
  * A section's own prose (the web's intro / read-only notices).
  *
- * The horizontal inset is 16dp rather than the sheet's old 24dp because a page already
- * insets itself by 16dp: 16 + 16 lands the prose on the cards' *text* edge, which is where
- * a card row's headline starts. At 24dp the note floated 8dp right of every row above it.
+ * The inset comes from [LocalSettingNoteInset], so the same card draws correctly in the
+ * sheet (flush) and on a tab (already inset) without either one knowing about the other.
  */
 @Composable
 internal fun SettingNote(text: String) {
@@ -631,7 +647,10 @@ internal fun SettingNote(text: String) {
         text = text,
         style = DshType.bodySmall,
         color = DshTheme.colors.labelTertiary,
-        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.xs),
+        modifier = Modifier.padding(
+            horizontal = LocalSettingNoteInset.current,
+            vertical = DshSpacing.xs,
+        ),
     )
 }
 
@@ -646,7 +665,10 @@ internal fun SettingErrorNote(text: String) {
         text = text,
         style = DshType.bodySmall,
         color = DshTheme.colors.error,
-        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.xs),
+        modifier = Modifier.padding(
+            horizontal = LocalSettingNoteInset.current,
+            vertical = DshSpacing.xs,
+        ),
     )
 }
 

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Modifier
 import uk.xa0.dsh.AgentPresetOption
@@ -116,31 +117,34 @@ internal fun MeSettingsPage(
     actions: MeSettingsActions,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            // The same 16dp the Me page insets its cards by, so a tab's cards line up with
-            // the ones the reader tapped to get here. The notes inside keep their own 24dp,
-            // which puts their prose on the cards' text edge rather than on the cards' edge.
-            .padding(horizontal = DshSpacing.xl)
-            .padding(bottom = DshSpacing.xxxl),
-    ) {
-        when (id) {
-            "appearance" -> AppearanceSettingCard(state, actions)
-            "general" -> {
-                HostSettingsNotes(state)
-                PermissionSettingCard(state, actions)
-                ConversationSettingCard(state, actions)
-                BusyEnterSettingCard(state, actions)
+    // The page insets its cards by the same 16dp the Me page does, so tapping a row does
+    // not shift the content sideways. Notes then need only the remaining 16dp to reach a
+    // card's text edge — see LocalSettingNoteInset, which is why this is a local rather
+    // than a second argument on every card.
+    CompositionLocalProvider(LocalSettingNoteInset provides DshSpacing.xl) {
+        Column(
+            modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = DshSpacing.xl)
+                .padding(bottom = DshSpacing.xxxl),
+        ) {
+            when (id) {
+                "appearance" -> AppearanceSettingCard(state, actions)
+                "general" -> {
+                    HostSettingsNotes(state)
+                    PermissionSettingCard(state, actions)
+                    ConversationSettingCard(state, actions)
+                    BusyEnterSettingCard(state, actions)
+                }
+                "model" -> ModelSettingCards(state)
+                "agent" -> AgentSettingCards(state, actions)
+                "terminal" -> TerminalSettingCards(state, actions)
+                "plugins" -> PluginSettingCards()
+                "archived" -> ArchivedSettingCards(state, actions)
+                // "about" is not a page: it opens the About sheet, which is a document
+                // about the host rather than a setting. See MeDestination in ChatPanel.kt.
             }
-            "model" -> ModelSettingCards(state)
-            "agent" -> AgentSettingCards(state, actions)
-            "terminal" -> TerminalSettingCards(state, actions)
-            "plugins" -> PluginSettingCards()
-            "archived" -> ArchivedSettingCards(state, actions)
-            // "about" is not a page: it opens the About sheet, which is a document about
-            // the host rather than a setting. See MeDestination in ChatPanel.kt.
         }
     }
 }
