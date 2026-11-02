@@ -149,6 +149,7 @@ import uk.xa0.dsh.ui.components.ApprovalCard
 import uk.xa0.dsh.ui.components.AssistantMessageRow
 import uk.xa0.dsh.ui.glass.glassBarLayer
 import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
+import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.CommandEntry
 import uk.xa0.dsh.ui.components.CommandMenu
@@ -1678,6 +1679,13 @@ internal fun ChatPanel(
                         Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
+                            // Lifted clear of the bar. The pages run behind the bar now (so
+                            // the material has something to refract), which means the
+                            // composer would otherwise sit *under* it — measured on the
+                            // first recording of this: the bar covered the input's first
+                            // line. The lift is the bar's own height plus the gap it is
+                            // drawn at, so the two cannot drift apart.
+                            .padding(bottom = BarHeight + BAR_BOTTOM_GAP)
                             .onSizeChanged { composerStackPx = it.height },
                     ) {
 
