@@ -1,9 +1,10 @@
 # 交接文档（给新会话）
 
-> 写于 **2026-11-02 晚**（外壳改造第 1–3 轮合入之后），本版为 **第七版**。
+> 写于 **2026-11-03 凌晨**（3.5b 合入之后），本版为 **第八版**。
 > 沿革：一版「接管 + 工具链全量升级」→ 二版「结构拆分」→ 三版「1.2b」→ 四版「阶段 1 完成」
 > → 五版「阶段 2.5 完成 + 2.6 清单」→ 六版「2.6 被 3.0 取代」→
-> **本版「输入框/底栏三轮重做 + 一次 RPC 取消崩溃修复之后」**。
+> 七版「输入框/底栏三轮重做 + 一次 RPC 取消崩溃修复之后」→
+> **本版「3.5b：Me 的八个设置页签变成真页面」**。
 >
 > **新会话先读本文件**，再读 [PHASE-3-PLAN.md](PHASE-3-PLAN.md)。注意：该计划的 §4 PR 表
 > **没有记录第 1–3 轮输入框改造**（那是计划写成之后按用户真机反馈做的），当前外壳状态以本文件为准。
@@ -11,10 +12,10 @@
 ## 1. 一句话现状
 
 仓库 <https://github.com/gitMFQ/dsh-android>（私有）是整仓 GPL-3.0 的 **DSH 原生安卓客户端**。
-阶段 1、阶段 2.0–2.5、阶段 3 的 3.0–3.5a 全部合入；最近三天按真机反馈做了**输入框/底栏三轮重做**
-（PR #38 / #39 / #40），当前 master `050048c`。
+阶段 1、阶段 2.0–2.5、阶段 3 的 3.0–3.5a 全部合入；输入框/底栏三轮重做（PR #38 / #39 / #40）之后，
+**3.5b 把 Me 的八个设置页签做成了真页面**（PR #42），当前 master `0cc9a86`。
 
-**CI 实测（master `050048c`）**：`tests=1175 failures=0` / `screenshots=19` / Debug APK 绿。
+**CI 实测（master `0cc9a86`）**：`tests=1191 failures=0` / `screenshots=20` / Debug APK 绿。
 本机 aarch64 只能编译 Kotlin 和跑 `:design`/`:core:protocol` 测试，**测试真值以 CI 为准**。
 
 ## 2. 已合入（master）
@@ -31,6 +32,7 @@
 | #38 | **输入框第 1 轮**：输入框变成底栏另一半——收起 `[导航栏][圆按钮]`、展开 `[当前页圆][消息条]`；控件搬成药丸行（`+`/权限/计划/模型/上下文）；新增 `liquidPane` |
 | #39 | **输入框第 2 轮**：默认改为**消息条展开**、导航折成当前页圆；`+` 进输入条；药丸行加**速度 / Cache** 两颗读数、权限/模型只留图标；To-dos/回到底部玻璃化；**修对话底部被底栏挡住**（栈高度量在 padding 内侧）；**修流式输出"一会抬一下"**（TailFollow 对 padding 边缘修正） |
 | #40 | **第 3 轮**：长按菜单加**全屏输入**；点铅笔/圆图标不弹键盘；turn rail 可跳转；收起态导航**拉伸填满**；**系统导航栏透明 + 对话滑到其后**；**抽屉跟手**、底栏不响应抽屉；修长按放大玻璃被裁；**液态档去描边**；排队消息条玻璃化；会话统计速度药丸常驻；**RPC 取消竞态闪退修复**；`localbuild.sh` 锁修复 |
+| #42 | **3.5b**：Me 的八个页签变真页面；`SettingsContent.kt` 的段落提权成 `ui/settings/` 的卡片，**sheet 与页签共用同一套卡片**；Me 页行分组卡片化；`MeSubPage` 换真返回箭头 + trailing 槽；**Terminal 页签接管 shell 字号** |
 
 ## 3. 当前外壳长什么样（接手 UI 必读）
 
@@ -94,9 +96,50 @@
   仍 active 的 error 日志 + 现有错误横幅。
 - 新增 `core/protocol/src/test/.../RpcCancellationTest.kt` 6 条。
 
+### 3.5 Me 页与设置（3.5b 之后）
+
+- Me 页 = 身份头 + **四张分组卡片**（`ME_GROUPS`：This device / What answers /
+  Rare and dangerous / Facts），行是 `SegmentedColumn`（`design/.../ui/list/`，miuix `BasicComponent` 装进 Card）。
+- 八个页签**都是真页面**：`ui/settings/MeSettingsPage(id, state, actions)` 按 id 分发。
+  **About 是唯一例外**：它开 About **sheet**，不是页面（那是关于 host 的文档，不是设置；
+  塞进页里会同时出现第二个 Close 和返回箭头）。
+- **sheet 与页签共用一套卡片**：`ui/settings/SettingsCards.kt` 每个主题一个 card，
+  `SettingsContent.kt` 只剩 web 的段落**顺序**（1157 行 → 约 180 行）。
+  改一行设置只需改一处，两个界面同时生效——这是 3.5b 的全部目的。
+- `SettingsSheet(state, actions, onDismiss)` 与页签拿同一对 holder（`MeSettingsState` /
+  `MeSettingsActions`，在 `ui/settings/MeSettings.kt`），所以两者不可能对
+  host 写入规则产生分歧。
+- **host 写入规则原样搬过来**：`writerFor` 在字段缺失 / `applies != live` / secret /
+  provider 不可写时**不给控件**；被拒的写入显示 host 自己的措辞。
+- **Terminal 页签是新增状态**：shell 字号以前只能在 shell 里改，现在
+  `ChatUiState.terminalFontSp` + `ChatActions.setTerminalFont` 走同一个
+  `DshViewModel.setTerminalFontSp`。
+- **`MeSubPage` 的返回是左箭头**（原来是右向 chevron 配 "Back"，读起来像"继续往里走"），
+  并多了 trailing 槽，放 **All settings**（完整文档仍是 sheet）。
+- **页签内的 Back 先退页签**：handler 注册在 `MeDestination`（状态在那里），
+  所以它赢过"退回 Chat"。
+
+| 文件 | 作用 |
+|---|---|
+| `ui/settings/MeSettings.kt` | `MeSettingsState` / `MeSettingsActions` + `MeSettingsPage(id)` 分发 |
+| `ui/settings/SettingsCards.kt` | 九个主题卡片 + `writerFor` + `LocalSettingNoteInset` |
+| `ui/SettingsContent.kt` | sheet 的段落顺序（约 180 行），不再是第二份实现 |
+| `ui/ShellTabs.kt` | `MeTab` 分组卡片、`ME_GROUPS`、`MeSubPage` |
+| `ui/ChatPanel.kt` | `MeDestination`：页签状态 + BackHandler + About 跳 sheet |
+
+> **`SegmentedColumn` 的卡片现在用 `codeBlock` + 0.5dp `borderL1`**，不是 `bgLayer1`：
+> 本 app 的浅色调色板里 `bgBase`/`bgLayer1`/`bgLayer2`/`bgLayer3` **全是纯白**，
+> 用 `bgLayer1` 填充的卡片在白底上完全看不见（第一次录基线就是这样暴露的）。
+> 3.5a 移植它之后一直没人用过，所以这个洞直到 Me 页才露出来。
+
+> **基线截图里必须关掉 miuix 的 squircle 着色器**：`Card` 用 AGSL runtime shader 画
+> 圆角，`isRuntimeShaderSupported()` 只是 `SDK_INT >= 33`，Robolectric 答"有"，
+> 然后把它交给自己的 native 编译器 → `IllegalArgumentException: 'color' is not a valid
+> layout qualifier`，**整个屏幕在 composition 阶段就崩**。两个基线类都 provide
+> `LocalSquircleEnabled = false`（miuix 自带的降级开关，回退到 `RoundedCornerShape`）。
 ## 4. 下一步（建议顺序）
 
-### 4.1 先做真机验收（第 1–3 轮的账还没结）
+### 4.1 先做真机验收（第 1–3 轮 + 3.5b 的账还没结）
 
 截图基线都是 **FLAT 档**（Robolectric 无 GPU），液态档、手势、系统栏透明、IME 都只有真机能验。
 建议按下面清单过一遍，把问题记成下一轮的输入：
@@ -115,12 +158,14 @@
 9. **读数药丸**：速度常驻（新会话首帧 `0 tok/s`，流式中数字变化、不闪烁消失）；`Cache xx%` 点开完整面板。
 10. **闪退**：反复切会话/退出页面/重连（尤其弱网时网关返回 HTML），进程不应再被 RPC 取消竞态带走；
     若出现真正的未处理异常，应看到错误横幅而不是闪退。
+11. **3.5b 设置页签**：Me → 每个页签都进得去、有内容、Back 先退页签（不是直接回 Chat）；
+    **All settings** 打开完整 sheet；**Terminal 页签改字号后 Shell 页立刻变**；
+    Appearance 七档能切；只读部署里 General 的控件是死的、有说明。
 
 ### 4.2 然后回到 PHASE-3-PLAN 的未完成项
 
 | # | 内容 | 备注 |
 |---|---|---|
-| **3.5b** | 把 `SegmentedList` 接进 **Me 的各设置页签**（现在子页是占位）；`SettingsContent.kt` 段落提权成可独立进子页 | 下一步最自然的 UI 工作 |
 | 3.6 | Files 页从「复用面板」变成类 VSCode 树浏览器 | |
 | 3.7 | TopBar 折叠：**随页变，不随滚动** | 见 PHASE-3-PLAN §6 |
 | 3.8 | 状态胶囊（连接 / 运行 / 待审批） | |
@@ -154,7 +199,9 @@
 | **跨模块 smart cast 编不过** | 先把属性读进局部变量再判断；别加 `!!`。 |
 | **AGP 9 不允许 `org.jetbrains.kotlin.android`** | 内置 Kotlin，应用该插件直接 build fail。 |
 | **新增测试任务要写进 `verify.yml` / `build.yml`** | 依赖一个模块不会跑它的测试，CI 会「绿着丢测试」。 |
-| **`tests` 与 `screenshots` 是两个数** | CI 分开打印，不要合并引用。当前 `tests=1175` / `screenshots=19`。 |
+| **`tests` 与 `screenshots` 是两个数** | CI 分开打印，不要合并引用。当前 `tests=1191` / `screenshots=20`。 |
+| **基线里必须关 squircle** | miuix `Card` 用 AGSL shader 画圆角，Robolectric 会在 composition 阶段崩（`'color' is not a valid layout qualifier`）。两个基线类都 provide `LocalSquircleEnabled = false`；**新增基线类也要加**。 |
+| **`SegmentedColumn` 的卡片用 `codeBlock` 不用 `bgLayer1`** | 浅色调色板里 `bgLayer1 == bgBase == 纯白`，卡片会看不见。 |
 | **基线只手动录** | `gh workflow run screenshots.yml --ref <分支> -f branch=<分支>`；下载 `roborazzi-baselines` 覆盖 `app/src/test/screenshots/` 后提交。本机录不了。 |
 | **`pluginManagement` 必须是 settings 第一个语句** | 所以 `DSH_LOCAL_MIRRORS` 在两个块里各读一次。 |
 | **镜像顺序** | 默认官方源在前；`localbuild.sh` 才用 `DSH_LOCAL_MIRRORS=1` 把阿里云排前。 |
@@ -177,6 +224,8 @@ dispatch screenshots → 下载覆盖基线 → 提交 → verify 绿 → merge�
 app/                 主模块（1175 项功能测试里的 app 部分；19 张截图基线）
   src/main/java/uk/xa0/dsh/
     ui/ChatPanel.kt       3840 行，外壳 + 聊天树 + 底栏/抽屉/rail 手势（最大的一块）
+    ui/settings/
+      MeSettings.kt（MeSettingsState/Actions + 页签分发）/ SettingsCards.kt（九个主题卡片）
     ui/components/
       Composer.kt / ComposerDock.kt / ComposerAccessories.kt / ComposerFullScreen.kt
       SessionStatsPills.kt（速度/Cache 药丸） QueueDock.kt（液态玻璃） ChatRows.kt（TodoCard 玻璃）
@@ -201,7 +250,7 @@ docs/                规划与调研；上游参考源码在 .work/ksu-kit（git
 
 | 想知道 | 读 |
 |---|---|
-| **下一步做什么** | 本文件 §4；PHASE-3-PLAN §4 只覆盖到 3.5a，输入框三轮不在里面 |
+| **下一步做什么** | 本文件 §4；PHASE-3-PLAN §4 覆盖到 3.5（3.5b 已合入），输入框三轮不在里面 |
 | 当前外壳的视觉/交互 | 本文件 §3、[DESIGN.md](DESIGN.md)、截图基线 |
 | 许可与来源规则 | [../NOTICE.md](../NOTICE.md) |
 | 阶段 2 历史结论 | [PHASE-2-PLAN.md](PHASE-2-PLAN.md) |

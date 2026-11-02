@@ -78,7 +78,7 @@
 | **3.2** ✅ | `feat/glass-bar` | 移植套件玻璃底栏（8 文件）+ 替换手写底栏；旧 `components/FloatingBottomBar.kt` 删除 | PR **#27** 合入；`tests=1166` / `screenshots=14` |
 | **3.2b** ⏳ | `feat/bar-backdrop` | **液态档真正生效**：`:design` 出不透明句柄 `GlassBarBackdrop` + `rememberGlassBarBackdrop()` + `Modifier.glassBarLayer()`；app 侧两步布线 | 真机 API 33+ 看到折射；**基线必然仍是平材质**（Robolectric 无 RenderEffect），这一点要写进 PR |
 | **3.4** | `test/page-baselines` | 给 Me 页 / Me 子页 / Plugins 页补基线（页面骨架已在 3.3 落地） | `screenshots` 14 → 17 |
-| **3.5** | `feat/me-tabs` | Me 的各设置页签填真内容：把 `SettingsContent.kt` 的段落提权成可独立进子页 | 每个页签一条基线 |
+| **3.5** ✅ | `feat/me-settings-pages` | Me 的各设置页签填真内容：`SettingsContent.kt` 的段落提权成 `ui/settings/` 的卡片，页签与 sheet 共用 | PR **#42** 合入；`tests=1191` / `screenshots=20`；`me-tab`、`me-subpage` 重录 + `me-general` 新增，其余 17 张逐字节不变 |
 | **3.6** | `feat/files-page` | Files 页从「复用面板」变成类 VSCode 的树浏览器 | 新增/重录 Files 基线 |
 | **3.7** | `feat/topbar-collapse` | TopBar 折叠：**随页变，不随滚动**（见 §6） | 聊天基线重录 |
 | **3.8** | `feat/status-capsule` | 状态胶囊：连接 / 运行 / 待审批 | 新增 1 张胶囊基线 |
