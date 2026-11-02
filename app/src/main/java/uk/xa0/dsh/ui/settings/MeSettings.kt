@@ -120,6 +120,10 @@ internal fun MeSettingsPage(
         modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
+            // The same 16dp the Me page insets its cards by, so a tab's cards line up with
+            // the ones the reader tapped to get here. The notes inside keep their own 24dp,
+            // which puts their prose on the cards' text edge rather than on the cards' edge.
+            .padding(horizontal = DshSpacing.xl)
             .padding(bottom = DshSpacing.xxxl),
     ) {
         when (id) {

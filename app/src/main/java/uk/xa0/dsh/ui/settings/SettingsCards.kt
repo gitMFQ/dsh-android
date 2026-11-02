@@ -498,7 +498,9 @@ internal fun ArchivedSettingCards(state: MeSettingsState, actions: MeSettingsAct
             expanded = false
         },
         placeholder = "Search archived sessions",
-        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.md),
+        // Vertical only: the page already insets its content by 16dp, and the field is the
+        // one thing on this page that is not inside a card.
+        modifier = Modifier.padding(vertical = DshSpacing.md),
         // A blank query matches everything in the filter below, so clearing the text is the
         // whole of restoring the list.
         onClear = {
@@ -560,7 +562,7 @@ internal fun ArchivedSettingCards(state: MeSettingsState, actions: MeSettingsAct
             modifier = Modifier
                 .fillMaxWidth()
                 .clickableNoRipple { expanded = !expanded }
-                .padding(horizontal = DshSpacing.xxl, vertical = DshSpacing.md),
+                .padding(horizontal = DshSpacing.xl, vertical = DshSpacing.md),
         )
     }
 }
@@ -616,14 +618,20 @@ private const val ARCHIVED_PAGE_SIZE = 8
 
 // ------------------------------------------------------------------- building
 
-/** A section's own prose (the web's intro / read-only notices). */
+/**
+ * A section's own prose (the web's intro / read-only notices).
+ *
+ * The horizontal inset is 16dp rather than the sheet's old 24dp because a page already
+ * insets itself by 16dp: 16 + 16 lands the prose on the cards' *text* edge, which is where
+ * a card row's headline starts. At 24dp the note floated 8dp right of every row above it.
+ */
 @Composable
 internal fun SettingNote(text: String) {
     Text(
         text = text,
         style = DshType.bodySmall,
         color = DshTheme.colors.labelTertiary,
-        modifier = Modifier.padding(horizontal = DshSpacing.xxl, vertical = DshSpacing.xs),
+        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.xs),
     )
 }
 
@@ -638,7 +646,7 @@ internal fun SettingErrorNote(text: String) {
         text = text,
         style = DshType.bodySmall,
         color = DshTheme.colors.error,
-        modifier = Modifier.padding(horizontal = DshSpacing.xxl, vertical = DshSpacing.xs),
+        modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.xs),
     )
 }
 
