@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
@@ -71,6 +72,24 @@ internal val PillHeight = 56.dp
 
 /** The pill's own inset from the panel edge, on each side. */
 internal val BarInset = 4.dp
+
+/**
+ * The width one tab asks for before the row distributes spare room.
+ *
+ * Public for the same reason [BarHeight] is: a caller laying the bar out beside something
+ * else has to know how wide it will be, and copying `64.dp` into `:app` lets the two drift.
+ */
+val BarTabMinWidth = 64.dp
+
+/**
+ * The width the bar measures itself to for [count] tabs: every tab at its minimum, plus
+ * the content inset on both sides.
+ *
+ * A function rather than a value because the bar's width follows its item count, and that
+ * count is the caller's — the dock beside it reserves exactly this much before the two
+ * panes start to morph.
+ */
+fun barNaturalWidth(count: Int): Dp = BarTabMinWidth * count.coerceAtLeast(1) + BarInset * 2
 
 /**
  * Per-tab scale, provided by the bar to whatever it is laying out.
@@ -248,7 +267,7 @@ fun RowScope.FloatingBottomBarItem(
     val scale = LocalFloatingBottomBarTabScale.current
     Column(
         modifier
-            .widthIn(min = 64.dp)
+            .widthIn(min = BarTabMinWidth)
             // The scale is read inside a `graphicsLayer` block, not passed as a modifier
             // argument, so the press animation changes a layer property instead of
             // recomposing every tab on every frame.
