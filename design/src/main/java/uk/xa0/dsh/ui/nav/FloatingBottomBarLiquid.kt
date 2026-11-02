@@ -318,17 +318,30 @@ internal fun LiquidBottomBar(
                         },
                         onDrawSurface = {
                             val progress = state.damped.pressProgress
-                            // Rest state: a 10% veil that gives the pill a defined edge. It
-                            // fades as the press grows, because the inner shadow below then
-                            // carries the depth.
+                            // ## The rest-state veil is *white*, not black (measured)
+                            //
+                            // This used to paint `Color.Black.copy(alpha = 0.1f)` on a light
+                            // appearance, to "give the pill a defined edge". On a `#FFFFFF`
+                            // page that is a 10% grey wash over the selected seat — which is
+                            // the grey the reader reported, and it is *only* on the selected
+                            // tab, which is why it read as a smudge rather than as a tint.
+                            //
+                            // A light appearance needs no darkening to define an edge: the
+                            // pill already sits on a darker translucent pane and carries its
+                            // own highlight. So the veil lifts instead of darkening, by a
+                            // third of the old weight — enough to read as "this seat is the
+                            // filled one", not enough to become a visible tone.
                             drawRect(
                                 color = if (!isInDark) {
-                                    Color.Black.copy(alpha = 0.1f)
+                                    Color.White.copy(alpha = 0.55f)
                                 } else {
-                                    Color.White.copy(alpha = 0.1f)
+                                    Color.White.copy(alpha = 0.10f)
                                 },
                                 alpha = 1f - progress,
                             )
+                            // The pressed state darkens a hair on both appearances: pressing
+                            // is a shadow-side gesture, and on a light appearance a pressed
+                            // seat that *brightened* would read as a hover.
                             drawRect(Color.Black.copy(alpha = 0.03f * progress))
                         },
                     )
