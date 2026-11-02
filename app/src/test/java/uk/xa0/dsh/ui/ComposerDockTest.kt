@@ -19,6 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import uk.xa0.dsh.model.SessionStats
 import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.ui.components.ComposerAccessoryRail
 import uk.xa0.dsh.ui.components.ComposerDock
@@ -77,9 +78,9 @@ class ComposerDockTest {
 
         // Open: the tab bar has folded away and the compact dock's circle is the way back.
         rule.onNodeWithContentDescription("Send and queue").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Collapse the message box").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Show navigation").assertIsDisplayed()
 
-        rule.onNodeWithContentDescription("Collapse the message box").performClick()
+        rule.onNodeWithContentDescription("Show navigation").performClick()
         rule.waitForIdle()
 
         // Resting: a circle that offers to write, and no send control anywhere. The
@@ -130,7 +131,6 @@ class ComposerDockTest {
             DshTheme {
                 ComposerAccessoryRail(
                     backdrop = null,
-                    onToggleCommands = {},
                     permissionLabel = "Full access",
                     onPermissionClick = { permissions++ },
                     planActive = true,
@@ -146,6 +146,21 @@ class ComposerDockTest {
                     contextTokens = 12_000,
                     contextWindow = 100_000,
                     contextBreakdown = null,
+                    stats = SessionStats(
+                        hasStats = true,
+                        turns = 1,
+                        steps = 3,
+                        llmMs = 1_000,
+                        decodeMs = 1_000,
+                        decodeTokens = 128,
+                        hasUsage = true,
+                        uncachedInputTokens = 10,
+                        cacheReadTokens = 990,
+                        outputTokens = 500,
+                    ),
+                    rates = null,
+                    family = null,
+                    onBalance = {},
                 )
             }
         }
@@ -159,6 +174,8 @@ class ComposerDockTest {
         rule.onNodeWithContentDescription("Context window, 12 percent used").assertIsDisplayed()
         rule.onNodeWithText("Plan").assertIsDisplayed()
         rule.onNodeWithText("12%").assertIsDisplayed()
+        rule.onNodeWithText("128 tok/s").assertIsDisplayed()
+        rule.onNodeWithText("Cache 99%").assertIsDisplayed()
 
         rule.onNodeWithContentDescription("Select model, current DeepSeek V4 · High").performClick()
         rule.onNodeWithContentDescription("Change access mode, current Full access").performClick()

@@ -15,14 +15,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -44,7 +42,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -55,6 +52,9 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import kotlinx.coroutines.delay
 import uk.xa0.dsh.ContextBreakdown
+import uk.xa0.dsh.model.FamilyUsage
+import uk.xa0.dsh.model.SessionStats
+import uk.xa0.dsh.model.TokenRates
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
@@ -71,24 +71,27 @@ import java.util.Locale
  *
  * ## Why they left the card
  *
- * The card used to carry five controls beside the text: attach, access, plan, the model
+ * The card used to carry the controls beside the text: attach, access, plan, the model
  * trigger and the context ring, all on the same row as send. That row could only be kept
- * from overflowing by weighting the model chip and squeezing its label, and every one of
- * those controls was still competing with the screen's primary action for width. Pulling
- * them out into their own row above the dock gives each control the room to say what it
- * is, gives send the whole trailing edge of the bar, and leaves the input one job.
+ * from overflowing by weighting the model chip and squeezing its label. Pulling them out
+ * into their own row above the dock gives send the whole trailing edge of the bar and
+ * leaves the input the `+` and the text.
+ *
+ * ## Why so few words
+ *
+ * The rail is read at a glance, not studied. The access mode and the model are
+ * **icon-only** — the shield and the brain are the two controls whose identity does not
+ * depend on the current value, and the full sentence (which mode, which route) is the
+ * sheet they open. The context gauge keeps its ring and its number because that *is* its
+ * reading. The two session readings are one figure each: output speed and cache share.
  *
  * Each pill is its own sheet of the same liquid material as the bar and the input
  * ([liquidPane]), not a tinted rectangle: on a phone the row floats over the transcript,
  * so the glass has something to refract.
- *
- * A `+` that opens the command menu, the access mode, plan mode when it is on, the model
- * trigger and the context gauge are the whole set. The bar keeps send and stop.
  */
 @Composable
 fun ComposerAccessoryRail(
     backdrop: GlassBarBackdrop?,
-    onToggleCommands: () -> Unit,
     permissionLabel: String?,
     onPermissionClick: () -> Unit,
     planActive: Boolean,
@@ -99,61 +102,35 @@ fun ComposerAccessoryRail(
     contextTokens: Int,
     contextWindow: Int,
     contextBreakdown: ContextBreakdown?,
+    stats: SessionStats?,
+    rates: TokenRates?,
+    family: FamilyUsage?,
+    onBalance: () -> Unit,
     modifier: Modifier = Modifier,
-    showAttach: Boolean = true,
 ) {
     Row(
         modifier
             .fillMaxWidth()
-            // Scrolls rather than squeezes: a long model name or a translated access label
-            // must move the row, never shrink the targets below a thumb.
+            // Scrolls rather than squeezes: the row grows with the readings (speed and
+            // cache appear mid-turn), and a translated label must move the row rather
+            // than shrink a target below a thumb.
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = DshSpacing.xl),
         horizontalArrangement = Arrangement.spacedBy(DshSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (showAttach) {
-            GlassPill(
-                backdrop = backdrop,
-                onClick = onToggleCommands,
-                horizontalPadding = 8.dp,
-                pillDescription = "Add files or run commands",
-            ) {
-                Icon(
-                    Icons.Rounded.Add,
-                    contentDescription = null,
-                    tint = DshTheme.colors.labelPrimary,
-                    modifier = Modifier.size(17.dp),
-                )
-            }
-        }
-
         if (permissionLabel != null) {
             GlassPill(
                 backdrop = backdrop,
                 onClick = onPermissionClick,
+                horizontalPadding = 8.dp,
                 pillDescription = "Change access mode, current $permissionLabel",
             ) {
                 Icon(
                     Icons.Rounded.Security,
                     contentDescription = null,
                     tint = DshTheme.colors.labelCaption,
-                    modifier = Modifier.size(13.dp),
-                )
-                Spacer(Modifier.width(DshSpacing.xs))
-                Text(
-                    text = permissionLabel,
-                    style = DshType.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                    color = DshTheme.colors.labelSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.width(DshSpacing.xxs))
-                Icon(
-                    Icons.Rounded.ExpandMore,
-                    contentDescription = null,
-                    tint = DshTheme.colors.labelCaption,
-                    modifier = Modifier.size(12.dp),
+                    modifier = Modifier.size(15.dp),
                 )
             }
         }
@@ -181,34 +158,21 @@ fun ComposerAccessoryRail(
         }
 
         if (modelTrigger != null) {
+            // The brain is the model's identity, not its current value: the route's name
+            // and its "next turn" / "unavailable" state are the sheet's job, and an
+            // icon-only pill keeps the rail to one screen. A route that cannot run tints
+            // the glyph as a fault rather than growing words.
             GlassPill(
                 backdrop = backdrop,
                 onClick = onModelClick,
+                horizontalPadding = 8.dp,
                 pillDescription = modelTrigger.description,
             ) {
-                Text(
-                    text = modelTrigger.label,
-                    style = DshType.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                    color = if (modelTrigger.alert) DshTheme.colors.error else DshTheme.colors.labelSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = ModelPillLabelMax),
-                )
-                if (modelTrigger.marker != null) {
-                    Spacer(Modifier.width(DshSpacing.xs))
-                    Text(
-                        text = modelTrigger.marker,
-                        style = DshType.micro,
-                        color = if (modelTrigger.alert) DshTheme.colors.error else DshTheme.colors.labelTertiary,
-                        maxLines = 1,
-                    )
-                }
-                Spacer(Modifier.width(DshSpacing.xxs))
                 Icon(
-                    Icons.Rounded.ExpandMore,
+                    Icons.Rounded.Psychology,
                     contentDescription = null,
-                    tint = if (modelTrigger.alert) DshTheme.colors.error else DshTheme.colors.labelCaption,
-                    modifier = Modifier.size(12.dp),
+                    tint = if (modelTrigger.alert) DshTheme.colors.error else DshTheme.colors.labelSecondary,
+                    modifier = Modifier.size(15.dp),
                 )
             }
         }
@@ -220,11 +184,17 @@ fun ComposerAccessoryRail(
             windowTokens = contextWindow,
             breakdown = contextBreakdown,
         )
+
+        SessionSpeedPill(stats = stats, backdrop = backdrop)
+        SessionCachePill(
+            stats = stats,
+            backdrop = backdrop,
+            rates = rates,
+            family = family,
+            onBalance = onBalance,
+        )
     }
 }
-
-/** How wide the model pill's name may grow before it ellipsises. */
-private val ModelPillLabelMax = 150.dp
 
 /** The pill's height: a thumb-sized target that still reads as a chip, not a button. */
 private val PillHeight = 32.dp
@@ -236,9 +206,10 @@ private val PillHeight = 32.dp
  * model and context treatments cannot drift into five slightly different pills.
  */
 @Composable
-private fun GlassPill(
+internal fun GlassPill(
     backdrop: GlassBarBackdrop?,
-    onClick: () -> Unit,
+    /** Null keeps the pill a reading rather than a button, as the old static chip did. */
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     tint: Color? = null,
     pillDescription: String? = null,
@@ -260,7 +231,9 @@ private fun GlassPill(
                     Modifier
                 },
             )
-            .clickableNoRipple(onClick = onClick)
+            .then(
+                if (onClick != null) Modifier.clickableNoRipple(onClick = onClick) else Modifier,
+            )
             .padding(horizontal = horizontalPadding),
         verticalAlignment = Alignment.CenterVertically,
         content = content,

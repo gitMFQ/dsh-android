@@ -83,14 +83,16 @@ import uk.xa0.dsh.ui.theme.DshTheme
  * Four 64dp tabs cannot shrink to 56dp without cutting labels; a dock that narrowed by
  * clipping its own tabs would look broken for the whole animation. Collapsing to the
  * current destination's icon is the same move the reference makes, and it still says
- * where you are. Tapping it returns the tab row — the reference's own rule for the
- * compact dock while the search is open.
+ * where you are. Tapping it shows the tab row again; the single icon is the door to the
+ * four, which is what keeps the default state from spending a third of the row on
+ * labels nobody asked for.
  *
  * ## The controls are not in here
  *
- * Send and stop are the only actions the bar keeps. Everything else moved to
- * [ComposerAccessoryRail] above it, one pill each, which is what gives send the whole
- * trailing edge and keeps the bar's content a text field rather than a toolbar.
+ * The bar keeps the `+` (which belongs beside the text it writes into) and send/stop.
+ * Everything else moved to [ComposerAccessoryRail] above it, one pill each, which is what
+ * gives send the whole trailing edge and keeps the bar's content a text field rather than
+ * a toolbar.
  */
 @Composable
 fun ComposerDock(
@@ -111,6 +113,9 @@ fun ComposerDock(
     busyEnter: String = BusyEnter.QUEUE,
     onSendMode: (String) -> Unit = {},
     onToggleBusyEnter: () -> Unit = {},
+    /** The `+` in the bar's leading edge: the command menu that writes into this field. */
+    onToggleCommands: () -> Unit = {},
+    showAttach: Boolean = true,
     /** False on a wide window, where the rail owns navigation and the bar would duplicate it. */
     showNavigation: Boolean = true,
     /** False while a read-only subagent's frame claims the composer's seat. */
@@ -203,6 +208,8 @@ fun ComposerDock(
                     busyEnter = busyEnter,
                     onSendMode = onSendMode,
                     onToggleBusyEnter = onToggleBusyEnter,
+                    onToggleCommands = onToggleCommands,
+                    showAttach = showAttach,
                     backdrop = backdrop,
                     imeRequest = imeRequest,
                     verticalNudge = inputNudge,
@@ -229,13 +236,12 @@ private val BarContentInset = 4.dp
 /**
  * How wide the expanded bar may grow beside the dock.
  *
- * Not the full remainder on a large phone: at 411dp the row would otherwise reach the
- * window edge and the bar would read as a second, screen-wide surface instead of as the
- * dock's partner. The cap keeps the pair centred with the same margin the collapsed row
- * has. On a tablet the bar is the only pane ([showNavigation] false) and takes its own,
- * wider cap.
+ * On a phone it takes the whole remainder (the default shape is the open bar, so it should
+ * read as the row's owner rather than the dock's guest); the cap only stops a very wide
+ * phone window from stretching one message field across it. On a tablet the bar is the
+ * only pane ([showNavigation] false) and takes its own, wider cap.
  */
-private val ExpandedInputMax = 300.dp
+private val ExpandedInputMax = 360.dp
 private val WideInputMax = 720.dp
 
 /**
@@ -243,7 +249,9 @@ private val WideInputMax = 720.dp
  * icon while the composer is open.
  *
  * Both are kept in the same box and clipped to the animating width, so the bar appears to
- * fold into the circle rather than being swapped for one. The bar's own width is forced
+ * fold into the circle rather than being swapped for one. The circle's meaning is "show the
+ * navigation": the composer is the default pane now, so putting the tab bar back is the move
+ * the reader asks for there. The bar's own width is forced
  * with `requiredWidth`: it is still measured at its natural size while the box around it
  * narrows, which is what makes the fold a clip instead of a re-layout of four tabs.
  */
@@ -304,7 +312,7 @@ private fun NavigationPane(
                     .glassLift(CircleShape)
                     .liquidPane(backdrop, CircleShape)
                     .clickableNoRipple(onClick = onCollapse)
-                    .semantics { contentDescription = "Collapse the message box" },
+                    .semantics { contentDescription = "Show navigation" },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -340,6 +348,8 @@ private fun InputPane(
     busyEnter: String,
     onSendMode: (String) -> Unit,
     onToggleBusyEnter: () -> Unit,
+    onToggleCommands: () -> Unit,
+    showAttach: Boolean,
     backdrop: GlassBarBackdrop?,
     imeRequest: Int,
     verticalNudge: Dp,
@@ -401,6 +411,8 @@ private fun InputPane(
                 busyEnter = busyEnter,
                 onSendMode = onSendMode,
                 onToggleBusyEnter = onToggleBusyEnter,
+                onToggleCommands = onToggleCommands,
+                showAttach = showAttach,
                 focusRequester = focusRequester,
             )
         }

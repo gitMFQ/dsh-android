@@ -117,6 +117,9 @@ import uk.xa0.dsh.model.shellCommandOf
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.shortenToolPath
 import uk.xa0.dsh.ui.markdown.MarkdownText
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -1169,7 +1172,11 @@ private fun NestedCallDisclosure(count: Int, expanded: Boolean, onToggle: () -> 
  * tally; the list only exists while expanded.
  */
 @Composable
-fun TodoCard(items: List<TodoItem>, modifier: Modifier = Modifier) {
+fun TodoCard(
+    items: List<TodoItem>,
+    modifier: Modifier = Modifier,
+    backdrop: GlassBarBackdrop? = null,
+) {
     if (items.isEmpty()) return
     val colors = DshTheme.colors
     var collapsed by rememberSaveable { mutableStateOf(true) }
@@ -1178,9 +1185,11 @@ fun TodoCard(items: List<TodoItem>, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(colors.tip)
-            .border(0.5.dp, colors.borderL1, shape),
+            // One of the floating cards over the transcript now, so it wears the same
+            // liquid material as the dock it is lifted above rather than an opaque
+            // `tip` slab beside it.
+            .glassLift(shape)
+            .liquidPane(backdrop, shape),
     ) {
         Row(
             Modifier

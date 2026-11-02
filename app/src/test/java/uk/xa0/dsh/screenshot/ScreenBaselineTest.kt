@@ -19,6 +19,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -42,6 +44,7 @@ import uk.xa0.dsh.model.SessionFile
 import uk.xa0.dsh.model.SessionFiles
 import uk.xa0.dsh.model.PendingSessionTarget
 import uk.xa0.dsh.model.SessionHeader
+import uk.xa0.dsh.model.SessionStats
 import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.SessionTarget
 import uk.xa0.dsh.model.StartupStep
@@ -142,7 +145,11 @@ class ScreenBaselineTest {
      */
     private val FIXTURE_CLOCK_MS = 1_793_446_800_000L
 
-    private fun capture(name: String, content: @Composable () -> Unit) {
+    private fun capture(
+        name: String,
+        before: () -> Unit = {},
+        content: @Composable () -> Unit,
+    ) {
         rule.setContent {
             // Light, explicitly. `DshTheme()` defaults to `ThemeMode.SYSTEM`, which
             // reads the device's night setting — so a baseline recorded on a light
@@ -169,6 +176,11 @@ class ScreenBaselineTest {
                 }
             }
         }
+        rule.waitForIdle()
+        // Some states are only reachable by using the screen; the action runs after the
+        // fixture is laid out and before the shutter, so the capture is of a real
+        // interaction rather than of a state flag handed to the panel.
+        before()
         rule.waitForIdle()
         rule.onRoot().captureRoboImage("src/test/screenshots/$name.png")
     }
@@ -305,7 +317,6 @@ class ScreenBaselineTest {
             ) {
                 ComposerAccessoryRail(
                     backdrop = null,
-                    onToggleCommands = {},
                     permissionLabel = "Full access",
                     onPermissionClick = {},
                     planActive = false,
@@ -321,6 +332,26 @@ class ScreenBaselineTest {
                     contextTokens = 12_000,
                     contextWindow = 100_000,
                     contextBreakdown = null,
+                    // The session readings are part of the rail now: 128 tok/s from the
+                    // host's decode counters and a 99% cache share, the two figures the
+                    // request names.
+                    stats = SessionStats(
+                        hasStats = true,
+                        turns = 1,
+                        steps = 3,
+                        llmMs = 1_000,
+                        ttftMs = 200,
+                        ttftSteps = 3,
+                        decodeMs = 1_000,
+                        decodeTokens = 128,
+                        hasUsage = true,
+                        uncachedInputTokens = 10,
+                        cacheReadTokens = 990,
+                        outputTokens = 500,
+                    ),
+                    rates = null,
+                    family = null,
+                    onBalance = {},
                 )
                 Spacer(Modifier.height(DshSpacing.sm))
                 // One attachment, because the chip row is the part of the bar that only
@@ -653,70 +684,103 @@ class ScreenBaselineTest {
     @Test
     fun chatTranscript() {
         capture("chat-transcript") {
-            ChatPanel(
-                state = ChatUiState(
-                    ui = UiState(
-                        phase = AppPhase.READY,
-                        currentSessionId = "s1",
-                        sessions = listOf(
-                            SessionItem(
-                                id = "s1",
-                                title = "Re-skin the shell",
-                                cwd = "/home/user/var/work/dsh-android",
-                                updatedAt = 1_000L,
-                                running = false,
-                                isSubagent = false,
-                            ),
+            ChatTranscriptContent()
+        }
+    }
+
+    /**
+     * The same transcript with the dock's other shape: the four destinations back, the
+     * composer folded to its circle.
+     *
+     * The open bar is the resting shape (round 2), so this is the state the reader
+     * reaches by asking for navigation. Captured by *tapping* the dock's circle rather
+     * than by a flag, which also exercises the one interaction that swaps the panes.
+     */
+    @Test
+    fun chatTranscriptCollapsed() {
+        capture(
+            "chat-transcript-collapsed",
+            before = {
+                rule.onNodeWithContentDescription("Show navigation").performClick()
+                rule.waitForIdle()
+            },
+        ) {
+            ChatTranscriptContent()
+        }
+    }
+
+    /**
+     * The conversation fixture both transcript captures share.
+     *
+     * Extracted so the two dock shapes are the same screen with one interaction between
+     * them: a second copy of these rows would let the collapsed capture drift from the
+     * open one without anyone noticing.
+     */
+    @Composable
+    private fun ChatTranscriptContent() {
+        ChatPanel(
+            state = ChatUiState(
+                ui = UiState(
+                    phase = AppPhase.READY,
+                    currentSessionId = "s1",
+                    sessions = listOf(
+                        SessionItem(
+                            id = "s1",
+                            title = "Re-skin the shell",
+                            cwd = "/home/user/var/work/dsh-android",
+                            updatedAt = 1_000L,
+                            running = false,
+                            isSubagent = false,
                         ),
-                    ),
-                    entries = listOf(
-                        ChatEntry.UserMessage(
-                            seq = 1,
-                            id = "m1",
-                            text = "Re-skin the shell, one screen at a time.",
-                            time = FIXTURE_CLOCK_MS,
-                            fromPlugin = false,
-                            summary = null,
-                        ),
-                        ChatEntry.AssistantMessage(
-                            seq = 2,
-                            turn = 1,
-                            step = 1,
-                            reasoning = "",
-                            text = "Starting with the frame: the bar, the header, the composer.",
-                            time = FIXTURE_CLOCK_MS + 61_000L,
-                        ),
-                        ChatEntry.ToolCall(
-                            seq = 3,
-                            callId = "c1",
-                            name = "read",
-                            arguments = "{\"path\":\"/home/user/var/work/dsh-android/docs/PHASE-2-PLAN.md\"}",
-                            result = "ok",
-                            isError = false,
-                            time = FIXTURE_CLOCK_MS + 74_000L,
-                            turn = 1,
-                        ),
-                        ChatEntry.UserMessage(
-                            seq = 4,
-                            id = "m2",
-                            text = "Good. Then the drawer.",
-                            time = FIXTURE_CLOCK_MS + 132_000L,
-                            fromPlugin = false,
-                            summary = null,
-                        ),
-                    ),
-                    header = SessionHeader(
-                        id = "s1",
-                        cwd = "/home/user/var/work/dsh-android",
-                        createdAt = 0L,
-                        agentPreset = null,
-                        parentSession = null,
                     ),
                 ),
-                actions = ChatActions(),
-                terminal = { Modifier.fillMaxSize() },
-            )
-        }
+                entries = listOf(
+                    ChatEntry.UserMessage(
+                        seq = 1,
+                        id = "m1",
+                        text = "Re-skin the shell, one screen at a time.",
+                        time = FIXTURE_CLOCK_MS,
+                        fromPlugin = false,
+                        summary = null,
+                    ),
+                    ChatEntry.AssistantMessage(
+                        seq = 2,
+                        turn = 1,
+                        step = 1,
+                        reasoning = "",
+                        text = "Starting with the frame: the bar, the header, the composer.",
+                        time = FIXTURE_CLOCK_MS + 61_000L,
+                    ),
+                    ChatEntry.ToolCall(
+                        seq = 3,
+                        callId = "c1",
+                        name = "read",
+                        arguments = "{\"path\":\"/home/user/var/work/dsh-android/docs/PHASE-2-PLAN.md\"}",
+                        result = "ok",
+                        isError = false,
+                        time = FIXTURE_CLOCK_MS + 74_000L,
+                        turn = 1,
+                    ),
+                    ChatEntry.UserMessage(
+                        seq = 4,
+                        id = "m2",
+                        text = "Good. Then the drawer.",
+                        time = FIXTURE_CLOCK_MS + 132_000L,
+                        fromPlugin = false,
+                        summary = null,
+                    ),
+                ),
+                header = SessionHeader(
+                    id = "s1",
+                    cwd = "/home/user/var/work/dsh-android",
+                    createdAt = 0L,
+                    agentPreset = null,
+                    parentSession = null,
+                ),
+            ),
+            actions = ChatActions(),
+            terminal = { Modifier.fillMaxSize() },
+        )
     }
     /**
      * The Me page: identity on top, the settings tabs under it (3.3).

@@ -147,7 +147,10 @@ import uk.xa0.dsh.model.turnOrNull
 import uk.xa0.dsh.ui.agentPresetLabel
 import uk.xa0.dsh.ui.components.ApprovalCard
 import uk.xa0.dsh.ui.components.AssistantMessageRow
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassBarLayer
+import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
 import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
@@ -168,7 +171,6 @@ import uk.xa0.dsh.ui.components.NoticeRow
 import uk.xa0.dsh.ui.components.QueueDock
 import uk.xa0.dsh.ui.components.QuestionCard
 import uk.xa0.dsh.ui.components.ReferenceMenu
-import uk.xa0.dsh.ui.components.SessionStatsPills
 import uk.xa0.dsh.ui.components.StateDot
 import uk.xa0.dsh.ui.components.SubagentReadOnlyComposer
 import uk.xa0.dsh.ui.components.TodoCard
@@ -704,7 +706,13 @@ internal fun ChatPanel(
 
     // The composer's open/closed shape, and the keyboard request that only a *gesture*
     // raises (see `ComposerDock.imeRequest`).
-    var composerExpanded by rememberSaveable(ui.currentSessionId) { mutableStateOf(false) }
+    //
+    // **Open by default** (round 2): the message bar is the dock's resting pane and the
+    // four destination icons are folded into the current page's circle behind it. Typing
+    // is the thing a conversation screen is for; navigation is a detour, so it is the
+    // detour that takes the extra tap. The keyboard does not follow — it is requested
+    // only by a gesture, so arriving on a session does not throw the transcript away.
+    var composerExpanded by rememberSaveable(ui.currentSessionId) { mutableStateOf(true) }
     var composerImeRequest by remember { mutableIntStateOf(0) }
 
     // Back walks *up* the screen before it is allowed anywhere near the close gate.
@@ -912,16 +920,27 @@ internal fun ChatPanel(
     // including the dock area it is padded clear of. The transcript reserves it as bottom
     // content padding, which is what lets its last row scroll up clear of what is drawn
     // *over* it. It has to be measured rather than assumed: every card above is conditional.
+    //
+    // **Streaming must not change this number.** A token arrival is a change *inside* the
+    // list; the dock's height moves only when the reader types another line, opens a menu,
+    // or a card appears. That is why the session readings moved into the rail (round 2):
+    // as a separate footer row they appeared the moment the first usage projection landed,
+    // which pushed the whole transcript up once in the middle of a stream. The rail is one
+    // fixed-height row, so numbers that arrive every turn change its width, never its
+    // height. TailFollow then corrects growth against the padded edge, pixel for pixel, so
+    // the newest line stays above the input instead of climbing out from behind it.
     var composerStackPx by remember { mutableIntStateOf(0) }
     // The height of the floating dock area: the accessory rail, the menus and the dock
     // row. Measured, not assumed — a long draft grows the bar, and the cards above it and
     // the transcript's bottom padding both have to follow.
     var dockAreaPx by remember { mutableIntStateOf(0) }
     val dockAreaDp = with(LocalDensity.current) { dockAreaPx.toDp() }
-    // Leaving the conversation, or a subagent claiming the seat, puts the dock back to its
-    // resting shape: an open composer on the Files page is a keyboard with no field.
+    // Leaving the conversation, or a subagent claiming the seat, puts the bar away; coming
+    // back re-opens it, because "open" is this dock's resting shape rather than a mode the
+    // reader has to remember. A deliberate collapse is not undone: the effect only runs when
+    // the page or the read-only seat changes, not when the reader taps the dock's circle.
     LaunchedEffect(destination, readOnlyReason) {
-        if (destination != Destination.CHAT || readOnlyReason != null) composerExpanded = false
+        composerExpanded = destination == Destination.CHAT && readOnlyReason == null
     }
 
     ModalNavigationDrawer(
@@ -1657,7 +1676,13 @@ internal fun ChatPanel(
                                 },
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
-                                    .padding(end = DshSpacing.xl, bottom = DshSpacing.lg),
+                                    // Clear of the dock, not of the screen edge: the bar is
+                                    // what the button used to hide behind.
+                                    .padding(
+                                        end = DshSpacing.xl,
+                                        bottom = dockAreaDp + DshSpacing.lg,
+                                    ),
+                                backdrop = glassBackdrop,
                             )
                         }
                     // Everything docked to the composer floats over the transcript instead of
@@ -1674,8 +1699,13 @@ internal fun ChatPanel(
                         Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .padding(bottom = dockAreaDp + BAR_BOTTOM_GAP)
-                            .onSizeChanged { composerStackPx = it.height },
+                            // The measurement sits *outside* the padding, so the number is
+                            // the whole footprint the transcript must clear — cards plus
+                            // the dock area they are lifted above. With it inside the
+                            // padding (as it was) the list reserved the cards only and the
+                            // last row sat behind the dock, which is the reported defect.
+                            .onSizeChanged { composerStackPx = it.height }
+                            .padding(bottom = dockAreaDp + BAR_BOTTOM_GAP),
                     ) {
 
                     if (ui.approval != null) {
@@ -1704,6 +1734,7 @@ internal fun ChatPanel(
                     if (todos.isNotEmpty()) {
                         TodoCard(
                             items = todos,
+                            backdrop = glassBackdrop,
                             modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
                         )
                     }
@@ -1745,14 +1776,16 @@ internal fun ChatPanel(
         }
 
             // The bottom dock: the destination bar and the composer share one row, in the
-            // shape BiliPai's liquid-glass search dock uses. At rest it reads
-            // `[tab bar] [gap] [circle]`; opened, the tab bar folds into the current
-            // destination's circle and the input takes the space it freed — so the row
-            // never changes width, and the two panes cannot drift apart.
+            // shape BiliPai's liquid-glass search dock uses. **The open bar is the resting
+            // shape** (round 2): `[current-page circle] [gap] [message bar]`. Tapping the
+            // circle trades the bar for its own circle and puts the four destinations
+            // back — so the row never changes width, and the two panes cannot drift apart.
             //
             // The controls that used to live inside the input are the rail above it, one
-            // glass pill each. They stay visible at rest: a reader who only wants to check
-            // the model or the context gauge should not have to open a keyboard first.
+            // glass pill each, plus the session's two readings. The rail is always visible:
+            // a reader who only wants to check the model, the cache share or the speed
+            // should not have to open a keyboard first, and keeping it one fixed-height
+            // row is also what keeps token arrivals from moving the transcript.
             //
             // On a wide window the rail owns navigation, so the dock is the input alone and
             // always open. A 56dp circle in the middle of a tablet would be a phone
@@ -1771,33 +1804,14 @@ internal fun ChatPanel(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     if (destination == Destination.CHAT) {
-                        // The web mounts the statistic pills on the composer dock, just
-                        // under the card — not in the header, which is where they would
-                        // otherwise look like they belonged. Self-gating, so an empty
-                        // session draws nothing at all rather than an empty row.
-                        SessionStatsPills(
-                            stats = ui.sessionStats,
-                            onBalance = {
-                                showBalance = true
-                                // Ask when the door opens, not when the app starts: a figure
-                                // read at launch is stale by the time anyone looks at it.
-                                actions.refreshBalance()
-                            },
-                            // Priced routes only. The rates follow the session's *current*
-                            // model, which is also what the host bills the next turn at.
-                            rates = usageRates,
-                            family = family,
-                            modifier = Modifier.padding(
-                                start = DshSpacing.xl,
-                                end = DshSpacing.xl,
-                                bottom = DshSpacing.sm,
-                            ),
-                        )
-
                         if (readOnlyReason == null) {
+                            // Everything the composer used to keep inside its card, plus
+                            // the session's two readings, in one row of glass pills. The
+                            // readings joined it in round 2: they are glanceable values,
+                            // and a separate footer row was one more height that could
+                            // change under a streaming transcript.
                             ComposerAccessoryRail(
                                 backdrop = glassBackdrop,
-                                onToggleCommands = { menuOpen = !menuOpen },
                                 permissionLabel = permissionLabel,
                                 onPermissionClick = { showPermission = true },
                                 planActive = ui.planActive,
@@ -1808,6 +1822,19 @@ internal fun ChatPanel(
                                 contextTokens = ui.contextTokens,
                                 contextWindow = ui.contextWindow,
                                 contextBreakdown = ui.contextBreakdown,
+                                stats = ui.sessionStats,
+                                // Priced routes only. The rates follow the session's
+                                // *current* model, which is what the host bills the next
+                                // turn at.
+                                rates = usageRates,
+                                family = family,
+                                onBalance = {
+                                    showBalance = true
+                                    // Ask when the door opens, not when the app starts: a
+                                    // figure read at launch is stale by the time anyone
+                                    // looks at it.
+                                    actions.refreshBalance()
+                                },
                             )
                             Spacer(Modifier.height(DshSpacing.sm))
 
@@ -1864,10 +1891,6 @@ internal fun ChatPanel(
                             } else {
                                 actions.send(text, actions.submitMode())
                             }
-                            // Submitting puts the dock back to its resting shape, the
-                            // reference's own rule for its search: the bar's job is done,
-                            // and the transcript keeps the room it was borrowing.
-                            composerExpanded = false
                         },
                         onStop = actions.stop,
                         running = ui.running,
@@ -1878,13 +1901,13 @@ internal fun ChatPanel(
                             val text = takeDraftForSend()
                             followFrom++
                             actions.send(text, mode)
-                            composerExpanded = false
                         },
                         onToggleBusyEnter = {
                             actions.updateBusyEnter(
                                 if (ui.busyEnter == BusyEnter.STEER) BusyEnter.QUEUE else BusyEnter.STEER,
                             )
                         },
+                        onToggleCommands = { menuOpen = !menuOpen },
                         items = DESTINATION_ITEMS,
                         selectedKey = destination.name,
                         onSelect = { key ->
@@ -2828,15 +2851,20 @@ private fun RunningDot() {
  * composer, shown only once you have scrolled away from the newest turn.
  */
 @Composable
-private fun ScrollToBottomButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ScrollToBottomButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    backdrop: GlassBarBackdrop? = null,
+) {
     val colors = DshTheme.colors
+    // The same material as the dock it floats above. This used to be an opaque
+    // `bgLayer2` circle, which read as a hole punched in the glass vocabulary right
+    // beside the composer; it is now one more sheet of it, lifting the way the bar does.
     Box(
         modifier
             .size(34.dp)
-            .shadow(2.dp, CircleShape)
-            .clip(CircleShape)
-            .background(colors.bgLayer2)
-            .border(0.5.dp, colors.borderL3, CircleShape)
+            .glassLift(CircleShape)
+            .liquidPane(backdrop, CircleShape)
             .clickableNoRipple(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

@@ -1,6 +1,7 @@
 package uk.xa0.dsh.ui.scroll
 
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -202,7 +203,7 @@ private fun tailIsTallerThanViewport(state: LazyListState): Boolean {
     val info = state.layoutInfo
     val last = info.visibleItemsInfo.lastOrNull() ?: return false
     if (last.index != info.totalItemsCount - 1) return false
-    return last.size > info.viewportEndOffset - info.viewportStartOffset
+    return last.size > contentSpan(info)
 }
 
 /**
@@ -231,16 +232,60 @@ private fun showingTail(state: LazyListState): Boolean {
 }
 
 /**
- * How far the last item in the list extends past the bottom of the viewport, or zero
+ * How far the last item extends past the *padded* bottom of the content area, or zero
  * when that item is not on screen at all.
  *
  * The "not on screen" case is what makes this safe: a reader up in history has rows
  * below the fold, the item at the end of the viewport is not the last item in the
  * list, and the answer is zero however stale anything else is.
+ *
+ * The padded edge, not `viewportEndOffset`, is the whole correction. `viewportEndOffset`
+ * is computed in the item coordinate system as `mainAxisAvailableSize +
+ * afterContentPadding`, which resolves to the layout's own bottom edge — the list's
+ * content padding is deliberately invisible to it. Correcting against the layout's
+ * edge therefore lets a growing tail sit *behind* whatever the bottom padding was
+ * reserving (here, the composer dock) until it crossed the screen edge, and then
+ * scrolls it by a whole chunk: the "the output lifts a little every so often" the
+ * device reported. The reader's visible bottom is the layout edge minus the bottom
+ * content padding, and that is what the correction targets.
  */
 private fun tailOverflow(state: LazyListState): Float {
     val info = state.layoutInfo
     val last = info.visibleItemsInfo.lastOrNull() ?: return 0f
     if (last.index != info.totalItemsCount - 1) return 0f
-    return (last.offset + last.size - info.viewportEndOffset).coerceAtLeast(0).toFloat()
+    return tailOverflow(
+        lastBottom = last.offset + last.size,
+        viewportEndOffset = info.viewportEndOffset,
+        afterContentPadding = info.afterContentPadding,
+    )
 }
+
+/**
+ * The content area's bottom in the list's item-offset coordinate system.
+ *
+ * Equal to the layout's bottom minus the bottom content padding. See [tailOverflow]
+ * for why the raw `viewportEndOffset` is the wrong edge to follow.
+ */
+internal fun contentBottom(viewportEndOffset: Int, afterContentPadding: Int): Int =
+    viewportEndOffset - afterContentPadding
+
+/**
+ * How tall the content the reader can actually see is: the layout's height minus the
+ * content padding on both ends. In the item-offset coordinate system the top padding
+ * shifts the start to `viewportStartOffset + beforeContentPadding`.
+ */
+internal fun contentSpan(info: LazyListLayoutInfo): Int =
+    contentBottom(info.viewportEndOffset, info.afterContentPadding) -
+        (info.viewportStartOffset + info.beforeContentPadding)
+
+/**
+ * The pure half of the growth correction: how far [lastBottom] extends past the padded
+ * content area, or zero when it fits.
+ *
+ * Split out so the one arithmetic that this follow depends on can be tested without a
+ * list: the defect it fixes was that the correction targeted `viewportEndOffset`, the
+ * *layout's* bottom, so a tail growing behind reserved bottom padding was not
+ * corrected until it crossed the screen edge.
+ */
+internal fun tailOverflow(lastBottom: Int, viewportEndOffset: Int, afterContentPadding: Int): Float =
+    (lastBottom - contentBottom(viewportEndOffset, afterContentPadding)).coerceAtLeast(0).toFloat()
