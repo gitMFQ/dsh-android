@@ -2,7 +2,9 @@ package uk.xa0.dsh.screenshot
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
@@ -52,6 +54,8 @@ import uk.xa0.dsh.term.TerminalSeat
 import uk.xa0.dsh.term.TerminalState
 import uk.xa0.dsh.ui.AboutContent
 import uk.xa0.dsh.ui.ChatActions
+import uk.xa0.dsh.ui.DESTINATION_ITEMS
+import uk.xa0.dsh.ui.Destination
 import uk.xa0.dsh.ui.ChatPanel
 import uk.xa0.dsh.ui.ChatUiState
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
@@ -66,7 +70,8 @@ import uk.xa0.dsh.ui.SessionsDrawer
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.TerminalPanel
 import uk.xa0.dsh.ui.nav.BottomBarItem
-import uk.xa0.dsh.ui.components.Composer
+import uk.xa0.dsh.ui.components.ComposerAccessoryRail
+import uk.xa0.dsh.ui.components.ComposerDock
 import uk.xa0.dsh.ui.components.FilesPanel
 import uk.xa0.dsh.ui.nav.FloatingBottomBar
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -271,31 +276,33 @@ class ScreenBaselineTest {
     }
 
     /**
-     * The composer, which is the one surface every session ends at.
+     * The composer's dock, opened: the accessory rail above, the message bar below.
      *
-     * Captured with text in it and an attachment attached, because those are the two
-     * states that change the card's geometry — the send control swaps for a stop
-     * button while running, and an attachment adds a chip row. An empty composer is
-     * the state that can be inferred from the others; a populated one cannot.
+     * This is the shape that replaced the old composer card — a circle beside the tab
+     * bar at rest, a bar beside the current destination's circle when open — so it is
+     * captured open with text and an attachment, the two states that change the bar's
+     * geometry. The rail is included because it is where the controls that left the card
+     * went: a baseline of the bar alone would not show whether the pills are the same
+     * glass, the same height, or still present.
      *
-     * The horizontal inset is `DshSpacing.xl`, matching where the real screen puts
-     * it. Without it the card measures the full 411dp and the baseline would be 32dp
-     * wider than anything a reader ever sees.
-     *
-     * The capture is only as tall as the card: below it is the harness's own
-     * background, not a screen. That is stated rather than padded away — a fake
-     * conversation behind it would be a fixture pretending to be a transcript.
+     * The horizontal inset comes from the dock itself (16dp), matching where the real
+     * screen puts it — adding another inset here would make the baseline 32dp wider than
+     * anything a reader ever sees. The capture is only as tall as the dock: below it is
+     * the harness's own background, not a screen, and pretending there were a transcript
+     * behind it would be a fixture lying about what the material refracts.
      */
     @Test
     fun composer() {
         capture("composer") {
             val state = remember { TextFieldState("Re-skin the shell, one screen at a time.") }
-            Column(Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.md)) {
-                Composer(
-                    state = state,
-                    onSend = {},
-                    onStop = {},
-                    running = false,
+            Column(Modifier.padding(vertical = DshSpacing.md)) {
+                ComposerAccessoryRail(
+                    backdrop = null,
+                    onToggleCommands = {},
+                    permissionLabel = "Full access",
+                    onPermissionClick = {},
+                    planActive = false,
+                    onExitPlan = {},
                     modelTrigger = ModelTriggerState(
                         label = "DeepSeek V4 · High",
                         marker = null,
@@ -303,17 +310,22 @@ class ScreenBaselineTest {
                         alert = false,
                     ),
                     onModelClick = {},
-                    permissionLabel = "Full access",
-                    onPermissionClick = {},
-                    planActive = false,
-                    onExitPlan = {},
                     contextPercent = 12,
                     contextTokens = 12_000,
                     contextWindow = 100_000,
                     contextBreakdown = null,
-                    // One attachment, because the chip row is the part of this card
-                    // that only exists in a state this test would otherwise never
-                    // reach — and it is the reason the card grows a row.
+                )
+                Spacer(Modifier.height(DshSpacing.sm))
+                // One attachment, because the chip row is the part of the bar that only
+                // exists in a state this test would otherwise never reach.
+                ComposerDock(
+                    state = state,
+                    expanded = true,
+                    onExpand = {},
+                    onCollapse = {},
+                    onSend = {},
+                    onStop = {},
+                    running = false,
                     attachments = listOf(
                         PendingAttachment(
                             id = "att-1",
@@ -322,8 +334,11 @@ class ScreenBaselineTest {
                             mediaType = "image/png",
                         ),
                     ),
-                    onToggleCommands = {},
                     onRemoveAttachment = {},
+                    items = DESTINATION_ITEMS,
+                    selectedKey = Destination.CHAT.name,
+                    onSelect = {},
+                    backdrop = null,
                 )
             }
         }

@@ -19,7 +19,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import uk.xa0.dsh.scroll.HarnessApplication
-import uk.xa0.dsh.ui.components.Composer
+import uk.xa0.dsh.ui.components.ComposerContent
 import uk.xa0.dsh.ui.composer.applySendRestore
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -73,23 +73,12 @@ class ComposerRestoreTest {
         rule.setContent {
             DshTheme {
                 Box(Modifier.fillMaxWidth().padding(horizontal = DshSpacing.xl)) {
-                    Composer(
+                    ComposerContent(
                         state = state,
                         onSend = {},
                         onStop = {},
                         running = false,
-                        modelTrigger = null,
-                        onModelClick = {},
-                        permissionLabel = null,
-                        onPermissionClick = {},
-                        planActive = false,
-                        onExitPlan = {},
-                        contextPercent = 0,
-                        contextTokens = 0,
-                        contextWindow = 0,
-                        contextBreakdown = null,
                         attachments = emptyList(),
-                        onToggleCommands = {},
                         onRemoveAttachment = {},
                     )
                 }

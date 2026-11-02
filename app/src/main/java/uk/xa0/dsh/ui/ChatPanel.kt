@@ -153,13 +153,13 @@ import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.CommandEntry
 import uk.xa0.dsh.ui.components.CommandMenu
-import uk.xa0.dsh.ui.components.Composer
+import uk.xa0.dsh.ui.components.ComposerAccessoryRail
+import uk.xa0.dsh.ui.components.ComposerDock
 import uk.xa0.dsh.ui.components.DeliverableRow
 import uk.xa0.dsh.ui.components.DotState
 import uk.xa0.dsh.ui.components.DshMark
 import uk.xa0.dsh.ui.components.ExplorerWiring
 import uk.xa0.dsh.ui.components.FilesPanel
-import uk.xa0.dsh.ui.nav.FloatingBottomBar
 import uk.xa0.dsh.ui.components.GoalBar
 import uk.xa0.dsh.ui.components.JobsSeat
 import uk.xa0.dsh.ui.components.JobsSheet
@@ -702,6 +702,11 @@ internal fun ChatPanel(
         }
     }
 
+    // The composer's open/closed shape, and the keyboard request that only a *gesture*
+    // raises (see `ComposerDock.imeRequest`).
+    var composerExpanded by rememberSaveable(ui.currentSessionId) { mutableStateOf(false) }
+    var composerImeRequest by remember { mutableIntStateOf(0) }
+
     // Back walks *up* the screen before it is allowed anywhere near the close gate.
     //
     // One handler with an explicit order rather than several `BackHandler`s: which of
@@ -722,9 +727,11 @@ internal fun ChatPanel(
     // something still on screen.
     BackHandler(
         enabled = showRouter || destination != Destination.CHAT || chatView != ChatView.CHAT ||
-            subagentParent != null,
+            subagentParent != null || composerExpanded,
     ) {
         when {
+            // An open composer is the topmost thing on the screen that Back can close.
+            composerExpanded -> composerExpanded = false
             showRouter -> showRouter = false
             // The pill first, then the destination: inside Chat the pill is the shallower
             // level, so leaving Shell returns to the transcript rather than all the way
@@ -797,6 +804,12 @@ internal fun ChatPanel(
             }
             else -> if (entry.takesInput) {
                 draft.edit { replaceTrigger(token, "/${entry.name} ") }
+                // The pick wrote into a box the reader may not be looking at: the dock
+                // can be collapsed while the command menu is open. Opening it here is
+                // what makes the seeded token visible rather than a draft the circle
+                // only marks with a dot.
+                composerExpanded = true
+                composerImeRequest++
             } else {
                 draft.edit { consumeTrigger(token) }
                 actions.executeCommand("/${entry.name}")
@@ -895,11 +908,21 @@ internal fun ChatPanel(
     // hero, and the banner is present only while `ui.error` is set.
     var headerPx by remember { mutableIntStateOf(0) }
     var bannerPx by remember { mutableIntStateOf(0) }
-    // The floating composer stack's measured height. The transcript reserves it as bottom
-    // content padding, which is what lets its last row scroll up clear of a composer that
-    // is drawn *over* it — and how tall that stack is depends on attachments, the queue dock
-    // and the stat pills, so it has to be measured rather than assumed.
+    // The floating card stack's measured height — approval, questions, todos, goal, queue —
+    // including the dock area it is padded clear of. The transcript reserves it as bottom
+    // content padding, which is what lets its last row scroll up clear of what is drawn
+    // *over* it. It has to be measured rather than assumed: every card above is conditional.
     var composerStackPx by remember { mutableIntStateOf(0) }
+    // The height of the floating dock area: the accessory rail, the menus and the dock
+    // row. Measured, not assumed — a long draft grows the bar, and the cards above it and
+    // the transcript's bottom padding both have to follow.
+    var dockAreaPx by remember { mutableIntStateOf(0) }
+    val dockAreaDp = with(LocalDensity.current) { dockAreaPx.toDp() }
+    // Leaving the conversation, or a subagent claiming the seat, puts the dock back to its
+    // resting shape: an open composer on the Files page is a keyboard with no field.
+    LaunchedEffect(destination, readOnlyReason) {
+        if (destination != Destination.CHAT || readOnlyReason != null) composerExpanded = false
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -1328,34 +1351,18 @@ internal fun ChatPanel(
                             .offset { IntOffset(0, -(headerPx + bannerPx) / 2) },
                     )
                 } else if (isHero) {
-                    // The hero has no flex child that can absorb a pill the way the
-                    // transcript does, so an in-flow row would lift the centred
-                    // composer by half the pill's height when the socket drops.
-                    // Overlaid on the seat it costs no layout at all, and the strip
-                    // it lands on is empty because the hero block is centred.
-                    Box(Modifier.weight(1f)) {
+                    // The composer is no longer inside the hero: it lives in the bottom
+                    // dock, which is composed outside this page and therefore survives the
+                    // hero → transcript switch without being re-seated. What the hero
+                    // reserves is the dock area, measured, so its centred block stays in
+                    // the middle of the room that is actually left above the dock.
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .padding(bottom = dockAreaDp + BAR_BOTTOM_GAP),
+                    ) {
                         HeroBody(
                             modifier = Modifier.fillMaxSize(),
-                            state = draft,
-                            running = ui.running,
-                            modelTrigger = modelTrigger,
-                            onModelClick = { showModels = true },
-                            permissionLabel = permissionLabel,
-                            onPermissionClick = { showPermission = true },
-                            planActive = ui.planActive,
-                            onExitPlan = actions.exitPlanMode,
-                            contextPercent = ui.contextPercent,
-                            contextTokens = ui.contextTokens,
-                            contextWindow = ui.contextWindow,
-                            contextBreakdown = ui.contextBreakdown,
-                            attachments = ui.attachments,
-                            onToggleCommands = { menuOpen = !menuOpen },
-                            onRemoveAttachment = actions.removeAttachment,
-                            menuOpen = menuOpen,
-                            triggers = triggers,
-                            references = references,
-                            clearReferences = actions.clearReferences,
-                            onPickCommand = onPickCommand,
                             workspaceLabel = heroCwd?.let(::shortenLastSegment) ?: "Choose workspace",
                             onWorkspaceClick = { showWorkspace = true },
                             presetLabel = presetLabel,
@@ -1364,20 +1371,6 @@ internal fun ChatPanel(
                                 actions.refreshAgentPresets()
                                 showPresets = true
                             },
-                            onSend = {
-                                val text = takeDraftForSend()
-                                followFrom++
-                                // The hero send is the deferred one: a hero turn has never
-                                // run, so there is no busy policy to honour yet. The
-                                // in-session composer below is the one that passes
-                                // `submitMode()`.
-                                actions.sendDeferred(text)
-                            },
-                            onStop = actions.stop,
-                            // A child can land on the hero for the moment before its
-                            // history snapshot arrives; the same gate claims its seat
-                            // there as in a live session.
-                            readOnlyReason = readOnlyReason,
                         )
                         connectionLabel?.let {
                             ConnectionPill(
@@ -1672,20 +1665,16 @@ internal fun ChatPanel(
                     // edge, so nothing the reader scrolls ever passes behind the composer —
                     // which is the entire reason for giving it the glass material at all.
                     //
-                    // `BoxScope` is available here, so the stack aligns to the bottom of the
-                    // very box the list fills: the overlap is a layout fact rather than an
-                    // offset that has to be kept in step by hand.
+                    // Since the composer moved into the bottom dock (outside this page), the
+                    // stack's job is the transient cards above it: approval, questions, todos,
+                    // goal and queue. Its bottom padding is the measured height of the dock
+                    // area — accessory pills, popups and the dock row — so the last card still
+                    // rests just above what is actually on screen, whatever the input is doing.
                     Column(
                         Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            // Lifted clear of the bar. The pages run behind the bar now (so
-                            // the material has something to refract), which means the
-                            // composer would otherwise sit *under* it — measured on the
-                            // first recording of this: the bar covered the input's first
-                            // line. The lift is the bar's own height plus the gap it is
-                            // drawn at, so the two cannot drift apart.
-                            .padding(bottom = BarHeight + BAR_BOTTOM_GAP)
+                            .padding(bottom = dockAreaDp + BAR_BOTTOM_GAP)
                             .onSizeChanged { composerStackPx = it.height },
                     ) {
 
@@ -1701,7 +1690,7 @@ internal fun ChatPanel(
                     }
 
                     // A host question blocks the agent's tool call, so it takes the
-                    // same seat as an approval — directly above the composer.
+                    // same seat as an approval — above the composer dock.
                     ui.questions?.let { questions ->
                         QuestionCard(
                             set = questions,
@@ -1730,163 +1719,21 @@ internal fun ChatPanel(
                         )
                     }
 
-                    // Queue (dock order 20). Its bottom edge is tucked under the
-                    // composer card — the web's negative margin — so the two read as
-                    // one surface; Column paints the later child over the earlier
-                    // one, which is what hides the seam. The dock stays composed when
-                    // the queue is empty so it can animate itself away, and its offset
-                    // spans the composer's top gap as well: that keeps the composer
-                    // still while the dock unfolds and sinks above it.
-                    //
-                    // How deep that tuck has to be is set by the card's own corner
-                    // arc, not by the web's 3px. The dock is inset `md` (8dp) from the
-                    // card on each side and the card is a `DshRadius.bubble` (22dp)
-                    // capsule, so at the dock's own edge the arc already stands
-                    //   `22 - sqrt(22^2 - (22 - 8)^2) = 5.03dp`
-                    // below the card's flat top. A 3dp tuck therefore left background
-                    // showing in the corner — measured at 420dpi (2.625 px/dp), a
-                    // 4px-tall by 6px-wide wedge at each end (1.5dp x 2.3dp) where the
-                    // dock's square corner and the card's arc curve away from each
-                    // other. 7dp clears the 5.03dp arc at every density (both are dp)
-                    // and leaves ~2dp of margin. QueueDock pays the extra 4dp out of
-                    // its *bottom padding*, so the panel's visible top edge and its
-                    // rows do not move; only the part the card covers grows.
-                    //
-                    // The extra `md` inset on each side is the web's
-                    // `--dsh-composer-dock-inset` (8px): the panel is deliberately
-                    // *narrower* than the input card, so its square bottom corners
-                    // hide inside the card's 22dp rounded top corners. At the card's
-                    // own width they poked out beside the curve as two dark ears,
-                    // which is what made the join read as two separate cards.
-                    // Boxed rather than modified in place: the dock's own size
-                    // animation clips its content to the growing bounds, so the offset
-                    // has to live outside it or the tucked bottom edge gets cut off.
-                    Box(
-                        Modifier
+                    // Queue (dock order 20). It used to tuck under the composer card so the
+                    // two read as one surface; the card now lives in the dock row below, and
+                    // the queue rests above the accessory rail like the other cards. It stays
+                    // composed when empty so it can animate itself away.
+                    QueueDock(
+                        items = ui.queue,
+                        running = ui.running,
+                        mutable = queueMutable,
+                        busy = ui.queueBusy,
+                        onEdit = actions.editQueueItem,
+                        onRemove = actions.removeQueueItem,
+                        onSteer = actions.steerQueueItem,
+                        modifier = Modifier
                             .padding(horizontal = DshSpacing.xl + DshSpacing.md)
-                            .offset(y = DshSpacing.sm + 7.dp),
-                    ) {
-                        QueueDock(
-                            items = ui.queue,
-                            running = ui.running,
-                            mutable = queueMutable,
-                            busy = ui.queueBusy,
-                            onEdit = actions.editQueueItem,
-                            onRemove = actions.removeQueueItem,
-                            onSteer = actions.steerQueueItem,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-
-                    // The menu sits directly above the composer card, as the web's
-                    // menu is anchored to the card's top edge.
-                    // `@` and `/` are mutually exclusive by their first character, so
-                    // only one of these can be open at a time.
-                    ComposerPopups(
-                        triggers = triggers,
-                        references = references,
-                        state = draft,
-                        menuOpen = menuOpen,
-                        onPickCommand = onPickCommand,
-                        clearReferences = actions.clearReferences,
-                        modifier = Modifier.padding(
-                            start = DshSpacing.xl,
-                            end = DshSpacing.xl,
-                            bottom = DshSpacing.sm,
-                        ),
-                    )
-
-                    if (readOnlyReason != null) {
-                        // The frame takes the composer's own slot and padding, so the
-                        // queue dock, the pills below and the transcript above it do
-                        // not move when the seat is claimed.
-                        SubagentReadOnlyComposer(
-                            reason = readOnlyReason,
-                            modifier = Modifier.padding(
-                                start = DshSpacing.xl,
-                                end = DshSpacing.xl,
-                                // Keeps the frame in the composer's slot: the same
-                                // 6dp the card leaves above the pills.
-                                bottom = DshSpacing.sm,
-                                top = DshSpacing.sm,
-                            ),
-                        )
-                    } else {
-                        Composer(
-                            state = draft,
-                            onSend = {
-                                val text = takeDraftForSend()
-                                // Sending is one of the two moments that mean "follow
-                                // again", wherever the reader had got to.
-                                followFrom++
-                                actions.send(text, actions.submitMode())
-                            },
-                            onSendMode = { mode ->
-                                val text = takeDraftForSend()
-                                followFrom++
-                                actions.send(text, mode)
-                            },
-                            onToggleBusyEnter = {
-                                actions.updateBusyEnter(
-                                    if (ui.busyEnter == BusyEnter.STEER) BusyEnter.QUEUE else BusyEnter.STEER,
-                                )
-                            },
-                            busyEnter = ui.busyEnter,
-                            onStop = actions.stop,
-                            running = ui.running,
-                            modelTrigger = modelTrigger,
-                            onModelClick = { showModels = true },
-                            permissionLabel = permissionLabel,
-                            onPermissionClick = { showPermission = true },
-                            planActive = ui.planActive,
-                            onExitPlan = actions.exitPlanMode,
-                            contextPercent = ui.contextPercent,
-                            contextTokens = ui.contextTokens,
-                            contextWindow = ui.contextWindow,
-                            contextBreakdown = ui.contextBreakdown,
-                            attachments = ui.attachments,
-                            onToggleCommands = { menuOpen = !menuOpen },
-                            onRemoveAttachment = actions.removeAttachment,
-                            modifier = Modifier.padding(
-                                start = DshSpacing.xl,
-                                end = DshSpacing.xl,
-                                // Matches the pills' own bottom margin below, so the
-                                // two gaps around the row are the same 6dp. With the
-                                // pills absent this is the composer's clearance to the
-                                // navigation inset, which is why it is not larger.
-                                bottom = DshSpacing.sm,
-                                // Constant whether or not the dock is present: the dock's
-                                // own offset reaches back down over this gap when it is.
-                                top = DshSpacing.sm,
-                            ),
-                        )
-                    }
-
-                    // The web mounts the statistic pills on the composer dock, just
-                    // under the card — not in the header, which is where they would
-                    // otherwise look like they belonged. Self-gating, so an empty
-                    // session (and every session before its projections land) draws
-                    // nothing at all rather than an empty row.
-                    SessionStatsPills(
-                        stats = ui.sessionStats,
-                        onBalance = {
-                            showBalance = true
-                            // Ask when the door opens, not when the app starts: a figure
-                            // read at launch is stale by the time anyone looks at it.
-                            actions.refreshBalance()
-                        },
-                        // Priced routes only. The rates follow the session's *current*
-                        // model, which is also what the host bills the next turn at.
-                        rates = usageRates,
-                        family = family,
-                        modifier = Modifier.padding(
-                            start = DshSpacing.xl,
-                            end = DshSpacing.xl,
-                            // The block is the last thing in the column, so it owns the
-                            // gap to the navigation inset; without it the pills sat on
-                            // whatever the inset happened to be on that device.
-                            bottom = DshSpacing.sm,
-                        ),
+                            .fillMaxWidth(),
                     )
                     }
                     }
@@ -1897,36 +1744,158 @@ internal fun ChatPanel(
             }
         }
 
-            // The destination selector, floating over the content rather than below it.
+            // The bottom dock: the destination bar and the composer share one row, in the
+            // shape BiliPai's liquid-glass search dock uses. At rest it reads
+            // `[tab bar] [gap] [circle]`; opened, the tab bar folds into the current
+            // destination's circle and the input takes the space it freed — so the row
+            // never changes width, and the two panes cannot drift apart.
             //
-            // **No longer gated on the hero** (3.3). The old bar was withheld when the
-            // session was empty, because two of its three items (Trajectory, Shell) would
-            // have opened empty rooms. Files, Plugins and Me are not about the session at
-            // all — the Plugins and Me pages are just as real on a session with nothing in
-            // it — so hiding the bar there would hide the only route to them.
+            // The controls that used to live inside the input are the rail above it, one
+            // glass pill each. They stay visible at rest: a reader who only wants to check
+            // the model or the context gauge should not have to open a keyboard first.
             //
-            // `DESTINATION_ITEMS` is passed whole and never filtered — the item count is
-            // a constant. See the enum's own comment for why that is not negotiable.
+            // On a wide window the rail owns navigation, so the dock is the input alone and
+            // always open. A 56dp circle in the middle of a tablet would be a phone
+            // affordance with no thumb to meet it.
             //
-            // **Exactly one of these is composed.** A bar on a wide window would be the
-            // same destinations twice, one of them in the wrong place for the hand — so
-            // the choice is made once, here, and both branches read the same
-            // `destination` and call the same `goToDestination`.
-            //
-            // `align(BottomCenter)` is what centres the capsule: the bar sizes itself to its
-            // content, and the box is the thing that decides where that content sits.
-            if (!wide) {
-                FloatingBottomBar(
-                    items = DESTINATION_ITEMS,
-                    selectedKey = destination.name,
-                    onSelect = { key ->
-                        Destination.entries.firstOrNull { it.name == key }?.let(goToDestination)
-                    },
-                    backdrop = glassBackdrop,
-                    modifier = Modifier
+            // **Exactly one of the two navigation surfaces is composed.** The dock on a
+            // phone, the rail on a wide window; both read the same `destination` and call
+            // the same `goToDestination`.
+            if (destination == Destination.CHAT || !wide) {
+                Column(
+                    Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = BAR_BOTTOM_GAP),
-                )
+                        .fillMaxWidth()
+                        .padding(bottom = BAR_BOTTOM_GAP)
+                        .onSizeChanged { dockAreaPx = it.height },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (destination == Destination.CHAT) {
+                        // The web mounts the statistic pills on the composer dock, just
+                        // under the card — not in the header, which is where they would
+                        // otherwise look like they belonged. Self-gating, so an empty
+                        // session draws nothing at all rather than an empty row.
+                        SessionStatsPills(
+                            stats = ui.sessionStats,
+                            onBalance = {
+                                showBalance = true
+                                // Ask when the door opens, not when the app starts: a figure
+                                // read at launch is stale by the time anyone looks at it.
+                                actions.refreshBalance()
+                            },
+                            // Priced routes only. The rates follow the session's *current*
+                            // model, which is also what the host bills the next turn at.
+                            rates = usageRates,
+                            family = family,
+                            modifier = Modifier.padding(
+                                start = DshSpacing.xl,
+                                end = DshSpacing.xl,
+                                bottom = DshSpacing.sm,
+                            ),
+                        )
+
+                        if (readOnlyReason == null) {
+                            ComposerAccessoryRail(
+                                backdrop = glassBackdrop,
+                                onToggleCommands = { menuOpen = !menuOpen },
+                                permissionLabel = permissionLabel,
+                                onPermissionClick = { showPermission = true },
+                                planActive = ui.planActive,
+                                onExitPlan = actions.exitPlanMode,
+                                modelTrigger = modelTrigger,
+                                onModelClick = { showModels = true },
+                                contextPercent = ui.contextPercent,
+                                contextTokens = ui.contextTokens,
+                                contextWindow = ui.contextWindow,
+                                contextBreakdown = ui.contextBreakdown,
+                            )
+                            Spacer(Modifier.height(DshSpacing.sm))
+
+                            // The `@` and `/` menus hang directly above the input, where
+                            // the caret is; `@` and `/` are mutually exclusive by their
+                            // first character, so only one can be open at a time.
+                            ComposerPopups(
+                                triggers = triggers,
+                                references = references,
+                                state = draft,
+                                menuOpen = menuOpen,
+                                onPickCommand = onPickCommand,
+                                clearReferences = actions.clearReferences,
+                                modifier = Modifier.padding(
+                                    start = DshSpacing.xl,
+                                    end = DshSpacing.xl,
+                                    bottom = DshSpacing.sm,
+                                ),
+                            )
+                        } else {
+                            // The frame claims the composer's seat without taking input;
+                            // the dock keeps the navigation it has always drawn.
+                            SubagentReadOnlyComposer(
+                                reason = readOnlyReason,
+                                modifier = Modifier.padding(
+                                    start = DshSpacing.xl,
+                                    end = DshSpacing.xl,
+                                    top = DshSpacing.sm,
+                                    bottom = DshSpacing.sm,
+                                ),
+                            )
+                        }
+                    }
+
+                    ComposerDock(
+                        state = draft,
+                        expanded = destination == Destination.CHAT && (composerExpanded || wide),
+                        onExpand = {
+                            composerExpanded = true
+                            // Bumped per gesture so a wide window, which is always open,
+                            // never steals focus when the screen recomposes.
+                            composerImeRequest++
+                        },
+                        onCollapse = { composerExpanded = false },
+                        onSend = {
+                            val text = takeDraftForSend()
+                            // Sending is one of the two moments that mean "follow again",
+                            // wherever the reader had got to.
+                            followFrom++
+                            if (isHero) {
+                                // The hero send is the deferred one: a hero turn has never
+                                // run, so there is no busy policy to honour yet.
+                                actions.sendDeferred(text)
+                            } else {
+                                actions.send(text, actions.submitMode())
+                            }
+                            // Submitting puts the dock back to its resting shape, the
+                            // reference's own rule for its search: the bar's job is done,
+                            // and the transcript keeps the room it was borrowing.
+                            composerExpanded = false
+                        },
+                        onStop = actions.stop,
+                        running = ui.running,
+                        attachments = ui.attachments,
+                        onRemoveAttachment = actions.removeAttachment,
+                        busyEnter = ui.busyEnter,
+                        onSendMode = { mode ->
+                            val text = takeDraftForSend()
+                            followFrom++
+                            actions.send(text, mode)
+                            composerExpanded = false
+                        },
+                        onToggleBusyEnter = {
+                            actions.updateBusyEnter(
+                                if (ui.busyEnter == BusyEnter.STEER) BusyEnter.QUEUE else BusyEnter.STEER,
+                            )
+                        },
+                        items = DESTINATION_ITEMS,
+                        selectedKey = destination.name,
+                        onSelect = { key ->
+                            Destination.entries.firstOrNull { it.name == key }?.let(goToDestination)
+                        },
+                        backdrop = glassBackdrop,
+                        showNavigation = !wide,
+                        showInput = destination == Destination.CHAT && readOnlyReason == null,
+                        imeRequest = composerImeRequest,
+                    )
+                }
             }
             }
         }
@@ -3352,38 +3321,15 @@ private fun ComposerPopups(
     }
 }
 
-/** Empty-session state: mark + "New Session" with the composer vertically centred. */
+/** Empty-session state: the mark, "New Session", and the workspace/preset chips. */
 @Composable
 private fun HeroBody(
     modifier: Modifier,
-    state: TextFieldState,
-    running: Boolean,
-    modelTrigger: ModelTriggerState?,
-    onModelClick: () -> Unit,
-    permissionLabel: String?,
-    onPermissionClick: () -> Unit,
-    planActive: Boolean,
-    onExitPlan: () -> Unit,
-    contextPercent: Int,
-    contextTokens: Int,
-    contextWindow: Int,
-    contextBreakdown: uk.xa0.dsh.ContextBreakdown?,
-    attachments: List<uk.xa0.dsh.PendingAttachment>,
-    onToggleCommands: () -> Unit,
-    onRemoveAttachment: (String) -> Unit,
-    menuOpen: Boolean,
-    triggers: ComposerTriggers,
-    references: List<ReferenceCandidate>,
-    clearReferences: () -> Unit,
-    onPickCommand: (CommandEntry) -> Unit,
     workspaceLabel: String,
     onWorkspaceClick: () -> Unit,
     presetLabel: String?,
     showPresetChip: Boolean,
     onPresetClick: () -> Unit,
-    onSend: () -> Unit,
-    onStop: () -> Unit,
-    readOnlyReason: SubagentReadOnlyReason?,
 ) {
     val colors = DshTheme.colors
     Column(
@@ -3451,40 +3397,8 @@ private fun HeroBody(
         }
         Spacer(Modifier.height(DshSpacing.md))
 
-        // Typing `/` or `@` here behaves exactly as it does in a session: the same
-        // triggers, the same host rosters, the same popups.
-        ComposerPopups(
-            triggers = triggers,
-            references = references,
-            state = state,
-            menuOpen = menuOpen,
-            onPickCommand = onPickCommand,
-            clearReferences = clearReferences,
-            modifier = Modifier.padding(bottom = DshSpacing.sm),
-        )
-        if (readOnlyReason != null) {
-            SubagentReadOnlyComposer(reason = readOnlyReason)
-        } else {
-            Composer(
-                state = state,
-                onSend = onSend,
-                onStop = onStop,
-                running = running,
-                modelTrigger = modelTrigger,
-                onModelClick = onModelClick,
-                permissionLabel = permissionLabel,
-                onPermissionClick = onPermissionClick,
-                planActive = planActive,
-                onExitPlan = onExitPlan,
-                contextPercent = contextPercent,
-                contextTokens = contextTokens,
-                contextWindow = contextWindow,
-                contextBreakdown = contextBreakdown,
-                attachments = attachments,
-                onToggleCommands = onToggleCommands,
-                onRemoveAttachment = onRemoveAttachment,
-            )
-        }
+        // The composer itself is not here: it lives in the bottom dock, which is
+        // composed outside the page. The hero only decides what sits above it.
         Spacer(Modifier.height(DshSpacing.xl))
     }
 }
