@@ -85,6 +85,7 @@ import uk.xa0.dsh.PendingAttachment
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.glass.glassSurface
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -192,9 +193,11 @@ fun Composer(
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(colors.inputMajor)
-                .border(0.5.dp, colors.borderL2, shape)
+                // The same tiered material as the floating bar, from the same function:
+                // translucent where the platform can blur, a hairline pane where it cannot.
+                // The composer is the surface that most needs it — it is drawn *over* the
+                // transcript now, so there is genuinely something behind it to show through.
+                .glassSurface(shape)
                 // 10dp, not `DshSpacing.md` (8dp) nor `lg` (12dp): the user asked
                 // for "the tiniest bit more" above the text row, and 10dp is the
                 // deliberate half-step between the two tokens. The card grows 2dp
