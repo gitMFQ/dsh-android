@@ -167,7 +167,8 @@ class ComposerDockTest {
         rule.waitForIdle()
 
         // One pill per control, each findable by the sentence a screen reader would use.
-        rule.onNodeWithContentDescription("Add files or run commands").assertIsDisplayed()
+        // The `+` is not in this rail any more: it lives inside the message bar, where the
+        // command menu it opens writes its tokens.
         rule.onNodeWithContentDescription("Change access mode, current Full access").assertIsDisplayed()
         rule.onNodeWithContentDescription("Leave plan mode").assertIsDisplayed()
         rule.onNodeWithContentDescription("Select model, current DeepSeek V4 · High").assertIsDisplayed()
