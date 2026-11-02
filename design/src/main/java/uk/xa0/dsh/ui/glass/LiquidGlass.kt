@@ -102,38 +102,49 @@ fun Modifier.glassSurface(shape: Shape): Modifier {
 @Composable
 fun rememberGlassEnabled(): Boolean = remember { supportsLiquidGlass }
 /**
- * The lift a floating glass pane wears: a soft shadow *below* it, never under it.
+ * The lift a floating glass pane wears — on a **dark** appearance only.
  *
- * ## Why the offset is the whole point (measured, light appearance)
+ * ## The defect this exists for, and why the first attempt at it failed
  *
- * The shadow used to be drawn centred (`offset = DpOffset.Zero`) at a 10dp radius. That is
- * right for an opaque pane and wrong for a translucent one: the shadow lands *inside* the
- * pane's footprint and shows straight through the fill. Measured off a recorded baseline — a
- * light appearance on a `#FFFFFF` page — the capsule's interior sampled **`#F8F8F8`**, which is
- * exactly the arithmetic: a 10%-black shadow over white is `#E6E6E6`, and a 72%-white fill over
- * that is `#F8F8F8`. A grey bar, produced by a shadow that was never meant to be visible there.
+ * Reported from a device: the bottom bar looked grey on a light appearance. Measured off a
+ * recorded baseline (a `#FFFFFF` page), the capsule's interior sampled **`#F8F8F8`**.
  *
- * Pushing it down and shortening its radius moves the shadow's mass out from under the pane, so
- * the middle keeps the fill's own colour and only the lower edge carries the separation. On a
- * dark appearance the same bleed existed and was invisible, which is why it took a light
- * appearance and a pixel probe to find it.
+ * Cause: the shadow was drawn centred at a 10dp radius, so it landed *inside* the pane's own
+ * footprint and a translucent fill let it through. The arithmetic is exact — 10% black over
+ * white is `#E6E6E6`, and a 72% white fill over that is `#F8F8F8`.
  *
- * One function rather than a copy per bar because the bar and the composer are the same material
- * at two places on one screen; a divergence between them is the kind of thing nobody notices
- * until a screenshot compares the two.
+ * **The first attempt was to offset the shadow down 4dp and shorten its radius to 6dp. It was
+ * not enough, and the same pixel probe said so**: the interior still measured `#F7F7F7`, about
+ * 3% black. The reason is what `dropShadow` actually draws — a *blurred copy of the shape* —
+ * and a 6dp blur of a 64dp capsule moved 4dp still covers nearly the whole capsule. There is no
+ * offset that pushes a blurred copy of a shape out from under that shape while leaving it
+ * visible at the edge.
+ *
+ * So on a light appearance the pane has **no shadow at all**. Its separation comes from the
+ * hairline stroke [glassSurface] already draws: a defined edge is what makes a translucent pane
+ * read as a surface, and it is the one device that cannot bleed through the fill.
+ *
+ * The dark appearance keeps the shadow, where it does real work — separating a pane from a
+ * near-black page — and where the bleed that ruined the light appearance is invisible, because
+ * the fill is dark too.
+ *
+ * One function rather than a copy per surface because the bar and the composer are the same
+ * material at two places on one screen; a divergence between them is the kind of thing nobody
+ * notices until a screenshot compares the two.
  */
 @Composable
-fun Modifier.glassLift(shape: Shape): Modifier = dropShadow(
-    shape = shape,
-    shadow = Shadow(
-        radius = 6.dp,
-        // Down, not centred: see above.
-        offset = DpOffset(0.dp, 4.dp),
-        color = Color.Black,
-        // Lighter on a light appearance, where a shadow reads as dirt faster than it reads as
-        // depth; denser on the dark one, where it is also what separates the pane from a
-        // near-black page.
-        alpha = if (DshTheme.colors.isDark) 0.22f else 0.12f,
-    ),
-)
+fun Modifier.glassLift(shape: Shape): Modifier {
+    if (!DshTheme.colors.isDark) return this
+    return dropShadow(
+        shape = shape,
+        shadow = Shadow(
+            radius = 6.dp,
+            offset = DpOffset(0.dp, 4.dp),
+            color = Color.Black,
+            // Denser than the old 0.2: on a dark appearance the shadow is the only thing
+            // separating the pane from the page, and it no longer has to fight the fill.
+            alpha = 0.22f,
+        ),
+    )
+}
 
