@@ -138,6 +138,43 @@ kotlin {
     }
 }
 
+// The material3 the BOM pins, and the material3 this app actually shipped, are not the same
+// number — and the difference is a bug the reader found before any of us did.
+//
+// `miuix-ui` declares `material3-window-size-class`, which pulls, in a chain nobody wrote
+// deliberately:
+//
+//   miuix-ui:0.9.4                              (Apache-2.0, a Maven dependency)
+//     -> org.jetbrains.compose.material3:material3-window-size-class-android:1.12.0-alpha03
+//       -> androidx.compose.material3:material3-window-size-class-android:1.5.0-alpha22
+//         -> androidx.compose.material3:material3:1.5.0-alpha22
+//
+// Gradle resolves the *highest* requirement and a BOM's constraint does not beat a
+// transitive one, so every build shipped **material3 1.5.0-alpha22** while the BOM said
+// 1.4.0. Verified without a build: the debug APK's `classes16.dex` contains
+// `NavigationDrawerKt$ModalNavigationDrawer$2$1`, which exists only in the alpha, and has
+// zero hits for the 1.4.0-only sibling.
+//
+// That alpha is not cosmetic. Its `ModalNavigationDrawer` runs
+// `LaunchedEffect(drawerState.isOpen) { focusRequester.requestFocus() }` — Material's
+// "keyboard focus should go to the first element of the drawer" — and the first
+// always-focusable child of ours is the search field (`clickable` is `SystemDefined` and
+// is not focusable in touch mode; a `BasicTextField` is), so **opening the drawer raised
+// the keyboard**. `SessionsDrawer` also carries a zero-size focus anchor to absorb that
+// request, which stays useful as a guard if the graph drifts again.
+//
+// Excluding the artifact is safe because nothing references it: measured, zero classes
+// across `miuix-ui`, `miuix-preference` and this app name the package. Excluded on the
+// *configuration* rather than on one declaration, because the artifact arrives through
+// several edges (`:design`'s `api(miuix-ui)` is one of them) and an exclude on a single
+// dependency only removes that dependency's own transitive.
+configurations.all {
+    exclude(group = "org.jetbrains.compose.material3", module = "material3-window-size-class")
+    exclude(group = "org.jetbrains.compose.material3", module = "material3-window-size-class-android")
+    exclude(group = "androidx.compose.material3", module = "material3-window-size-class")
+    exclude(group = "androidx.compose.material3", module = "material3-window-size-class-android")
+}
+
 dependencies {
     // The domain model, extracted so its 413 tests no longer need this module's
     // 58k lines to compile. The Kotlin package is still `uk.xa0.dsh.model`, so no
@@ -192,8 +229,9 @@ dependencies {
     // Miuix: the Apache-2.0 component library that supplies everything the
     // KernelSU-style design needs but cannot legally take from the GPL-3.0
     // reference repo (dialogs, sheets, switches, sliders, rails, refresh,
-    // icons, squircles). miuix-blur is deliberately absent: its module minSdk is
-    // 33 and this app supports 26, so the glass bar is drawn by hand instead.
+    // icons, squircles). `miuix-blur` is declared in `:design` rather than here,
+    // because the palette bridge and the glass are that module's business; it
+    // arrives under `tools:overrideLibrary` and is gated on API 33 — see NOTICE.md.
     implementation("top.yukonga.miuix.kmp:miuix-ui:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-preference:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-icons:0.9.4")

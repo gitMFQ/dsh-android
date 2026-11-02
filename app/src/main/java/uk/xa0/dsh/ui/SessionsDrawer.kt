@@ -9,6 +9,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -878,6 +879,45 @@ fun SessionsDrawer(
             .navigationBarsPadding()
             .padding(start = DshSpacing.lg, end = DshSpacing.lg, bottom = DshSpacing.sm),
     ) {
+        // A focus anchor, and the only reason it is here is to catch Material's own
+        // focus request.
+        //
+        // `ModalNavigationDrawer` — the sheet's host at `ChatPanel.kt:899` — asks the
+        // *first focus target* in the drawer's content to take the keyboard every time
+        // the sheet opens. Not a guess: the material3 this app actually ships is
+        // 1.5.0-alpha22 (the BOM pins 1.4.0, and the drift arrives through miuix's
+        // window-size-class artifact, which the build fixes separately), and its
+        // `ModalNavigationDrawer` carries `LaunchedEffect(drawerState.isOpen) { if
+        // (drawerState.isOpen) focusRequester.requestFocus() }` on the Layout wrapping
+        // `drawerContent`.
+        //
+        // Until this anchor existed, that first target was the search box, so opening
+        // the drawer raised the IME with the caret in "Search sessions..." — the device
+        // report this seat answers. It was the box and not the Refresh or New Session
+        // controls that follow it because of how each is focusable: `clickable` builds its
+        // focus target as `Focusability.SystemDefined`, which is *not* focusable while
+        // the device is in touch mode, while a `BasicTextField` is `Focusability.Always`.
+        // A traversal that skips the buttons therefore lands on the field;
+        // `Modifier.focusable()` here is `Always` too, and as the content's first focus
+        // stop it is what that request finds.
+        //
+        // Deliberately zero-size and semantically empty: it must take no space and must
+        // not become a screen-reader stop, so there is no contentDescription and
+        // `clearAndSetSemantics` drops the focusable node's semantics while leaving the
+        // focus target — the part that catches the request — in place.
+        //
+        // A symptom-level fix, not the root one: the cause is the dependency drift
+        // above, which the build fixes on its own. If material3 ever drops back to
+        // 1.4.0 — whose drawer requests no focus at all — this anchor is an unused
+        // focus stop rather than a harmful one. The field still takes focus when the
+        // reader taps it; that is a tap request, not this one.
+        Box(
+            Modifier
+                .size(0.dp)
+                .focusable()
+                .clearAndSetSemantics { },
+        )
+
         // Brand lockup — 48dp, a little tighter than the web sidebar's 60px row:
         // its content is centred, so every dp of row height becomes dp of empty
         // band above "Search sessions..." on a phone, where the drawer has no
