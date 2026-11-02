@@ -15,7 +15,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -97,4 +101,50 @@ fun Modifier.glassSurface(shape: Shape): Modifier {
  */
 @Composable
 fun rememberGlassEnabled(): Boolean = remember { supportsLiquidGlass }
+/**
+ * The lift a floating glass pane wears — on a **dark** appearance only.
+ *
+ * ## The defect this exists for, and why the first attempt at it failed
+ *
+ * Reported from a device: the bottom bar looked grey on a light appearance. Measured off a
+ * recorded baseline (a `#FFFFFF` page), the capsule's interior sampled **`#F8F8F8`**.
+ *
+ * Cause: the shadow was drawn centred at a 10dp radius, so it landed *inside* the pane's own
+ * footprint and a translucent fill let it through. The arithmetic is exact — 10% black over
+ * white is `#E6E6E6`, and a 72% white fill over that is `#F8F8F8`.
+ *
+ * **The first attempt was to offset the shadow down 4dp and shorten its radius to 6dp. It was
+ * not enough, and the same pixel probe said so**: the interior still measured `#F7F7F7`, about
+ * 3% black. The reason is what `dropShadow` actually draws — a *blurred copy of the shape* —
+ * and a 6dp blur of a 64dp capsule moved 4dp still covers nearly the whole capsule. There is no
+ * offset that pushes a blurred copy of a shape out from under that shape while leaving it
+ * visible at the edge.
+ *
+ * So on a light appearance the pane has **no shadow at all**. Its separation comes from the
+ * hairline stroke [glassSurface] already draws: a defined edge is what makes a translucent pane
+ * read as a surface, and it is the one device that cannot bleed through the fill.
+ *
+ * The dark appearance keeps the shadow, where it does real work — separating a pane from a
+ * near-black page — and where the bleed that ruined the light appearance is invisible, because
+ * the fill is dark too.
+ *
+ * One function rather than a copy per surface because the bar and the composer are the same
+ * material at two places on one screen; a divergence between them is the kind of thing nobody
+ * notices until a screenshot compares the two.
+ */
+@Composable
+fun Modifier.glassLift(shape: Shape): Modifier {
+    if (!DshTheme.colors.isDark) return this
+    return dropShadow(
+        shape = shape,
+        shadow = Shadow(
+            radius = 6.dp,
+            offset = DpOffset(0.dp, 4.dp),
+            color = Color.Black,
+            // Denser than the old 0.2: on a dark appearance the shadow is the only thing
+            // separating the pane from the page, and it no longer has to fight the fill.
+            alpha = 0.22f,
+        ),
+    )
+}
 

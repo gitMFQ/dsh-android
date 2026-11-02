@@ -895,6 +895,11 @@ internal fun ChatPanel(
     // hero, and the banner is present only while `ui.error` is set.
     var headerPx by remember { mutableIntStateOf(0) }
     var bannerPx by remember { mutableIntStateOf(0) }
+    // The floating composer stack's measured height. The transcript reserves it as bottom
+    // content padding, which is what lets its last row scroll up clear of a composer that
+    // is drawn *over* it — and how tall that stack is depends on attachments, the queue dock
+    // and the stat pills, so it has to be measured rather than assumed.
+    var composerStackPx by remember { mutableIntStateOf(0) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -1478,7 +1483,12 @@ internal fun ChatPanel(
                                 start = DshSpacing.xl,
                                 end = DshSpacing.xl,
                                 top = DshSpacing.xl,
-                                bottom = DshSpacing.md,
+                                // The floating stack's own height, measured, plus the gap the
+                                // last row keeps from the bottom edge. Without it the newest
+                                // message would sit permanently under the composer: the list
+                                // still ends at the stack, and the padding is what buys the
+                                // room to scroll clear of it.
+                                bottom = DshSpacing.md + with(LocalDensity.current) { composerStackPx.toDp() },
                             ),
                             verticalArrangement = Arrangement.spacedBy(DshSpacing.xl),
                         ) {
@@ -1650,7 +1660,20 @@ internal fun ChatPanel(
                                     .padding(end = DshSpacing.xl, bottom = DshSpacing.lg),
                             )
                         }
-                    }
+                    // Everything docked to the composer floats over the transcript instead of
+                    // sitting below it. Stacked below, the list's box ends at the stack's top
+                    // edge, so nothing the reader scrolls ever passes behind the composer —
+                    // which is the entire reason for giving it the glass material at all.
+                    //
+                    // `BoxScope` is available here, so the stack aligns to the bottom of the
+                    // very box the list fills: the overlap is a layout fact rather than an
+                    // offset that has to be kept in step by hand.
+                    Column(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .onSizeChanged { composerStackPx = it.height },
+                    ) {
 
                     if (ui.approval != null) {
                         ApprovalCard(
@@ -1851,6 +1874,8 @@ internal fun ChatPanel(
                             bottom = DshSpacing.sm,
                         ),
                     )
+                    }
+                    }
                 }
                         }
                     }
