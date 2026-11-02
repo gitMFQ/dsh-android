@@ -1658,33 +1658,6 @@ internal fun ChatPanel(
                             )
                         }
 
-                        // Offered whenever the follow has been released, which is the
-                        // same question as "is the newest row on screen" — there is no
-                        // second notion of being at the bottom to keep in step.
-                        if (!following.value) {
-                            ScrollToBottomButton(
-                                onClick = {
-                                    ScrollDiag.prog("chat", "to-bottom-button")
-                                    // Instant, and to the last index at the moment it
-                                    // runs: an animation to an index captured before it
-                                    // started lands short whenever a row arrives during
-                                    // it, which during a turn is always.
-                                    scope.launch {
-                                        val last = listState.layoutInfo.totalItemsCount - 1
-                                        if (last >= 0) listState.scrollToItem(last)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    // Clear of the dock, not of the screen edge: the bar is
-                                    // what the button used to hide behind.
-                                    .padding(
-                                        end = DshSpacing.xl,
-                                        bottom = dockAreaDp + DshSpacing.lg,
-                                    ),
-                                backdrop = glassBackdrop,
-                            )
-                        }
                     // Everything docked to the composer floats over the transcript instead of
                     // sitting below it. Stacked below, the list's box ends at the stack's top
                     // edge, so nothing the reader scrolls ever passes behind the composer —
@@ -1919,6 +1892,32 @@ internal fun ChatPanel(
                         imeRequest = composerImeRequest,
                     )
                 }
+            }
+
+            // Back-to-bottom, composed *outside* the pager on purpose: its glass samples
+            // the layer the transcript records, and a pane inside that layer would blur
+            // its own previous frame instead of the conversation. It sits above the dock
+            // area, so the bar can no longer hide it.
+            if (destination == Destination.CHAT && chatView == ChatView.CHAT && !following.value) {
+                ScrollToBottomButton(
+                    onClick = {
+                        ScrollDiag.prog("chat", "to-bottom-button")
+                        // Instant, and to the last index at the moment it runs: an
+                        // animation to an index captured before it started lands short
+                        // whenever a row arrives during it, which during a turn is always.
+                        scope.launch {
+                            val last = listState.layoutInfo.totalItemsCount - 1
+                            if (last >= 0) listState.scrollToItem(last)
+                        }
+                    },
+                    backdrop = glassBackdrop,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            end = DshSpacing.xl,
+                            bottom = dockAreaDp + BAR_BOTTOM_GAP + DshSpacing.md,
+                        ),
+                )
             }
             }
         }
