@@ -86,6 +86,16 @@ data class ChatUiState(
     val draftRestore: DraftRestore? = null,
     /** Tool-call id → the id of the call that dispatched it, for the nested tree. */
     val toolParents: Map<String, String> = emptyMap(),
+    /**
+     * The Shell page's cell size, in sp.
+     *
+     * A field of its own rather than a read of `ui`: it is a preference the *panel* writes
+     * (the Me page's Terminal tab and the shell's own A−/A+ both go through
+     * `DshViewModel.setTerminalFontSp`), and the panel is handed `UiState` as one object
+     * it does not write into. Carrying it here is what lets a screenshot fixture state a
+     * cell size without a view model.
+     */
+    val terminalFontSp: Float = uk.xa0.dsh.term.TerminalCellSize.DEFAULT_FONT_SP,
 ) {
     /** The roster row for the open session, if the roster has it. */
     val current: SessionItem?
@@ -204,4 +214,6 @@ data class ChatActions(
     val trustCertificate: (String, java.security.cert.X509Certificate) -> Unit = { _, _ -> },
     val forgetCertificate: (String) -> Unit = {},
     val writeHostSetting: (String, String, String) -> Unit = { _, _, _ -> },
+    /** `DshViewModel.setTerminalFontSp`, from the Me page's Terminal tab. */
+    val setTerminalFont: (Float) -> Unit = {},
 )

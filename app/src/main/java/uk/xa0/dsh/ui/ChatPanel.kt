@@ -198,6 +198,9 @@ import uk.xa0.dsh.ui.composer.composerTriggers
 import uk.xa0.dsh.ui.composer.consumeTrigger
 import uk.xa0.dsh.ui.composer.replaceTrigger
 import uk.xa0.dsh.ui.scroll.TailFollow
+import uk.xa0.dsh.ui.settings.MeSettingsActions
+import uk.xa0.dsh.ui.settings.MeSettingsPage
+import uk.xa0.dsh.ui.settings.MeSettingsState
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -267,6 +270,46 @@ internal fun ChatPanel(
         ?.value
         ?: "compact"
     val foldTurns = transcriptView != "normal"
+
+    // The Me page's tabs and the Settings sheet draw from this one holder (3.5b): eight
+    // pages would otherwise thread thirty values through MeDestination, and the sheet
+    // would keep a second copy of them. Everything here is a read of `ui` or of the
+    // panel's own arguments; nothing new is stored.
+    val meSettings = MeSettingsState(
+        themeMode = ui.themeMode,
+        busyEnter = ui.busyEnter,
+        transcriptView = transcriptView,
+        // No default-permission state exists on this client, so the row shows
+        // "Unavailable" rather than claiming a value the host never sent.
+        defaultPermission = "",
+        permissionOptions = ui.permissionOptions,
+        models = ui.models,
+        providerOrder = ui.providerOrder,
+        selectedModel = ui.selectedModel,
+        agentPreset = ui.agentPreset,
+        agentPresetOptions = ui.agentPresetOptions,
+        agentModePickerEnabled = true,
+        // Archived ids are a set on this client, so the host's own archive order is not
+        // recoverable here.
+        archivedSessions = ui.sessions.filter { it.id in ui.archivedSessionIds },
+        workspaces = ui.workspaces,
+        sessionsLoading = ui.sessionsLoading,
+        hostSettings = ui.hostSettings,
+        hostSettingsLoading = ui.hostSettingsLoading,
+        hostSettingsError = ui.hostSettingsError,
+        settingsSaving = ui.settingsSaving,
+        settingsWriteError = ui.settingsWriteError,
+        terminalFontSp = state.terminalFontSp,
+    )
+    val meSettingsActions = MeSettingsActions(
+        onTheme = actions.updateTheme,
+        onBusyEnter = actions.updateBusyEnter,
+        onPreset = actions.updatePreset,
+        onSelectModel = actions.selectModel,
+        onUnarchive = actions.unarchiveSession,
+        onSettingWrite = actions.writeHostSetting,
+        onTerminalFont = actions.setTerminalFont,
+    )
     val closingSeqs = state.closingSeqs
     val branchSeqs = state.branchSeqs
     val turnDurations = state.turnDurations
@@ -1341,6 +1384,17 @@ internal fun ChatPanel(
                         MeDestination(
                             username = ui.username,
                             balance = ui.balance,
+                            settings = meSettings,
+                            settingsActions = meSettingsActions,
+                            onOpenAbout = { showAbout = true },
+                            onOpenSettings = {
+                                showSettings = true
+                                // The sheet reads on open rather than on a timer, but it
+                                // is no longer the *only* reader — the transcript needs
+                                // `ui-chat.transcriptView` to know whether it may fold —
+                                // so the connect-time read is what usually supplies this.
+                                actions.loadHostSettings()
+                            },
                         )
                     }
 
@@ -2015,38 +2069,12 @@ internal fun ChatPanel(
     }
 
     if (showSettings) {
+        // The same state holder and acts the Me page's tabs are handed, so the sheet and
+        // the pages are one rendering of one document rather than two (3.5b).
         SettingsSheet(
-            themeMode = ui.themeMode,
-            agentPreset = ui.agentPreset,
-            onTheme = actions.updateTheme,
-            onPreset = actions.updatePreset,
-            busyEnter = ui.busyEnter,
-            onBusyEnter = actions.updateBusyEnter,
+            state = meSettings,
+            actions = meSettingsActions,
             onDismiss = { showSettings = false },
-            // Read-only parity data (SettingsContent.kt). The General rows are
-            // host-backed now; the values below are the pre-read fallbacks and the
-            // rows the app has no writer for.
-            hostSettings = ui.hostSettings,
-            hostSettingsLoading = ui.hostSettingsLoading,
-            hostSettingsError = ui.hostSettingsError,
-            settingsSaving = ui.settingsSaving,
-            settingsWriteError = ui.settingsWriteError,
-            onSettingWrite = actions.writeHostSetting,
-            models = ui.models,
-            providerOrder = ui.providerOrder,
-            permissionOptions = ui.permissionOptions,
-            // No default-permission state exists, so the row shows "Unavailable"
-            // rather than claiming a value the host never sent.
-            defaultPermission = "",
-            transcriptView = transcriptView,
-            agentPresetOptions = ui.agentPresetOptions,
-            agentModePickerEnabled = true,
-            // Archived ids are a set on this client, so the host's own
-            // archive order is not recoverable here.
-            archivedSessions = ui.sessions.filter { it.id in ui.archivedSessionIds },
-            workspaces = ui.workspaces,
-            sessionsLoading = ui.sessionsLoading,
-            onUnarchive = actions.unarchiveSession,
         )
     }
 
@@ -3780,25 +3808,44 @@ private fun BranchFromMessageDialog(
  *
  * ## Why the sub-page is state here and not a second pager
  *
- * A settings tab is a *stack*, not a sibling: you go in and come back out. A pager
- * would make the tabs swipeable as if they were places beside each other, and it would
- * put the reader's position in a structure that is not showing them where they are.
+ * A settings tab is a *stack*, not a sibling: you go in and come back out. A pager would
+ * make the tabs swipeable as if they were places beside each other, and it would put the
+ * reader's position in a structure that is not showing them where they are.
  *
- * ## What the tabs are, today
+ * ## What the tabs are (3.5b)
  *
- * Placeholders, deliberately. The shape is what this step fixes — identity on top, a
- * list of tabs, each opening its own page — and the content of each tab is its own PR.
- * The one thing not left open is the header, because "whose account is this and what is
- * left on it" is already known and is the reason the page reads as *me* rather than as a
- * preferences screen.
+ * Real pages. Each one composes the card the Settings sheet composes for that subject
+ * (`ui/settings/SettingsCards.kt`), so the two surfaces cannot disagree about a row or
+ * about the host's write rules. The tab is the section with room to breathe; the sheet is
+ * the whole document.
+ *
+ * **About** is the one exception, and it is not a page: it opens the About *sheet*, which
+ * is a document about the host — connection, certificate, session, sign-out — rather than
+ * a setting. Drawing it inside this page's column would put a second Close button on a
+ * screen that already has a back arrow, and would hide the sign-out action behind a tab
+ * nobody associates with it.
+ *
+ * ## Back
+ *
+ * A sub-page is on top of the page, so Back has to leave it before it leaves Me. That
+ * handler is registered here rather than in the ordered one above because this is where
+ * the state is — and because it must win over "return to Chat", which is the press the
+ * reader would otherwise get.
  */
 @Composable
 private fun MeDestination(
     username: String,
     balance: BalanceState,
+    settings: MeSettingsState,
+    settingsActions: MeSettingsActions,
+    onOpenAbout: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     var openTab by rememberSaveable { mutableStateOf<String?>(null) }
     val tab = openTab?.let { id -> ME_ENTRIES.firstOrNull { it.id == id } }
+    if (tab != null) {
+        BackHandler { openTab = null }
+    }
     if (tab == null) {
         MeTab(
             username = username,
@@ -3808,14 +3855,43 @@ private fun MeDestination(
                 // The figure the stat pills already lead with: the whole total for the
                 // currency the account is billed in, not a derived number. Null when the
                 // reply carried no currency, and the header then draws only the name.
-                state.account.primary?.let { info -> "Balance · ${info.totalBalance} ${info.currency}" }
+                state.account.primary?.let { info ->
+                    "Balance · " + info.totalBalance + " " + info.currency
+                }
             },
             entries = ME_ENTRIES,
-            onOpen = { openTab = it.id },
+            onOpen = { entry ->
+                // About is the sheet, not a page: see this function's note.
+                if (entry.id == "about") onOpenAbout() else openTab = entry.id
+            },
         )
     } else {
-        MeSubPage(title = tab.title, onBack = { openTab = null }) {
-            PlaceholderTab(title = tab.title, summary = tab.summary, icon = tab.icon)
+        MeSubPage(
+            title = tab.title,
+            onBack = { openTab = null },
+            // The sheet's own reach: Settings remains a complete document, and the tab is
+            // one section of it. Nothing on the page needs the full sheet, but a reader
+            // who wants the rest of the document should not have to leave Me to find it.
+            trailing = {
+                Text(
+                    text = "All settings",
+                    style = DshType.bodySmall,
+                    color = DshTheme.colors.link,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(DshRadius.sm))
+                        .clickableNoRipple(onClick = onOpenSettings)
+                        .padding(DshSpacing.sm),
+                )
+            },
+        ) {
+            // The page takes the height the back bar leaves; the page owns its own scroll,
+            // so the bar never scrolls away with the rows.
+            MeSettingsPage(
+                id = tab.id,
+                state = settings,
+                actions = settingsActions,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }

@@ -5,6 +5,7 @@
 package uk.xa0.dsh.ui.list
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -55,6 +57,7 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.LocalDismissState
 import top.yukonga.miuix.kmp.window.WindowListPopup
+import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
@@ -114,9 +117,22 @@ fun SegmentedColumn(
             )
         }
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            // `codeBlock`, not `bgLayer1`: in this app's light palette every layer token is
+            // pure white (`bgBase` through `bgLayer3` are all `#FFFFFF`), so a card filled
+            // with one of them is invisible against the page — the rows read as a bare list
+            // with hairlines, which is what the first recording of the Me pages showed.
+            // `codeBlock` is the app's existing "recessed surface" token (`#F9FAFB` light /
+            // `#1B1B1C` dark) and is what the Settings sheet's own cards were drawn with
+            // before this vocabulary replaced them, so the two surfaces agree.
+            //
+            // The hairline is the other half: on a white page the fill alone is a 2-value
+            // difference, and the border is what makes the card's edge a line rather than a
+            // guess. Same 0.5dp/`borderL1` pair the old cards used.
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(0.5.dp, colors.borderL1, RoundedCornerShape(DshRadius.card)),
             colors = CardDefaults.defaultColors(
-                color = colors.bgLayer1,
+                color = colors.codeBlock,
                 contentColor = colors.labelPrimary,
             ),
         ) {

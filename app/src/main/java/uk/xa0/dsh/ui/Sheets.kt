@@ -52,10 +52,8 @@ import uk.xa0.dsh.ContextBreakdown
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.ModelOption
 import uk.xa0.dsh.PermissionOption
-import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.WorkspaceItem
 import uk.xa0.dsh.model.ConnectionRestart
-import uk.xa0.dsh.model.HostSettings
 import uk.xa0.dsh.model.HostVersion
 import uk.xa0.dsh.model.ModelChoice
 import uk.xa0.dsh.model.RouterProbeResult
@@ -64,6 +62,8 @@ import uk.xa0.dsh.net.AcceptedCert
 import uk.xa0.dsh.net.CertReadout
 import uk.xa0.dsh.net.DoorFault
 import uk.xa0.dsh.ui.components.DshTextField
+import uk.xa0.dsh.ui.settings.MeSettingsActions
+import uk.xa0.dsh.ui.settings.MeSettingsState
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -71,40 +71,12 @@ import uk.xa0.dsh.ui.theme.DshType
 import java.security.cert.X509Certificate
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSheet(
-    themeMode: String,
-    agentPreset: String,
-    onTheme: (String) -> Unit,
-    onPreset: (String) -> Unit,
-    busyEnter: String,
-    onBusyEnter: (String) -> Unit,
+    state: MeSettingsState,
+    actions: MeSettingsActions,
     onDismiss: () -> Unit,
-    // Everything below is the read-only parity data. Each default keeps the
-    // existing ChatScreen call compiling, and the parent wires the real UiState
-    // values into the same names.
-    models: List<ModelOption> = emptyList(),
-    providerOrder: List<String> = emptyList(),
-    permissionOptions: List<PermissionOption> = emptyList(),
-    defaultPermission: String = "",
-    transcriptView: String = "compact",
-    agentPresetOptions: List<AgentPresetOption> = emptyList(),
-    agentModePickerEnabled: Boolean = true,
-    archivedSessions: List<SessionItem> = emptyList(),
-    workspaces: List<WorkspaceItem> = emptyList(),
-    sessionsLoading: Boolean = false,
-    onUnarchive: ((String) -> Unit)? = null,
-    /**
-     * The host's own settings document, read when the sheet opens. All defaulted,
-     * so a caller that passes none of it gets the client-local rows as before.
-     */
-    hostSettings: HostSettings? = null,
-    hostSettingsLoading: Boolean = false,
-    hostSettingsError: String? = null,
-    settingsSaving: String? = null,
-    settingsWriteError: String? = null,
-    onSettingWrite: ((String, String, String) -> Unit)? = null,
 ) {
     val colors = DshTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -114,36 +86,15 @@ fun SettingsSheet(
         sheetState = sheetState,
         containerColor = colors.bgBase,
     ) {
-        // The web sections and their order live in `SettingsContent`; this
-        // entry point stays in `uk.xa0.dsh.ui` because ChatScreen opens it by
-        // that name. The non-settable facts that used to be bolted on the end
-        // now have their own surface — `AboutSheet` below.
-        SettingsContent(
-            themeMode = themeMode,
-            busyEnter = busyEnter,
-            onTheme = onTheme,
-            onBusyEnter = onBusyEnter,
-            defaultPermission = defaultPermission,
-            permissionOptions = permissionOptions,
-            transcriptView = transcriptView,
-            models = models,
-            providerOrder = providerOrder,
-            agentPreset = agentPreset,
-            agentPresetOptions = agentPresetOptions,
-            agentModePickerEnabled = agentModePickerEnabled,
-            archivedSessions = archivedSessions,
-            workspaces = workspaces,
-            sessionsLoading = sessionsLoading,
-            hostSettings = hostSettings,
-            hostSettingsLoading = hostSettingsLoading,
-            hostSettingsError = hostSettingsError,
-            settingsSaving = settingsSaving,
-            settingsWriteError = settingsWriteError,
-            onSettingWrite = onSettingWrite,
-            onPreset = onPreset,
-            onUnarchive = onUnarchive,
-            onDismiss = onDismiss,
-        )
+        // The web sections and their order live in `SettingsContent`; this entry point
+        // stays in `uk.xa0.dsh.ui` because ChatScreen opens it by that name. The
+        // non-settable facts that used to be bolted on the end now have their own
+        // surface — `AboutSheet` below.
+        //
+        // One state holder and one bundle of acts, not thirty arguments: the sheet draws
+        // the same cards the Me page's tabs draw (3.5b), so the two surfaces cannot drift
+        // on the host-write rules. See `ui/settings/MeSettings.kt`.
+        SettingsContent(state = state, actions = actions, onDismiss = onDismiss)
     }
 }
 
