@@ -1178,13 +1178,20 @@ internal fun ChatPanel(
                 // On the pager rather than on the Column because the *bar itself* must not
                 // be part of what the bar blurs: the pager is the content behind it, and
                 // nothing else in this column is.
-                // The pages stop above the bar. `BarHeight` is read from the bar itself rather
-                // than copied, so the reserved strip cannot drift away from what is drawn in
-                // it: the overlay takes the bottom of the page, and this is what keeps the
-                // composer, the pills and every other page's last row out from under it.
+                // The pages run **to the bottom of the screen**, behind the bar (3.2c).
+                //
+                // They used to stop above it, which is why the transcript could slide under
+                // the floating composer but never under the bar: the bar's strip was reserved
+                // layout, so nothing was ever painted there for the material to refract.
+                // Reported from a device exactly that way — "it slides into the composer but
+                // not into the bar".
+                //
+                // Nothing is lost by removing the reservation. Each page already keeps its own
+                // last row clear: the conversation through its composer stack's measured bottom
+                // padding, the others through their own content padding. What the strip cost
+                // was the one thing the bar exists for.
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = BAR_OVERLAY)
                     .glassBarLayer(glassBackdrop),
                 // Deliberately no `beyondViewportPageCount`: a page off screen is not
                 // composed. Shell holds a live terminal canvas and Trajectory a full
@@ -1672,6 +1679,13 @@ internal fun ChatPanel(
                         Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
+                            // Lifted clear of the bar. The pages run behind the bar now (so
+                            // the material has something to refract), which means the
+                            // composer would otherwise sit *under* it — measured on the
+                            // first recording of this: the bar covered the input's first
+                            // line. The lift is the bar's own height plus the gap it is
+                            // drawn at, so the two cannot drift apart.
+                            .padding(bottom = BarHeight + BAR_BOTTOM_GAP)
                             .onSizeChanged { composerStackPx = it.height },
                     ) {
 
@@ -1911,7 +1925,7 @@ internal fun ChatPanel(
                     backdrop = glassBackdrop,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = DshSpacing.md),
+                        .padding(bottom = BAR_BOTTOM_GAP),
                 )
             }
             }
@@ -3101,14 +3115,13 @@ private const val MAX_RAIL_TICKS = 22
 private val RAIL_WIDTH = 22.dp
 
 /**
- * How much of the screen bottom the floating bar owns.
+ * The gap between the floating bar and the bottom edge of the screen.
  *
- * The bar's height comes from the bar (`:design`'s `BarHeight`) and the gap is the one the
- * call site pads it by; together they are what the pager must leave clear. Stated once so
- * the two cannot disagree — the failure mode is a composer sitting under the glass, which
- * reads as a rendering bug rather than as a missing padding.
+ * Only the gap: the bar's own height is the bar's business, and nothing reserves either any
+ * more. The pages run to the bottom so the material has something behind it — see the pager's
+ * modifier — and each page keeps its own last row clear through its content padding.
  */
-private val BAR_OVERLAY = BarHeight + DshSpacing.md
+private val BAR_BOTTOM_GAP = DshSpacing.md
 
 /** Sidebar width; `drawerDrag` needs it to know what a full travel is. */
 private val DRAWER_WIDTH = 300.dp
