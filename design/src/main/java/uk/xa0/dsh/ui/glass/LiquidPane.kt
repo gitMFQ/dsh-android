@@ -5,7 +5,6 @@
 package uk.xa0.dsh.ui.glass
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +36,16 @@ import uk.xa0.dsh.ui.theme.DshTheme
  * The shadow is not here: the caller applies [glassLift] *outside* this surface, so the
  * offset arithmetic lives with the other lift, and a light appearance still declines to
  * draw one.
+ *
+ * ## The liquid tier has no hairline
+ *
+ * The three tiers draw the same *design* but not the same *edges*. A flat or translucent
+ * pane needs its 0.5dp stroke ([glassSurface]) because there is no other boundary between
+ * it and the page. A liquid pane already has one: the lens refracts the content behind it
+ * and the blur softens it, so a drawn line on top reads as a sticker outline rather than
+ * the rim of a sheet of glass — measured against the reference app, whose liquid surfaces
+ * carry no stroke at all, only that refracted rim. So the stroke is the flat tiers'
+ * property, not the material's, and it is deliberately absent here.
  *
  * [tint] is an optional wash over the material's own container colour, for the one control
  * that has a state colour of its own (plan mode's accent). It is drawn on the surface
@@ -79,7 +88,6 @@ fun Modifier.liquidPane(
             },
         )
         .clip(shape)
-        .border(0.5.dp, colors.borderL3, shape)
 }
 
 /**

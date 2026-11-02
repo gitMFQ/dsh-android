@@ -77,6 +77,7 @@ import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.ComposerAccessoryRail
 import uk.xa0.dsh.ui.components.ComposerDock
 import uk.xa0.dsh.ui.components.FilesPanel
+import uk.xa0.dsh.ui.components.FullScreenComposer
 import uk.xa0.dsh.ui.nav.FloatingBottomBar
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -782,6 +783,44 @@ class ScreenBaselineTest {
             terminal = { Modifier.fillMaxSize() },
         )
     }
+    /**
+     * Full-screen writing, the screen the selection toolbar's "Full screen" row opens.
+     *
+     * A fixture rather than an interaction: reaching this surface needs a text selection
+     * and its toolbar, which the harness cannot make. What is pinned is the frame — the
+     * close seat and send in the header, the draft's own large field, the attachments above
+     * it and the `+` on the floor — because a full-screen editor that is merely a bigger
+     * copy of the bar is exactly the kind of screen nobody tests until it is wrong.
+     */
+    @Test
+    fun composerFullScreen() {
+        capture("composer-fullscreen") {
+            val state = remember {
+                TextFieldState(
+                    "Re-skin the shell, one screen at a time.\n" +
+                        "This line is here to show the field's line height at full width.",
+                )
+            }
+            FullScreenComposer(
+                state = state,
+                running = false,
+                attachments = listOf(
+                    PendingAttachment(
+                        id = "att-1",
+                        name = "screenshot.png",
+                        bytes = 184_320,
+                        mediaType = "image/png",
+                    ),
+                ),
+                onRemoveAttachment = {},
+                onToggleCommands = {},
+                onSend = {},
+                onStop = {},
+                onClose = {},
+            )
+        }
+    }
+
     /**
      * The Me page: identity on top, the settings tabs under it (3.3).
      *

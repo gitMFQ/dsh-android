@@ -30,11 +30,13 @@ import uk.xa0.dsh.ui.theme.DshTheme
  * one figure each in the control rail, and each gates on its own reading. What is pinned
  * here is exactly the part the redesign could get wrong:
  *
- *  * a session with token activity and no closed step draws the cache pill alone (a real
+ *  * the speed reading is **always** present — a projection can arrive without a decode
+ *    window, and a pill that blinks out with it reads as broken; before the first figure
+ *    it states zero, after one it holds the last measured value;
+ *  * a session with token activity and no closed step draws the cache pill too (a real
  *    host shape — the connected host serves `tokenUsage` without `sessionStats`);
- *  * a session with closed steps and no billing draws the speed pill alone;
- *  * neither pill invents a figure the host did not report (no `0 tok/s`, no `Cache 0%`
- *    when there was no prompt-side input at all);
+ *  * a session with no billing draws no cache pill, and no claim about a cache share the
+ *    host never reported;
  *  * each pill opens its own panel, and a pill with no timing is a plain reading rather
  *    than a button onto an empty panel.
  *
@@ -137,16 +139,17 @@ class SessionStatsPillsTest {
     }
 
     @Test
-    fun `a token strip with no closed step draws only the cache pill`() {
+    fun `a token strip with no closed step still draws the speed pill`() {
         composeBoth(TOKEN_STRIP_ONLY)
 
-        rule.onNodeWithTag(STATS_SPEED_PILL_TAG).assertDoesNotExist()
+        rule.onNodeWithTag(STATS_SPEED_PILL_TAG).assertExists()
+        rule.onNodeWithText("0 tok/s", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag(STATS_CACHE_PILL_TAG).assertExists()
         rule.onNodeWithText("Cache 48%", useUnmergedTree = true).assertExists()
     }
 
     @Test
-    fun `closed steps without billing draw only the speed pill`() {
+    fun `closed steps without billing leave the speed pill alone`() {
         composeBoth(COUNTS_ONLY.copy(hasUsage = false))
 
         // COUNTS_ONLY has timing (decodeMs > 0) but no billed input or output, so the
@@ -157,10 +160,14 @@ class SessionStatsPillsTest {
     }
 
     @Test
-    fun `no projection draws nothing at all`() {
+    fun `no projection yet still shows the speed reading at rest`() {
         composeBoth(null)
 
-        rule.onNodeWithTag(STATS_SPEED_PILL_TAG).assertDoesNotExist()
+        // The rail is the conversation's instrument panel; the speed seat exists from the
+        // first frame, stating zero rather than vanishing. The cache share has no honest
+        // value before any billing, so it is absent.
+        rule.onNodeWithTag(STATS_SPEED_PILL_TAG).assertExists()
+        rule.onNodeWithText("0 tok/s", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag(STATS_CACHE_PILL_TAG).assertDoesNotExist()
     }
 
@@ -196,9 +203,10 @@ class SessionStatsPillsTest {
             SessionCachePill(stats = UNTIMED, backdrop = null)
         }
 
-        // No speed (nothing was timed) and no cache share (nothing was billed): both
-        // pills are absent rather than empty shells.
-        rule.onNodeWithTag(STATS_SPEED_PILL_TAG).assertDoesNotExist()
+        // Nothing was timed and nothing was billed: the speed pill states zero, the cache
+        // share is absent, and neither opens a panel it has no rows for.
+        rule.onNodeWithTag(STATS_SPEED_PILL_TAG).assertExists()
+        rule.onNodeWithText("0 tok/s", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag(STATS_CACHE_PILL_TAG).assertDoesNotExist()
         rule.onNodeWithText("Session statistics").assertDoesNotExist()
     }

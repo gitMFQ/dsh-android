@@ -82,5 +82,11 @@ for f in $FILES; do
 done
 
 cd "$WT"
-exec 9>&-
+# **The lock stays open across the build.** It used to be closed here
+# (`exec 9>&-`), which released the flock the moment Gradle started: two agents'
+# builds then overlapped and the `restore` trap of one clobbered the
+# `buildToolsVersion` the other had rewritten, producing "Failed to find Build
+# Tools revision 37.0.0" in a run whose code was fine. The child inherits the fd,
+# so the open file description keeps the lock until Gradle exits; the trap then
+# restores the build files while the lock is still held.
 "$GRADLE" -g "$GRADLE_USER_HOME" --no-daemon "$@"

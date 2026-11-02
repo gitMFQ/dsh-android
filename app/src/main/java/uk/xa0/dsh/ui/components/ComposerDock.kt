@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -116,16 +115,12 @@ fun ComposerDock(
     /** The `+` in the bar's leading edge: the command menu that writes into this field. */
     onToggleCommands: () -> Unit = {},
     showAttach: Boolean = true,
+    /** Asked by the selection toolbar's "Full screen" row. */
+    onFullscreen: () -> Unit = {},
     /** False on a wide window, where the rail owns navigation and the bar would duplicate it. */
     showNavigation: Boolean = true,
     /** False while a read-only subagent's frame claims the composer's seat. */
     showInput: Boolean = true,
-    /**
-     * Bumped by the caller on each *gesture* that opens the bar. The composer itself has
-     * no opinion about the keyboard: a bar opened by a tap should raise it, a wide layout
-     * that is simply always open should not.
-     */
-    imeRequest: Int = 0,
 ) {
     val navFull = barNaturalWidth(items.size)
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -133,6 +128,11 @@ fun ComposerDock(
         // The dock gives up exactly what the bar takes, so the row never resizes the
         // screen around it.
         val roomBesideDock = (available - CompactNavSize - DockGap).coerceAtLeast(0.dp)
+        // Collapsed, the tab bar **fills** the row: the four slots share everything the
+        // input gives up, so the dock's outer margins are the same 16dp in both shapes
+        // instead of the bar floating 41dp in from the edge. At 360dp the stretched width
+        // is exactly `barNaturalWidth`; wider phones spread the four slots.
+        val stretchedNavWidth = (available - DockGap - CompactNavSize).coerceAtLeast(navFull)
         val expandedWidth = if (showNavigation) {
             roomBesideDock.coerceAtMost(ExpandedInputMax)
         } else {
@@ -140,7 +140,7 @@ fun ComposerDock(
         }
 
         val navWidth by animateDpAsState(
-            targetValue = if (expanded && showNavigation) CompactNavSize else navFull,
+            targetValue = if (expanded && showNavigation) CompactNavSize else stretchedNavWidth,
             animationSpec = spring(dampingRatio = 0.8f, stiffness = 420f),
             label = "dockNavWidth",
         )
@@ -183,7 +183,7 @@ fun ComposerDock(
                     expanded = expanded,
                     width = navWidth,
                     height = navHeight,
-                    fullWidth = navFull,
+                    fullWidth = stretchedNavWidth,
                     items = items,
                     selectedKey = selectedKey,
                     onSelect = onSelect,
@@ -210,8 +210,8 @@ fun ComposerDock(
                     onToggleBusyEnter = onToggleBusyEnter,
                     onToggleCommands = onToggleCommands,
                     showAttach = showAttach,
+                    onFullscreen = onFullscreen,
                     backdrop = backdrop,
-                    imeRequest = imeRequest,
                     verticalNudge = inputNudge,
                 )
             }
@@ -282,12 +282,17 @@ private fun NavigationPane(
         items.firstOrNull { it.key == selectedKey }?.icon ?: items.firstOrNull()?.icon
     }
 
+    // Clip **only while folding**. At rest the tab bar's pressed tab grows past the panel
+    // (78/56 of the pill height, and a little past the shell on both axes) — that bloom is
+    // the material's whole press affordance, and clipping the box at rest cut it off. The
+    // fold needs the clip because the tab bar is measured at its full width inside a box
+    // that is shrinking; the resting shapes need none.
+    val folding = width < fullWidth - 0.5.dp
     Box(
         Modifier
             .width(width)
             .height(height)
-            .clip(CircleShape)
-            .clipToBounds(),
+            .then(if (folding) Modifier.clip(CircleShape).clipToBounds() else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         // Composed only while it has something to paint: once the fold has finished the
@@ -350,23 +355,22 @@ private fun InputPane(
     onToggleBusyEnter: () -> Unit,
     onToggleCommands: () -> Unit,
     showAttach: Boolean,
+    onFullscreen: () -> Unit,
     backdrop: GlassBarBackdrop?,
-    imeRequest: Int,
     verticalNudge: Dp,
 ) {
-    val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val shape = RoundedCornerShape(DshRadiusForCapsule)
 
-    // Only a gesture raises the keyboard. The wide layout composes this always-open and
-    // must not steal focus on every recomposition.
-    LaunchedEffect(imeRequest, expanded) {
-        if (expanded && imeRequest > 0) {
-            runCatching { focusRequester.requestFocus() }
-            keyboard?.show()
-        }
-    }
+    // ## The dock never raises the keyboard by itself
+    //
+    // Opening the bar with the circle (or collapsing it again) is a *shape* gesture, not
+    // a request to type: it used to request focus and show the IME, so putting the dock
+    // back to its resting shape — or asking for the navigation — threw a keyboard over the
+    // transcript. The field is still focusable and a tap on it opens the keyboard the
+    // ordinary way; nothing else does. Collapsing clears focus so a keyboard raised by a
+    // tap does not outlive the bar it belonged to.
     LaunchedEffect(expanded) {
         if (!expanded) {
             focusManager.clearFocus(force = true)
@@ -413,7 +417,7 @@ private fun InputPane(
                 onToggleBusyEnter = onToggleBusyEnter,
                 onToggleCommands = onToggleCommands,
                 showAttach = showAttach,
-                focusRequester = focusRequester,
+                onFullscreen = onFullscreen,
             )
         }
     }

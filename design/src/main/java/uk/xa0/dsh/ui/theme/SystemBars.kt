@@ -100,7 +100,12 @@ object SystemBars {
         // answer. `WindowBackground.apply` does need it — it paints a Monet *colour* —
         // and that is the difference between the two calls.
         val palette = dshPalette(themeMode, systemDark)
-        apply(activity, lightBackground = !palette.isDark, navigationBarColor = palette.bgBase.toArgb())
+        // Transparent, not the palette's base: the conversation now scrolls under the
+        // navigation bar (the screen no longer imposes its inset on the pager), so the
+        // strip has to show what is behind it rather than a slab of the app's background.
+        // The icon *appearance* still follows the palette, which is the part that has to
+        // stay legible over the content.
+        apply(activity, lightBackground = !palette.isDark, navigationBarColor = android.graphics.Color.TRANSPARENT)
     }
 
     /**
@@ -148,6 +153,12 @@ object SystemBars {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             @Suppress("DEPRECATION")
             window.navigationBarColor = navigationBarColor
+        } else {
+            // API 29+ draws its own contrast scrim over a transparent navigation bar. The
+            // screen now runs behind it on purpose, and the scrim would be the grey slab
+            // the transparency was meant to remove. The icons are kept legible by the
+            // appearance flag above, not by a scrim.
+            window.isNavigationBarContrastEnforced = false
         }
     }
 }

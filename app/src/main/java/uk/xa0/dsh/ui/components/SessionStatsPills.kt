@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,11 +83,18 @@ const val STATS_CACHE_PILL_TAG = "stats-pill-cache"
  */
 
 /**
- * Output speed, e.g. `123.4 tok/s`.
+ * Output speed, e.g. `123.4 tok/s` — present for the whole conversation, not only while
+ * the host happens to be reporting a decode window.
  *
- * Gated on `decodeMs > 0`, which is what makes the figure exist at all: an untimed
- * session has no speed to show, and an empty pill claiming `0 tok/s` would be a
- * measurement the host never took.
+ * ## Why it never disappears
+ *
+ * The figure is a projection: a new turn's first block can arrive without `decodeMs` and
+ * a fresh session has no timing at all, so a pill gated on the figure blinked out and back
+ * every time the projection moved — reported from the device as "sometimes shown,
+ * sometimes not". A reading that is *always* in the rail is the point of putting it there,
+ * so this holds the last figure the host reported and, before the first one, states zero.
+ * The rail's width changes with the number; its height does not, which is what keeps the
+ * transcript from moving.
  */
 @Composable
 fun SessionSpeedPill(
@@ -94,14 +102,22 @@ fun SessionSpeedPill(
     backdrop: GlassBarBackdrop?,
     modifier: Modifier = Modifier,
 ) {
-    if (stats == null || !stats.visible) return
-    val speed = stats.tokensPerSecondText ?: return
+    // The last measured figure, per composition of this rail. `SideEffect` rather than an
+    // assignment in the body so the state write happens after composition settles, the same
+    // discipline `rememberUpdatedState` follows.
+    var lastSpeed by remember { mutableStateOf<String?>(null) }
+    val reported = stats?.tokensPerSecondText
+    SideEffect {
+        if (reported != null && reported != lastSpeed) lastSpeed = reported
+    }
+    val speed = reported ?: lastSpeed ?: "0"
     var open by remember { mutableStateOf(false) }
+    val canOpen = stats?.hasTiming == true
 
     Box(modifier.testTag(STATS_SPEED_PILL_TAG)) {
         GlassPill(
             backdrop = backdrop,
-            onClick = if (stats.hasTiming) ({ open = !open }) else null,
+            onClick = if (canOpen) ({ open = !open }) else null,
             pillDescription = "Output speed, $speed tokens per second",
         ) {
             Icon(
@@ -118,7 +134,7 @@ fun SessionSpeedPill(
                 maxLines = 1,
             )
         }
-        if (open) {
+        if (open && stats != null) {
             PillPopover(onDismiss = { open = false }) {
                 StatPanel(title = "Session statistics") {
                     // A row is absent, not zeroed: an untimed figure is not the same

@@ -58,14 +58,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
@@ -79,6 +75,9 @@ import kotlinx.coroutines.withContext
 import uk.xa0.dsh.model.QueueAttachment
 import uk.xa0.dsh.model.QueuedMessage
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -131,6 +130,7 @@ fun QueueDock(
     onRemove: (String) -> Unit,
     onSteer: (String) -> Unit,
     modifier: Modifier = Modifier,
+    backdrop: GlassBarBackdrop? = null,
 ) {
     val colors = DshTheme.colors
 
@@ -161,12 +161,12 @@ fun QueueDock(
     // the panel has to keep its rows until the shrink finishes.
     val listVisible = shown.size == 1 || expanded
 
-    val panelShape = RoundedCornerShape(
-        topStart = DshRadius.card,
-        topEnd = DshRadius.card,
-        bottomStart = 0.dp,
-        bottomEnd = 0.dp,
-    )
+    // A full card again, all four corners: the panel used to tuck under the composer
+    // card's top edge (which is why its bottom corners were square and its hairline was
+    // drawn on three sides only). The queue floats above the accessory rail now, so the
+    // tuck — and the notch its open path existed to hide — is gone. It wears the same
+    // liquid glass as the to-dos and the dock, lifted the same way.
+    val panelShape = RoundedCornerShape(DshRadius.card)
 
     AnimatedVisibility(
         visible = items.isNotEmpty(),
@@ -183,45 +183,8 @@ fun QueueDock(
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(panelShape)
-                .background(colors.tip)
-                // The web draws this outline with `border-bottom: none`: the
-                // composer card's own top edge closes the shape, so a line here
-                // would trace the very seam the two are supposed to share. A
-                // plain `Modifier.border` draws all four sides, and its bottom
-                // stroke pokes out of the tuck beside the card's rounded top
-                // corners — the little notch that made the join read as two
-                // panels. Hence the open path: top, left and right only.
-                .drawWithContent {
-                    drawContent()
-                    val stroke = HAIRLINE.toPx()
-                    val inset = stroke / 2f
-                    val radius = DshRadius.card.toPx()
-                    val path = Path().apply {
-                        moveTo(inset, size.height)
-                        lineTo(inset, inset + radius)
-                        arcTo(
-                            Rect(inset, inset, inset + 2 * radius, inset + 2 * radius),
-                            180f,
-                            90f,
-                            false,
-                        )
-                        lineTo(size.width - inset - radius, inset)
-                        arcTo(
-                            Rect(size.width - inset - 2 * radius, inset, size.width - inset, inset + 2 * radius),
-                            270f,
-                            90f,
-                            false,
-                        )
-                        lineTo(size.width - inset, size.height)
-                    }
-                    drawPath(path, colors.borderL1, style = Stroke(width = stroke))
-                }
-                // The bottom padding is the caller's tuck's hidden skirt: the
-                // panel's painted bottom edge has to reach past the composer
-                // card's 22dp corner arc (see the ChatScreen call site), but its
-                // top edge and rows must not move, so the extra 4dp of tuck is
-                // taken here rather than by growing the dock upward.
+                .glassLift(panelShape)
+                .liquidPane(backdrop, panelShape)
                 .padding(top = DshSpacing.xs, bottom = DshSpacing.md),
         ) {
             AnimatedVisibility(
