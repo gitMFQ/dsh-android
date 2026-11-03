@@ -37,6 +37,24 @@ enum class WorkspaceEntryKind {
 }
 
 /**
+ * How the explorer orders one level.
+ *
+ * Three, and no "reverse" variant: each already names the direction a reader means by
+ * it. [NAME] is the host's collation (natural, case-insensitive); [SIZE] puts the
+ * largest file first, because "sort by size" is asked to find the big thing; [RECENT]
+ * puts the file the session touched most recently first, which is a fact about the
+ * transcript rather than about the disk — the listing carries no mtime.
+ *
+ * Directories lead in every one of them, so this is never the control that decides
+ * where navigation lives.
+ */
+enum class ExplorerOrder {
+    NAME,
+    SIZE,
+    RECENT,
+}
+
+/**
  * One direct child of a listed directory.
  *
  * [hidden] is derived from the name rather than carried: the host has no notion
@@ -200,6 +218,102 @@ object WorkspaceExplorer {
                 val byKind = kindRank(left.kind) - kindRank(right.kind)
                 if (byKind != 0) byKind else compareNatural(left.name, right.name)
             })
+    }
+
+    /**
+     * The same fold, plus the two things a reader with a large directory needs: a
+     * name filter and an order other than the default.
+     *
+     * [query] is matched case-insensitively against the name only — not the path, and
+     * not the contents. A filter that searched contents would be a different feature
+     * with a different cost: the host has no content search over a directory listing,
+     * and a reader typing into this field is looking for a row whose name they can
+     * already half-remember. A blank query filters nothing, so `null` and `""` behave
+     * alike.
+     *
+     * [order] never changes *which* rows appear, only their sequence, and directories
+     * always lead in every order: a listing whose folders were interleaved with files
+     * by size would make the one navigation affordance harder to find than the files it
+     * is hiding.
+     */
+    fun visibleEntries(
+        listing: WorkspaceListing,
+        badges: Map<String, SessionFile>,
+        showHidden: Boolean,
+        order: ExplorerOrder,
+        query: String?,
+    ): List<WorkspaceEntry> {
+        val needle = query?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        val rows = listing.entries.filter { entry ->
+            val visible = showHidden || !entry.hidden || badges.containsKey(listing.childPath(entry))
+            // The filter applies *on top of* the hidden rule rather than instead of it:
+            // a hidden file the session touched is still drawable, and a reader who
+            // typed a name is asking for that row specifically.
+            visible && (needle == null || entry.name.lowercase().contains(needle))
+        }
+        return rows.sortedWith(comparatorWithBadges(order, listing, badges))
+    }
+
+    /**
+     * Largest first, with "no size" ahead of every real one.
+     *
+     * The rows without a size are directories and the host's `other` kind, and they
+     * already lead by kind — this branch is only reached when two of them are compared,
+     * where name order is the only sensible tiebreak. Among files the largest comes
+     * first because that is the question "order by size" answers: a reader sorting by
+     * size is looking for the big thing, not the small one.
+     */
+    private fun compareBySize(left: WorkspaceEntry, right: WorkspaceEntry): Int {
+        val a = left.size
+        val b = right.size
+        return when {
+            a == null && b == null -> compareNatural(left.name, right.name)
+            a == null -> -1
+            b == null -> 1
+            else -> {
+                val bySize = b.compareTo(a)
+                if (bySize != 0) bySize else compareNatural(left.name, right.name)
+            }
+        }
+    }
+
+    /**
+     * The order comparator, given the badges — the only place `lastSeq` exists.
+     *
+     * `RECENT` is [SessionFile.lastSeq], the transcript's own sequence number, and
+     * **not** a filesystem mtime: `workspaceFiles/list` reports no mtime at all. That
+     * makes the order a fact about the session rather than about the disk, which is the
+     * only kind of recency this panel can honestly claim — a file the agent wrote a
+     * minute ago outranks one written last week, and a file the session never touched
+     * has no position at all, so it falls to the end in name order.
+     */
+    private fun comparatorWithBadges(
+        order: ExplorerOrder,
+        listing: WorkspaceListing,
+        badges: Map<String, SessionFile>,
+    ): Comparator<WorkspaceEntry> = Comparator { left, right ->
+        val byKind = kindRank(left.kind) - kindRank(right.kind)
+        if (byKind != 0) {
+            byKind
+        } else {
+            when (order) {
+                ExplorerOrder.NAME -> compareNatural(left.name, right.name)
+                ExplorerOrder.SIZE -> compareBySize(left, right)
+                ExplorerOrder.RECENT -> {
+                    val a = badges[listing.childPath(left)]?.lastSeq
+                    val b = badges[listing.childPath(right)]?.lastSeq
+                    when {
+                        a == null && b == null -> compareNatural(left.name, right.name)
+                        a == null -> 1
+                        b == null -> -1
+                        else -> {
+                            val bySeq = b.compareTo(a)
+                            if (bySeq != 0) bySeq else compareNatural(left.name, right.name)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**

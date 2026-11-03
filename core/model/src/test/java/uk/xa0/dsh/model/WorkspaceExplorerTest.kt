@@ -228,4 +228,129 @@ class WorkspaceExplorerTest {
         assertEquals("project", WorkspaceExplorer.basename("/home/user/project/"))
         assertEquals("/", WorkspaceExplorer.basename("/"))
     }
+
+    // ------------------------------------------------------ order and filter
+
+    /** A file entry carrying a size, for the orders that need one. */
+    private fun sized(name: String, size: Long) =
+        WorkspaceEntry(name, WorkspaceEntryKind.FILE, size = size)
+
+    private fun names(
+        listing: WorkspaceListing,
+        badges: Map<String, SessionFile> = emptyMap(),
+        order: ExplorerOrder = ExplorerOrder.NAME,
+        query: String? = null,
+        showHidden: Boolean = false,
+    ) = WorkspaceExplorer
+        .visibleEntries(listing, badges, showHidden, order, query)
+        .map { it.name }
+
+    @Test
+    fun `size order puts the largest file first`() {
+        val listing = level(
+            sized("small.txt", 10),
+            sized("huge.bin", 9_000),
+            sized("medium.log", 500),
+        )
+
+        assertEquals(
+            listOf("huge.bin", "medium.log", "small.txt"),
+            names(listing, order = ExplorerOrder.SIZE),
+        )
+    }
+
+    @Test
+    fun `size order keeps directories ahead of every file`() {
+        // A directory has no size at all. It must not be treated as the smallest file:
+        // it is the row that cannot be sorted by size, and it is also the only
+        // navigation affordance in the list.
+        val listing = level(
+            sized("huge.bin", 9_000),
+            entry("src", WorkspaceEntryKind.DIRECTORY),
+            sized("small.txt", 10),
+        )
+
+        assertEquals(
+            listOf("src", "huge.bin", "small.txt"),
+            names(listing, order = ExplorerOrder.SIZE),
+        )
+    }
+
+    @Test
+    fun `recent order follows the transcript, not the disk`() {
+        val listing = level(sized("old.txt", 1), sized("new.txt", 1), sized("mid.txt", 1))
+        val badges = mapOf(
+            "old.txt" to touched("old.txt", listOf(FileTouch.READ), firstSeq = 1, lastSeq = 3),
+            "new.txt" to touched("new.txt", listOf(FileTouch.READ), firstSeq = 9, lastSeq = 42),
+            "mid.txt" to touched("mid.txt", listOf(FileTouch.READ), firstSeq = 5, lastSeq = 11),
+        )
+
+        assertEquals(
+            listOf("new.txt", "mid.txt", "old.txt"),
+            names(listing, badges, order = ExplorerOrder.RECENT),
+        )
+    }
+
+    @Test
+    fun `a file the session never touched sorts last in recent order`() {
+        // It has no position in the transcript at all, which is not the same as "old".
+        // Putting it first would claim the session had touched it before everything.
+        val listing = level(sized("touched.txt", 1), sized("untouched.txt", 1))
+        val badges = mapOf(
+            "touched.txt" to touched("touched.txt", listOf(FileTouch.READ), lastSeq = 7),
+        )
+
+        assertEquals(
+            listOf("touched.txt", "untouched.txt"),
+            names(listing, badges, order = ExplorerOrder.RECENT),
+        )
+    }
+
+    @Test
+    fun `the filter matches the name case-insensitively`() {
+        val listing = level(sized("README.md", 1), sized("notes.md", 1), sized("readme.txt", 1))
+
+        assertEquals(listOf("README.md", "readme.txt"), names(listing, query = "read"))
+        assertEquals(listOf("README.md", "readme.txt"), names(listing, query = "READ"))
+    }
+
+    @Test
+    fun `a blank filter filters nothing`() {
+        val listing = level(sized("a.txt", 1), sized("b.txt", 1))
+
+        assertEquals(listOf("a.txt", "b.txt"), names(listing, query = null))
+        assertEquals(listOf("a.txt", "b.txt"), names(listing, query = ""))
+        assertEquals(listOf("a.txt", "b.txt"), names(listing, query = "   "))
+    }
+
+    @Test
+    fun `the filter is applied on top of the hidden rule, not instead of it`() {
+        // A hidden file the session never touched is not drawable at all, so typing its
+        // name must not surface it: the filter narrows what may be drawn, it does not
+        // widen it.
+        val listing = level(sized(".env", 1), sized("env.txt", 1))
+
+        assertEquals(listOf("env.txt"), names(listing, query = "env"))
+        assertEquals(listOf(".env", "env.txt"), names(listing, showHidden = true, query = "env"))
+    }
+
+    @Test
+    fun `the order never changes which rows appear`() {
+        val listing = level(
+            sized("b.txt", 9),
+            entry("src", WorkspaceEntryKind.DIRECTORY),
+            sized("a.txt", 1),
+        )
+
+        val byName = names(listing, order = ExplorerOrder.NAME)
+        val bySize = names(listing, order = ExplorerOrder.SIZE)
+        val byRecent = names(listing, order = ExplorerOrder.RECENT)
+
+        assertEquals(byName.toSet(), bySize.toSet())
+        assertEquals(byName.toSet(), byRecent.toSet())
+        // ...and the sequence is what actually differs, or this test would pass on an
+        // implementation that ignored the parameter.
+        assertEquals(listOf("src", "a.txt", "b.txt"), byName)
+        assertEquals(listOf("src", "b.txt", "a.txt"), bySize)
+    }
 }

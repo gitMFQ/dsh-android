@@ -55,6 +55,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,6 +71,7 @@ import uk.xa0.dsh.diag.diagOffset
 import uk.xa0.dsh.model.FileDownloader
 import uk.xa0.dsh.model.FilePreview
 import uk.xa0.dsh.model.FileTouch
+import uk.xa0.dsh.model.ExplorerOrder
 import uk.xa0.dsh.model.ExplorerState
 import uk.xa0.dsh.model.PreviewFormat
 import uk.xa0.dsh.model.PreviewLine
@@ -436,6 +439,11 @@ private fun ExplorerPane(
         is ExplorerState.Failed -> state.path
         ExplorerState.Idle -> ""
     }
+    // The level's own view state. Both reset when the level changes — a filter typed
+    // for `out/` must not silently hide rows in `src/`, which would read as an empty
+    // directory rather than as a filter still being applied.
+    var query by rememberSaveable(current) { mutableStateOf("") }
+    var order by rememberSaveable(current) { mutableStateOf(ExplorerOrder.NAME) }
     val crumbScroll = rememberScrollState()
     // Following `maxValue` rather than the path: the row's width is only known
     // after layout, and the effect body runs before it — keyed on the path alone
@@ -443,9 +451,18 @@ private fun ExplorerPane(
     LaunchedEffect(crumbScroll) {
         snapshotFlow { crumbScroll.maxValue }.collect { crumbScroll.scrollTo(it) }
     }
-    val entries = remember(listing, badges, showHidden) {
-        listing?.let { WorkspaceExplorer.visibleEntries(it, badges, showHidden) }.orEmpty()
+    val entries = remember(listing, badges, showHidden, order, query) {
+        listing?.let { WorkspaceExplorer.visibleEntries(it, badges, showHidden, order, query) }
+            .orEmpty()
     }
+    // Whether the *unfiltered* level has rows. The two empty states are different
+    // facts — "this directory is empty" and "your filter matched nothing" — and a
+    // reader who typed has to be told which one they are looking at.
+    val levelHasRows = remember(listing, badges, showHidden) {
+        listing?.let { WorkspaceExplorer.visibleEntries(it, badges, showHidden) }.orEmpty()
+            .isNotEmpty()
+    }
+    val clipboard = LocalClipboardManager.current
 
     Column(modifier) {
         Row(
@@ -495,6 +512,82 @@ private fun ExplorerPane(
             )
         }
 
+        // The level's toolbar: where you can go, what you can do with the path, and
+        // how the rows are arranged.
+        //
+        // "Up" is drawn as a control rather than left to the breadcrumb because the
+        // breadcrumb's segments are only as wide as their names, and on a deep path
+        // the ancestor a reader wants is the one scrolled off the left edge. It is
+        // disabled — not hidden — at the workspace root: the host confines
+        // `workspaceFiles/list` to the session's root, so there is genuinely nowhere
+        // above it, and a control that vanishes at one level teaches the reader that
+        // it cannot be relied on.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DshSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
+        ) {
+            val parent = current.substringBeforeLast('/', missingDelimiterValue = "")
+            val atRoot = current.isEmpty()
+            ExplorerAction(
+                label = "Up",
+                enabled = !atRoot,
+                onClick = { onList(parent) },
+            )
+            // The path as the host spells it, which is what a tool call or a shell
+            // command in this workspace needs. The breadcrumb above is shortened for
+            // reading; this is the one place the exact string is available.
+            ExplorerAction(
+                label = "Copy path",
+                enabled = listing != null,
+                onClick = {
+                    val exact = if (current.isEmpty()) root else "$root/$current"
+                    clipboard.setText(AnnotatedString(exact))
+                },
+            )
+            Spacer(Modifier.weight(1f))
+            // Three orders, as a cycling chip rather than a menu: with three values and
+            // no other option on the row, a popup costs two taps to change one word.
+            ExplorerAction(
+                label = when (order) {
+                    ExplorerOrder.NAME -> "Name"
+                    ExplorerOrder.SIZE -> "Size"
+                    ExplorerOrder.RECENT -> "Recent"
+                },
+                enabled = true,
+                active = order != ExplorerOrder.NAME,
+                onClick = {
+                    order = when (order) {
+                        ExplorerOrder.NAME -> ExplorerOrder.SIZE
+                        ExplorerOrder.SIZE -> ExplorerOrder.RECENT
+                        ExplorerOrder.RECENT -> ExplorerOrder.NAME
+                    }
+                },
+            )
+        }
+
+        // The filter. Only drawn once the level has something to filter: an empty
+        // directory with a search box over it reads as a search that failed.
+        if (levelHasRows) {
+            DshTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = "Filter this directory",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = DshSpacing.lg, vertical = DshSpacing.xs),
+                minHeight = 36.dp,
+                verticalPadding = DshSpacing.sm,
+                keyboardCapitalization = KeyboardCapitalization.None,
+                autoCorrect = false,
+                imeAction = ImeAction.Search,
+                onClear = { query = "" },
+                clearContentDescription = "Clear the filter",
+            )
+        }
+
         Row(
             Modifier.fillMaxWidth().padding(horizontal = DshSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
@@ -536,6 +629,13 @@ private fun ExplorerPane(
                 // held for the requested level either way, and the previous
                 // level's rows under a new breadcrumb would be a lie.
                 listing == null -> ExplorerNote("Loading…", Modifier.fillMaxSize())
+
+                // The two empty states are different facts. "Empty directory" is a
+                // statement about the host's answer; "no match" is a statement about
+                // the filter, and it names the word that caused it so the reader does
+                // not have to work out that they are the reason the list is blank.
+                entries.isEmpty() && levelHasRows ->
+                    ExplorerNote("Nothing here matches \"${query.trim()}\"", Modifier.fillMaxSize())
 
                 entries.isEmpty() -> ExplorerNote("Empty directory", Modifier.fillMaxSize())
 
@@ -583,6 +683,32 @@ private fun ExplorerPane(
             modifier = Modifier.padding(horizontal = DshSpacing.lg, vertical = DshSpacing.xs),
         )
     }
+}
+
+/** One word on the explorer's toolbar, with a disabled state that stays visible. */
+@Composable
+private fun ExplorerAction(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    active: Boolean = false,
+) {
+    val colors = DshTheme.colors
+    val tint = when {
+        !enabled -> colors.labelCaption
+        active -> colors.accent
+        else -> colors.labelSecondary
+    }
+    Text(
+        text = label,
+        style = DshType.bodySmall,
+        color = tint,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(DshRadius.sm))
+            .then(if (enabled) Modifier.clickableNoRipple(onClick = onClick) else Modifier)
+            .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xs),
+    )
 }
 
 /** One explorer row: kind icon, name, size, and the session's marks. */
