@@ -157,16 +157,18 @@ class ScreenBaselineTest {
 
     private fun capture(
         name: String,
+        // Explicit, never `ThemeMode.SYSTEM`. `DshTheme()` defaults to SYSTEM, which
+        // reads the device's night setting — so a baseline recorded on a light machine
+        // and compared on a dark one would fail for a reason that has nothing to do
+        // with the code. The appearance is a *parameter* rather than a constant
+        // because a palette is only pinned by a capture that names it: the light
+        // baselines said nothing about whether the dark one draws a card at all.
+        themeMode: String = ThemeMode.LIGHT,
         before: () -> Unit = {},
         content: @Composable () -> Unit,
     ) {
         rule.setContent {
-            // Light, explicitly. `DshTheme()` defaults to `ThemeMode.SYSTEM`, which
-            // reads the device's night setting — so a baseline recorded on a light
-            // machine and compared on a dark one would fail for a reason that has
-            // nothing to do with the code. The dark palette gets its own baselines
-            // when the re-skin starts touching colour.
-            DshTheme(themeMode = ThemeMode.LIGHT) {
+            DshTheme(themeMode = themeMode) {
                 // Glass off. Robolectric answers the capability test honestly — it is
                 // an SDK compare and the shadow platform ships the classes — but it has
                 // no GPU pipeline, and recording a backdrop there throws *during
@@ -266,6 +268,57 @@ class ScreenBaselineTest {
      */
     @Test
     fun drawer() {
+        capture("drawer") {
+            DrawerFixture()
+        }
+    }
+
+    /**
+     * The drawer in the dark appearance.
+     *
+     * ## Why a dark capture exists at all (and why only a few)
+     *
+     * Every baseline in this file used to be recorded under `ThemeMode.LIGHT`, which
+     * meant the seven appearances had **no pixel coverage whatsoever**: a change that
+     * only broke the dark palette — a card whose fill equalled the background, an
+     * accent that lost its contrast, a border that vanished on `#000` — passed the
+     * gate, because the gate only ever looked at light.
+     *
+     * That was the state of things while the shell was still being assembled. Once
+     * surfaces start being re-skinned (and once AMOLED and Monet become real options
+     * rather than settings that are merely stored), "does this colour still read?"
+     * has to be answerable by a diff rather than by a person squinting at a phone.
+     *
+     * ## Why these screens, and not all twenty
+     *
+     * Not a duplicate set: that would double the baseline count to pin palettes
+     * nobody has argued about yet, and every one of them would have to be re-recorded
+     * on every layout change. The three here are the colour-dense ones — the drawer's
+     * rows and chips, the transcript's pills and glass, and the Me page's segmented
+     * cards — and between them they exercise every role that matters: surface
+     * layering, `labelPrimary/Secondary/Tertiary`, `accent`, `borderL1/L3`, and the
+     * warning tint on `Full access`.
+     *
+     * A screen not captured here is not "verified in dark"; it is *unverified*, and
+     * the honest way to read a green run is against this list rather than against the
+     * whole file.
+     */
+    @Test
+    fun drawerDark() {
+        capture("drawer-dark", themeMode = ThemeMode.DARK) {
+            DrawerFixture()
+        }
+    }
+
+    /**
+     * The drawer's fixture, shared by the light and dark captures.
+     *
+     * Extracted rather than duplicated so the two appearances cannot drift into
+     * different content: the only thing between them is the palette, which is the
+     * single variable the pair exists to isolate.
+     */
+    @Composable
+    private fun DrawerFixture() {
         val sessions = listOf(
             SessionItem(
                 id = "s1",
@@ -292,32 +345,29 @@ class ScreenBaselineTest {
                 isSubagent = false,
             ),
         )
-
-        capture("drawer") {
-            SessionsDrawer(
-                sessions = sessions,
-                workspaces = emptyList(),
-                workspacesPhase = WorkspaceListPhase.Ready,
-                archivedSessionIds = emptySet(),
-                completedSessionIds = emptySet(),
-                currentId = "s1",
-                drawerOpen = true,
-                loading = false,
-                onSelect = {},
-                onNew = {},
-                onRefresh = {},
-                onSettings = {},
-                onAbout = {},
-                grouping = DrawerGrouping.FLAT,
-                orderByUpdated = true,
-                showArchived = false,
-                collapsedSections = emptySet(),
-                onGrouping = {},
-                onOrderByUpdated = {},
-                onShowArchived = {},
-                onCollapsedSections = {},
-            )
-        }
+        SessionsDrawer(
+            sessions = sessions,
+            workspaces = emptyList(),
+            workspacesPhase = WorkspaceListPhase.Ready,
+            archivedSessionIds = emptySet(),
+            completedSessionIds = emptySet(),
+            currentId = "s1",
+            drawerOpen = true,
+            loading = false,
+            onSelect = {},
+            onNew = {},
+            onRefresh = {},
+            onSettings = {},
+            onAbout = {},
+            grouping = DrawerGrouping.FLAT,
+            orderByUpdated = true,
+            showArchived = false,
+            collapsedSections = emptySet(),
+            onGrouping = {},
+            onOrderByUpdated = {},
+            onShowArchived = {},
+            onCollapsedSections = {},
+        )
     }
 
     /**
@@ -721,6 +771,23 @@ class ScreenBaselineTest {
     }
 
     /**
+     * The transcript in the dark appearance — the pills and the glass in the palette
+     * they are actually worn in at night.
+     *
+     * The composer's accessory rail is the densest colour surface this app has: a
+     * permission shield, a plan chip, a model trigger, a context ring, two readings
+     * and the dock's own material, all within one 56dp band. If a single one of those
+     * is drawn in a token that has no dark value, this is the capture that shows it —
+     * a light capture cannot, because on `#FFFFFF` almost everything reads.
+     */
+    @Test
+    fun chatTranscriptDark() {
+        capture("chat-transcript-dark", themeMode = ThemeMode.DARK) {
+            ChatTranscriptContent()
+        }
+    }
+
+    /**
      * The same transcript with the dock's other shape: the four destinations back, the
      * composer folded to its circle.
      *
@@ -867,6 +934,54 @@ class ScreenBaselineTest {
     @Test
     fun meTab() {
         capture("me-tab") {
+            MeTab(
+                username = "tony",
+                balanceText = "Balance · 12.34 CNY",
+                entries = ME_ENTRIES,
+                onOpen = {},
+            )
+        }
+    }
+
+    /**
+     * The Me page in the dark appearance.
+     *
+     * This is the capture the AMOLED defect would have shown: `bgBase` is pure black
+     * there and `bgLayer1` is `#0A0A0A`, so a card filled with a layer token instead
+     * of `codeBlock` — the exact mistake 3.5b's segmented card made on white — becomes
+     * invisible on black instead. The page's four grouped cards and the nine rows in
+     * them are the most surface-dense screen in the app, which is why it is the one
+     * that catches a layering regression first.
+     */
+    @Test
+    fun meTabDark() {
+        capture("me-tab-dark", themeMode = ThemeMode.DARK) {
+            MeTab(
+                username = "tony",
+                balanceText = "Balance · 12.34 CNY",
+                entries = ME_ENTRIES,
+                onOpen = {},
+            )
+        }
+    }
+
+    /**
+     * The Me page in AMOLED — the appearance where a surface token that is *nearly*
+     * the background stops being visible at all.
+     *
+     * `DARK` has `bgBase #151517` against `bgLayer1 #232324`: two greys close enough
+     * that a wrong token still reads as "a card, slightly off". AMOLED collapses that
+     * margin to `#000000` against `#0A0A0A`, which is where the distinction actually
+     * fails — and where 3.5b's `bgLayer1` card bug would have been caught immediately
+     * instead of after a baseline was recorded by hand and looked at.
+     *
+     * One capture, not a whole AMOLED set: this is the screen whose layering is the
+     * claim under test, and the other two dark captures already pin the palette's
+     * text and accent roles.
+     */
+    @Test
+    fun meTabAmoled() {
+        capture("me-tab-amoled", themeMode = ThemeMode.AMOLED) {
             MeTab(
                 username = "tony",
                 balanceText = "Balance · 12.34 CNY",
