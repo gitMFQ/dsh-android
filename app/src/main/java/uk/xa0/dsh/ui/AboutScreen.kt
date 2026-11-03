@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.LocalCafe
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -60,6 +59,9 @@ import uk.xa0.dsh.ui.components.CertificateSection
 import uk.xa0.dsh.ui.components.DshTextField
 import uk.xa0.dsh.ui.components.DshWordmark
 import uk.xa0.dsh.ui.settings.rememberSettingsLocalFacts
+import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
+import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
+import uk.xa0.dsh.ui.overlay.ConfirmTone
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -529,31 +531,19 @@ fun ForceQuitDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val colors = DshTheme.colors
-    AlertDialog(
+    ConfirmDialogHost(
+        show = true,
+        visuals = ConfirmDialogVisuals(
+            title = FORCE_QUIT_TITLE,
+            content = FORCE_QUIT_BODY,
+            confirm = FORCE_QUIT_CONFIRM,
+            // The one destructive confirmation in the app: it kills the process.
+            confirmTone = ConfirmTone.Error,
+            dismiss = FORCE_QUIT_CANCEL,
+        ),
+        onConfirm = onConfirm,
         // Back, a tap outside, or Keep it running: all three leave the app alive.
-        onDismissRequest = onDismiss,
-        containerColor = colors.bgBase,
-        title = {
-            Text(FORCE_QUIT_TITLE, color = colors.labelPrimary, style = DshType.titleMedium)
-        },
-        text = {
-            Text(
-                text = FORCE_QUIT_BODY,
-                style = DshType.bodyMedium,
-                color = colors.labelSecondary,
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(FORCE_QUIT_CONFIRM, color = colors.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(FORCE_QUIT_CANCEL, color = colors.labelSecondary)
-            }
-        },
+        onDismiss = onDismiss,
     )
 }
 
