@@ -30,9 +30,9 @@ import uk.xa0.dsh.ui.theme.DshTheme
  * reason the page exists — this development box has no `adb`, so a trace that cannot be
  * shared through the app is a trace that never gets read.
  *
- * The page draws from the process-wide [CrashLog], so each test installs it against a
- * temporary directory and clears it afterwards; the assertions are on what the page
- * renders for a given set of reports, not on how they got there.
+ * The page draws from the process-wide [CrashLog], so [crash] installs it against a
+ * temporary directory and the fixture is written before the page is composed; the
+ * assertions are on what the page renders for a given set of reports.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = HarnessApplication::class, qualifiers = "w411dp-h891dp")
@@ -45,7 +45,7 @@ class CrashLogPageTest {
     val folder = TemporaryFolder()
 
     @After
-    fun reset() = CrashLog.clear()
+    fun clearReports() = CrashLog.clear()
 
     private fun page() {
         rule.setContent {
@@ -94,18 +94,17 @@ class CrashLogPageTest {
     }
 
     /**
-     * Tapping a row expands the report, and the stack is on screen.
+     * Tapping a row expands the report, and the trace is on screen.
      *
      * The trace is the deliverable: a row that opened onto nothing would be a list of
-     * exception names, which is not enough to fix anything.
+     * exception names, which is not enough to fix anything. The footer's actions only
+     * exist while expanded, so their presence is the assertion that the row opened.
      */
     @Test
     fun `expanding a crash shows the stack`() {
         crash("boom")
         page()
         rule.onNodeWithText("java.lang.RuntimeException").performClick()
-        // The footer's actions only exist while expanded, so their presence is the
-        // assertion that the row opened; the stack itself is a single Text node.
         rule.onNodeWithText("Copy").assertIsDisplayed()
         rule.onNodeWithText("Share").assertIsDisplayed()
         rule.onNodeWithText("Delete").assertIsDisplayed()
@@ -129,7 +128,12 @@ class CrashLogPageTest {
         rule.onNodeWithText("No crashes recorded on this device.").assertIsDisplayed()
     }
 
-    /** Deleting one report leaves the others on screen. */
+    /**
+     * Deleting one report leaves the other, both in the store and on screen.
+     *
+     * Two rows carry the same label here, so the click is scoped to the first — the
+     * newest, which is the one the page lists first.
+     */
     @Test
     fun `deleting one crash keeps the rest`() {
         crash("keep")
@@ -137,22 +141,11 @@ class CrashLogPageTest {
         crash("drop")
         assertEquals(2, CrashLog.reports().size)
         page()
-        // Open the newest, delete it, and the page must still hold the other one.
-        rule.onAllNodesWithTextCount(2)
-        rule.onNodeWithText("java.lang.RuntimeException").performClick()
-        rule.onNodeWithText("Delete").performClick()
-        assertEquals(1, CrashLog.reports().size)
-    }
-}
 
-/**
- * Open the row at [index] when several rows share one label.
- *
- * A private extension rather than a shared helper: only this file needs it, and the
- * count is asserted rather than assumed so a fixture that stops producing two rows fails
- * here instead of silently testing nothing.
- */
-private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextCount(expected: Int) {
-    val nodes = onAllNodesWithText("java.lang.RuntimeException").fetchSemanticsNodes()
-    assertEquals("expected " + expected + " crash rows", expected, nodes.size)
+        rule.onAllNodesWithText("java.lang.RuntimeException")[0].performClick()
+        rule.onNodeWithText("Delete").performClick()
+
+        assertEquals(1, CrashLog.reports().size)
+        rule.onNodeWithText("java.lang.RuntimeException").assertIsDisplayed()
+    }
 }

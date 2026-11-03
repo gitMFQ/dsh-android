@@ -13,13 +13,19 @@ import org.robolectric.annotation.Config
 import uk.xa0.dsh.scroll.HarnessApplication
 
 /**
- * The crash record, and the two properties the page depends on.
+ * The crash record, and the properties the page depends on.
  *
  * [CrashLog] is the only path by which a device-side stack trace reaches a development
- * box that has no `adb`, so the two things that matter are that it **writes** and that it
- * **stays bounded**. Both are asserted here rather than on a device because the writing
- * has to happen on a dying thread, which is the one thing a device cannot be asked to
- * reproduce on demand.
+ * box that has no `adb`, so what matters is that it **writes**, that it **stays bounded**,
+ * and that the writer and the reader agree about where the reports are. All three are
+ * asserted here rather than on a device because the writing has to happen on a dying
+ * thread, which is the one thing a device cannot be asked to reproduce on demand.
+ *
+ * The handler is a process singleton, so [install] is called once for the class and each
+ * test clears the directory instead. Calling `install` per test is what the first
+ * version did, and it was wrong for a reason worth keeping in mind: installing does not
+ * re-point an already-installed handler unless the handler reads the directory rather
+ * than capturing it.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = HarnessApplication::class)
@@ -29,10 +35,13 @@ class CrashLogTest {
     val folder = TemporaryFolder()
 
     @After
-    fun reset() {
-        // The object is a process singleton and the tests share it, so the directory has
-        // to be handed back: a later test would otherwise read the previous one's reports.
-        CrashLog.clear()
+    fun clearReports() = CrashLog.clear()
+
+    /** Record one crash the way the platform does: through the installed handler. */
+    private fun crash(error: Throwable) {
+        CrashLog.install(folder.root)
+        Thread.getDefaultUncaughtExceptionHandler()
+            ?.uncaughtException(Thread.currentThread(), error)
     }
 
     /**
@@ -40,16 +49,11 @@ class CrashLogTest {
      *
      * The headline is the exception, the timestamp is the one the report recorded, and
      * the stack is present — which together are the whole contract between the writer
-     * and [CrashLogSettingCards].
+     * and [uk.xa0.dsh.ui.settings.CrashLogSettingCards].
      */
     @Test
     fun `a crash is recorded with its type, time and stack`() {
-        CrashLog.install(folder.root)
-        val boom = IllegalStateException("No NavigationEventDispatcher was provided")
-        // The handler the app installs is the platform's; call it the way the platform
-        // does, on this thread, so the write happens synchronously as designed.
-        Thread.getDefaultUncaughtExceptionHandler()
-            ?.uncaughtException(Thread.currentThread(), boom)
+        crash(IllegalStateException("No NavigationEventDispatcher was provided"))
 
         val reports = CrashLog.reports()
         assertEquals("one crash should produce one report", 1, reports.size)
@@ -73,12 +77,9 @@ class CrashLogTest {
      */
     @Test
     fun `reports are newest first`() {
-        CrashLog.install(folder.root)
-        val handler = Thread.getDefaultUncaughtExceptionHandler()
-        handler?.uncaughtException(Thread.currentThread(), RuntimeException("first"))
-        // Names carry milliseconds, so two reports in the same second still sort.
+        crash(RuntimeException("first"))
         Thread.sleep(5)
-        handler?.uncaughtException(Thread.currentThread(), RuntimeException("second"))
+        crash(RuntimeException("second"))
 
         val reports = CrashLog.reports()
         assertEquals(2, reports.size)
@@ -88,19 +89,30 @@ class CrashLogTest {
     }
 
     /**
+     * Two crashes inside one millisecond still get their own file.
+     *
+     * A crash loop fires far faster than the second-resolution stamp the name starts
+     * with, so the name carries a counter as well. Without it the second report silently
+     * overwrote the first, which is the one thing this must never do.
+     */
+    @Test
+    fun `two crashes in one millisecond do not collide`() {
+        crash(RuntimeException("one"))
+        crash(RuntimeException("two"))
+        assertEquals("both must survive", 2, CrashLog.reports().size)
+    }
+
+    /**
      * The kept set is capped, and the cap drops the *oldest*.
      *
      * A crash loop would otherwise fill the device: the to-dos crash fires on every
-     * appearance of the card, which in a loop is once a second. The newest report has to
-     * survive, because it is the one the reader is about to share.
+     * appearance of the card. The newest report has to survive, because it is the one
+     * the reader is about to share.
      */
     @Test
     fun `the kept set is capped and keeps the newest`() {
-        CrashLog.install(folder.root)
-        val handler = Thread.getDefaultUncaughtExceptionHandler()
         repeat(CrashLog.MAX_REPORTS + 4) { index ->
-            handler?.uncaughtException(Thread.currentThread(), RuntimeException("crash " + index))
-            Thread.sleep(2)
+            crash(RuntimeException("crash " + index))
         }
 
         val reports = CrashLog.reports()
@@ -115,9 +127,7 @@ class CrashLogTest {
     /** Clearing is the page's own destructive action, and it has to actually empty it. */
     @Test
     fun `clear removes every report`() {
-        CrashLog.install(folder.root)
-        Thread.getDefaultUncaughtExceptionHandler()
-            ?.uncaughtException(Thread.currentThread(), RuntimeException("gone"))
+        crash(RuntimeException("gone"))
         assertFalse(CrashLog.reports().isEmpty())
 
         CrashLog.clear()
@@ -127,11 +137,9 @@ class CrashLogTest {
     /** Deleting one leaves the others, which is what a per-report Delete promises. */
     @Test
     fun `deleting one report leaves the rest`() {
-        CrashLog.install(folder.root)
-        val handler = Thread.getDefaultUncaughtExceptionHandler()
-        handler?.uncaughtException(Thread.currentThread(), RuntimeException("keep me"))
+        crash(RuntimeException("keep me"))
         Thread.sleep(5)
-        handler?.uncaughtException(Thread.currentThread(), RuntimeException("delete me"))
+        crash(RuntimeException("delete me"))
 
         val newest = CrashLog.reports().first()
         assertTrue(newest.text.contains("delete me"))

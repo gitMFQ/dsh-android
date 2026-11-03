@@ -8,6 +8,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * The crash record: what took the process down, kept where the reader can get it back.
@@ -65,12 +66,28 @@ object CrashLog {
 
     private val installed = AtomicBoolean(false)
 
+    /** Monotonic, so two reports inside one millisecond cannot collide on a file name. */
+    private val sequence = AtomicInteger(0)
+
     @Volatile
     private var dir: File? = null
 
     /**
-     * Install the handler. Idempotent, and a no-op without a directory — a process that
-     * cannot write a report should not pretend it can.
+     * Install the handler, and point it at [base].
+     *
+     * The *handler* is installed once — installing a second one would chain a second
+     * observer onto the platform's and write every crash twice. The **directory**,
+     * however, is re-read by every call, and that is deliberate: the handler must write
+     * wherever [reports] is going to look, or a process that re-attached (a test, a
+     * second Application instance) would record crashes somewhere nothing reads.
+     *
+     * Capturing the directory in the handler's closure is what got this wrong the first
+     * time: the first `install` fixed the path forever, so a later `install` moved
+     * [reports] but not the writer, and every report vanished. The path is a field, and
+     * the handler reads it.
+     *
+     * A no-op without a usable directory: a process that cannot write a report should not
+     * pretend it can.
      */
     fun install(base: File) {
         val d = File(base, DIR)
@@ -80,8 +97,9 @@ object CrashLog {
 
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            // Synchronous and first: see the ordering rule above.
-            runCatching { write(d, thread, error) }
+            // Synchronous and first: see the ordering rule above. The directory is read
+            // here rather than captured, so it always matches what [reports] reads.
+            dir?.let { target -> runCatching { write(target, thread, error) } }
             previous?.uncaughtException(thread, error)
         }
     }
@@ -127,10 +145,14 @@ object CrashLog {
      */
     private fun write(dir: File, thread: Thread, error: Throwable) {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-        // Milliseconds after the seconds: two crashes inside one second are exactly the
-        // shape of a crash loop, and those two must not overwrite each other.
+        // Milliseconds after the seconds, then a counter: a crash loop can put two
+        // reports inside one millisecond, and those two must not overwrite each other.
+        // The counter is what guarantees the file name is unique; the timestamp is what
+        // makes the name *sort* chronologically, which is how [reports] orders itself.
         val millis = System.currentTimeMillis() % 1000
-        val name = PREFIX + stamp + "-" + millis.toString().padStart(3, '0') + ".txt"
+        val seq = sequence.incrementAndGet() % 1000
+        val name = PREFIX + stamp + "-" + millis.toString().padStart(3, '0') +
+            seq.toString().padStart(3, '0') + ".txt"
         val body = buildString {
             append("time: ").append(ISO.format(Date())).append('\n')
             append("thread: ").append(thread.name).append('\n')
