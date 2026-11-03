@@ -150,13 +150,27 @@ object WorkspaceTreeFold {
         query: String?,
     ) {
         val needle = query?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-        val entries = WorkspaceExplorer.visibleEntries(listing, badges, showHidden, order, query)
+        // The filter is applied here rather than through `visibleEntries`'s query
+        // argument, because that fold drops a non-matching *directory* before this
+        // loop can ask whether something under it matched. An ancestor chain has to
+        // survive a match below it, so the name test is this loop's job and
+        // `visibleEntries` is asked only for the hidden rule and the order.
+        val entries = WorkspaceExplorer.visibleEntries(
+            listing = listing,
+            badges = badges,
+            showHidden = showHidden,
+            order = order,
+            query = null,
+        )
         for (entry in entries) {
             val path = listing.childPath(entry)
             val directory = entry.kind == WorkspaceEntryKind.DIRECTORY
             val expanded = directory && path in open
-            if (directory && needle != null && !entry.name.lowercase().contains(needle)) {
-                // Keep the ancestor chain of a match, and only that.
+            val matchesSelf = needle == null || entry.name.lowercase().contains(needle)
+            if (!matchesSelf && !directory) continue
+            if (!matchesSelf && directory) {
+                // A directory that does not match its own name survives only as an
+                // ancestor of a match, which requires it to be open.
                 if (!expanded) continue
                 if (!hasMatchingDescendant(levels, open, levels[path], badges, showHidden, needle)) continue
             }
