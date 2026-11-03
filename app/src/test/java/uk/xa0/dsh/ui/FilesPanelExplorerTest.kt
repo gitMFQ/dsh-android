@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -22,6 +23,7 @@ import uk.xa0.dsh.model.SessionFiles
 import uk.xa0.dsh.model.WorkspaceEntry
 import uk.xa0.dsh.model.WorkspaceEntryKind
 import uk.xa0.dsh.model.WorkspaceListing
+import uk.xa0.dsh.model.WorkspaceTreeState
 import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.ui.components.ExplorerWiring
 import uk.xa0.dsh.ui.components.FilesPanel
@@ -172,4 +174,78 @@ class FilesPanelExplorerTest {
 
         assertEquals(listOf("out"), asked)
     }
+
+    /**
+     * The tree, with one directory open and its level arrived.
+     *
+     * `out` is open and its level has arrived. The tap assertion is the part that
+     * matters: in tree mode a directory row must *expand*, not navigate, or the
+     * reader loses the level they were reading to see a child of it.
+     */
+    private fun showTree(onToggle: (String) -> Unit = {}) {
+        val tree = WorkspaceTreeState(
+            levels = mapOf(
+                "" to listing,
+                "out" to WorkspaceListing(
+                    path = "out",
+                    entries = listOf(
+                        WorkspaceEntry("REPORT.md", WorkspaceEntryKind.FILE, size = 2048L),
+                    ),
+                    truncated = false,
+                ),
+            ),
+            open = setOf("out"),
+            root = cwd,
+        )
+        rule.setContent {
+            DshTheme {
+                Box(Modifier.size(width = 400.dp, height = 800.dp)) {
+                    FilesPanel(
+                        files = SessionFiles.derive(entries),
+                        root = cwd,
+                        explorer = ExplorerWiring(
+                            state = ExplorerState.Ready(listing),
+                            onList = {},
+                            onReload = {},
+                            tree = tree,
+                            onToggle = onToggle,
+                        ),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+    }
+
+    @Test
+    fun `an open directory draws its children under it`() {
+        showTree()
+
+        rule.onNodeWithText("out").assertExists()
+        // REPORT.md is a child of out; it is on screen only because that level is open.
+        rule.onNodeWithText("REPORT.md").assertExists()
+        // And the root level's other rows are still there, below the subtree.
+        rule.onNodeWithText("notes.txt").assertExists()
+    }
+
+    @Test
+    fun `tapping a directory row asks to toggle it, not to descend`() {
+        val toggled = mutableListOf<String>()
+        showTree(onToggle = { toggled += it })
+
+        rule.onNodeWithText("out").performClick()
+
+        assertEquals(listOf("out"), toggled)
+    }
+
+    @Test
+    fun `an open directory offers a collapse affordance`() {
+        showTree()
+
+        // Open draws "Collapse"; every closed directory draws "Expand". One of each
+        // is on screen here only if the tree is drawing state rather than a level.
+        rule.onAllNodesWithContentDescription("Collapse").assertCountEquals(1)
+    }
 }
+

@@ -332,6 +332,7 @@ internal fun ChatPanel(
     // The Files panel's explorer half. A flow of its own, like the browser's: a
     // listing failure belongs to the panel, not to the session error banner.
     val workspaceExplorer = state.workspaceExplorer
+    val workspaceTree = state.workspaceTree
     // The Plugins page's inventory, a flow of its own for the same reason.
     val pluginInventory = state.pluginInventory
 
@@ -1419,6 +1420,8 @@ internal fun ChatPanel(
                         state = workspaceExplorer,
                         onList = actions.listWorkspaceDirectory,
                         onReload = actions.reloadWorkspaceExplorer,
+                        tree = workspaceTree,
+                        onToggle = actions.toggleWorkspaceDirectory,
                     ),
                     // The downloader is session-scoped like the loader, and the panel
                     // decides whether to draw its control at all.

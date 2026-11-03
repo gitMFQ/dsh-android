@@ -29,9 +29,12 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.InsertDriveFile
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,6 +76,9 @@ import uk.xa0.dsh.model.FilePreview
 import uk.xa0.dsh.model.FileTouch
 import uk.xa0.dsh.model.ExplorerOrder
 import uk.xa0.dsh.model.ExplorerState
+import uk.xa0.dsh.model.TreeChildren
+import uk.xa0.dsh.model.TreeRow
+import uk.xa0.dsh.model.WorkspaceTreeState
 import uk.xa0.dsh.model.PreviewFormat
 import uk.xa0.dsh.model.PreviewLine
 import uk.xa0.dsh.model.SessionFile
@@ -108,6 +114,20 @@ data class ExplorerWiring(
     val state: ExplorerState,
     val onList: (String) -> Unit,
     val onReload: () -> Unit,
+    /**
+     * The tree: every level the host has answered, and which directories are open.
+     *
+     * Separate from [state] because the two answer different questions — see
+     * `DshViewModel.workspaceTree`. Null means the parent has no tree (a host-free
+     * caller, or a test that only exercises the flat pane), and then the pane draws
+     * the single level [state] carries, exactly as it did before the tree existed.
+     * That fallback is deliberate: it keeps every existing caller and every existing
+     * test working unchanged, and it makes the tree an addition rather than a
+     * rewrite of the one surface that already worked.
+     */
+    val tree: WorkspaceTreeState? = null,
+    /** Expand or collapse one directory. Null draws directories as descend-only. */
+    val onToggle: ((String) -> Unit)? = null,
 )
 
 /**
@@ -324,6 +344,8 @@ fun FilesPanel(
                                 badge?.let { onSelect?.invoke(it) }
                             },
                             modifier = listModifier,
+                            tree = explorer.tree,
+                            onToggle = explorer.onToggle,
                         )
                     } else {
                         FileListPane(
@@ -429,6 +451,8 @@ private fun ExplorerPane(
     onReload: () -> Unit,
     onSelectFile: (String, SessionFile?) -> Unit,
     modifier: Modifier = Modifier,
+    tree: WorkspaceTreeState? = null,
+    onToggle: ((String) -> Unit)? = null,
 ) {
     val colors = DshTheme.colors
     var showHidden by remember { mutableStateOf(false) }
@@ -454,6 +478,12 @@ private fun ExplorerPane(
     val entries = remember(listing, badges, showHidden, order, query) {
         listing?.let { WorkspaceExplorer.visibleEntries(it, badges, showHidden, order, query) }
             .orEmpty()
+    }
+    // The tree's rows, when the parent holds one. The same filter, order and hidden
+    // rules apply — the fold takes them as parameters — so the toolbar keeps meaning
+    // what it meant: it narrows every open level, not only the one on top.
+    val rows = remember(tree, badges, showHidden, order, query) {
+        tree?.rows(badges, showHidden, order, query).orEmpty()
     }
     // Whether the *unfiltered* level has rows. The two empty states are different
     // facts — "this directory is empty" and "your filter matched nothing" — and a
@@ -648,15 +678,39 @@ private fun ExplorerPane(
                             .diagDrag("files:explorer") { listState.diagOffset() },
                         state = listState,
                     ) {
-                        items(entries, key = { it.name }) { entry ->
-                            val childPath = listing.childPath(entry)
-                            ExplorerRow(
-                                entry = entry,
-                                badge = badges[childPath],
-                                selected = childPath == selectedPath,
-                                onDescend = { onList(childPath) },
-                                onOpen = { onSelectFile(childPath, badges[childPath]) },
-                            )
+                        if (tree != null) {
+                            // The tree draws itself from every level the host has
+                            // answered, so one list holds the whole open hierarchy.
+                            // Keyed by path rather than by name: the same name appears
+                            // at several depths, and a key of "build" would make two
+                            // different directories share one row's state.
+                            items(rows, key = { it.path }) { row ->
+                                ExplorerRow(
+                                    row = row,
+                                    badge = badges[row.path],
+                                    selected = row.path == selectedPath,
+                                    onToggle = { onToggle?.invoke(row.path) },
+                                    onDescend = { onList(row.path) },
+                                    onOpen = { onSelectFile(row.path, badges[row.path]) },
+                                )
+                            }
+                        } else {
+                            items(entries, key = { it.name }) { entry ->
+                                val childPath = listing.childPath(entry)
+                                ExplorerRow(
+                                    row = TreeRow(
+                                        path = childPath,
+                                        entry = entry,
+                                        depth = 0,
+                                        children = TreeChildren.CLOSED,
+                                    ),
+                                    badge = badges[childPath],
+                                    selected = childPath == selectedPath,
+                                    onToggle = null,
+                                    onDescend = { onList(childPath) },
+                                    onOpen = { onSelectFile(childPath, badges[childPath]) },
+                                )
+                            }
                         }
                     }
                 }
@@ -714,25 +768,65 @@ private fun ExplorerAction(
 /** One explorer row: kind icon, name, size, and the session's marks. */
 @Composable
 private fun ExplorerRow(
-    entry: WorkspaceEntry,
+    row: TreeRow,
     badge: SessionFile?,
     selected: Boolean,
+    onToggle: (() -> Unit)?,
     onDescend: () -> Unit,
     onOpen: () -> Unit,
 ) {
     val colors = DshTheme.colors
+    val entry = row.entry
     val directory = entry.kind == WorkspaceEntryKind.DIRECTORY
     val openable = entry.kind != WorkspaceEntryKind.OTHER
+    // A directory expands in place when the parent holds a tree; without one it
+    // still descends, which is the behaviour every existing caller has.
+    val expands = directory && onToggle != null
+    val open = row.children != TreeChildren.CLOSED
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(DshRadius.md))
             .background(if (selected) colors.sidebarItemActive else colors.bgBase)
-            .clickableNoRipple(enabled = openable) { if (directory) onDescend() else onOpen() }
-            .padding(horizontal = DshSpacing.lg, vertical = DshSpacing.sm),
+            .clickableNoRipple(enabled = openable) {
+                // Bound to a local first: `expands` already implies a non-null
+                // `onToggle`, but the compiler cannot narrow a function-typed
+                // parameter through a captured val.
+                val toggle = onToggle
+                when {
+                    expands && toggle != null -> toggle()
+                    directory -> onDescend()
+                    else -> onOpen()
+                }
+            }
+            .padding(
+                // The indent is the tree's only statement about hierarchy, so it is
+                // carried by the row rather than inferred from the path: a filtered
+                // level can hide an ancestor, and a path-derived indent would then
+                // step in by two for a row whose parent is not on screen.
+                start = DshSpacing.lg + (DshSpacing.lg * row.depth),
+                end = DshSpacing.lg,
+                top = DshSpacing.sm,
+                bottom = DshSpacing.sm,
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(DshSpacing.md),
     ) {
+        // The disclosure triangle: a real control rather than decoration, because a
+        // reader aiming at a deep row aims at the icon, and making them hit the name
+        // instead is the difference between a tree and a list of folders.
+        if (expands) {
+            Icon(
+                imageVector = if (open) Icons.Rounded.ExpandMore else Icons.Rounded.ChevronRight,
+                contentDescription = if (open) "Collapse" else "Expand",
+                tint = colors.labelTertiary,
+                modifier = Modifier.size(14.dp),
+            )
+        } else if (row.depth > 0) {
+            // A spacer where a file's triangle would be, so a file's icon lines up
+            // with its sibling directories' icons rather than with their triangles.
+            Spacer(Modifier.size(14.dp))
+        }
         Icon(
             imageVector = if (directory) Icons.Rounded.Folder else fileIcon(entry.name),
             contentDescription = null,
@@ -759,8 +853,25 @@ private fun ExplorerRow(
             )
         }
         badge?.let { TouchBadges(it) }
-        if (directory) {
-            Icon(
+        // The trailing seat says what is happening with this directory's children.
+        // A chevron when it can only descend; a spinner while a level is in flight;
+        // the warning tint when the host refused it. An open directory shows nothing
+        // here — its children are directly below, which is the statement.
+        when {
+            row.children == TreeChildren.LOADING -> CircularProgressIndicator(
+                color = colors.labelCaption,
+                strokeWidth = 1.5.dp,
+                modifier = Modifier.size(12.dp),
+            )
+
+            row.children == TreeChildren.FAILED -> Icon(
+                Icons.Rounded.Warning,
+                contentDescription = row.failure ?: "Could not list this directory",
+                tint = colors.warn,
+                modifier = Modifier.size(14.dp),
+            )
+
+            directory && !expands -> Icon(
                 Icons.Rounded.ChevronRight,
                 contentDescription = null,
                 tint = colors.labelCaption,

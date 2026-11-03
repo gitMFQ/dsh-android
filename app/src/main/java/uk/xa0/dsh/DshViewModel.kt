@@ -85,6 +85,7 @@ import uk.xa0.dsh.model.ExplorerState
 import uk.xa0.dsh.model.WorkspaceEntry
 import uk.xa0.dsh.model.WorkspaceEntryKind
 import uk.xa0.dsh.model.WorkspaceListing
+import uk.xa0.dsh.model.WorkspaceTreeState
 import uk.xa0.dsh.model.DownloadResult
 import uk.xa0.dsh.model.FileDownloader
 import uk.xa0.dsh.model.readWholeFile
@@ -1489,6 +1490,24 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     val workspaceExplorer: StateFlow<ExplorerState> = _workspaceExplorer.asStateFlow()
 
     /**
+     * The Files tree: every level the host has answered, plus which ones are open.
+     *
+     * A second flow rather than more fields on [ExplorerState] because the two answer
+     * different questions. [ExplorerState] is "what is the panel showing" — one level,
+     * one request, one failure — and it drives the breadcrumb and the Retry. This is
+     * "what does the tree hold", which is a set of levels that only grows while a
+     * session is open and a set of open directories the reader toggles. Folding the
+     * second into the first would make every expand and collapse look like a new
+     * navigation, and would re-render the breadcrumb for a change that has nothing to
+     * do with it.
+     *
+     * The fold that turns this into rows is [WorkspaceTreeFold.rows], which is pure and
+     * lives in `:core:model` — so the shape of the tree is tested without a device.
+     */
+    private val _workspaceTree = MutableStateFlow(WorkspaceTreeState())
+    val workspaceTree: StateFlow<WorkspaceTreeState> = _workspaceTree.asStateFlow()
+
+    /**
      * The Plugins page's read of `pluginInventory/list`.
      *
      * A flow of its own for the same reason [workspaceExplorer] is: only one page reads
@@ -1512,6 +1531,12 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Bumped per request, so a superseded level cannot land after a newer one. */
     private var explorerGeneration = 0
+
+    /** The directories the reader has expanded in the Files tree. */
+    private var explorerTreeOpen: Set<String> = emptySet()
+
+    /** Refusals by path, so an open directory can say why it will not list. */
+    private val explorerTreeFailures = HashMap<String, String>()
 
     // --------------------------------------------------------------- terminal
 
@@ -5973,12 +5998,14 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         explorerPath = path
         explorerLevels[path]?.let { cached ->
             _workspaceExplorer.value = ExplorerState.Ready(cached)
+            publishTree()
             return
         }
         val sessionId = _ui.value.currentSessionId
         _workspaceExplorer.value = ExplorerState.Loading(path)
         if (sessionId.isNullOrBlank()) {
             _workspaceExplorer.value = ExplorerState.Failed(path, "No open session to list from.")
+            publishTree()
             return
         }
         val request = if (path.isEmpty()) "." else path
@@ -5994,15 +6021,24 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             }.onSuccess { listing ->
                 if (generation != explorerGeneration) return@onSuccess
                 explorerLevels[path] = listing
+                explorerTreeFailures.remove(path)
                 _workspaceExplorer.value = ExplorerState.Ready(listing)
+                publishTree()
             }.onFailure { error ->
                 if (generation != explorerGeneration) return@onFailure
-                if (error is DshAuthException) {
+                val message = if (error is DshAuthException) {
                     onAuthFailure("workspaceFiles/list", error)
-                    _workspaceExplorer.value = ExplorerState.Failed(path, AUTH_ERROR)
+                    AUTH_ERROR
                 } else {
-                    _workspaceExplorer.value = ExplorerState.Failed(path, describe(error))
+                    describe(error)
                 }
+                // A failed reload must not leave the previous children drawn under a
+                // row that can no longer stand behind them: the level goes and the
+                // refusal takes its place.
+                explorerLevels.remove(path)
+                explorerTreeFailures[path] = message
+                _workspaceExplorer.value = ExplorerState.Failed(path, message)
+                publishTree()
             }
         }
     }
@@ -6019,13 +6055,65 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         listWorkspaceDirectory(explorerPath)
     }
 
+    /**
+     * Expands or collapses one directory in the Files tree.
+     *
+     * Expanding a directory whose level is already cached publishes it without a
+     * round trip — that is what the cache is for — and expanding one that is not
+     * asks. Collapsing never forgets the level: reopening must be instant, and the
+     * endpoint is a one-shot call the reader has already paid for.
+     *
+     * A directory that previously failed is re-asked on expand, because the reader
+     * tapping it again is them saying "try that again" and the alternative is a row
+     * that is permanently stuck on a stale refusal.
+     */
+    fun toggleWorkspaceDirectory(path: String) {
+        if (path.isEmpty()) return
+        val current = _workspaceTree.value.open
+        if (path in current) {
+            _workspaceTree.value = _workspaceTree.value.copy(open = current - path)
+            return
+        }
+        _workspaceTree.value = _workspaceTree.value.copy(open = current + path)
+        if (explorerLevels[path] == null) {
+            explorerTreeFailures.remove(path)
+            publishTree()
+            listWorkspaceDirectory(path)
+        } else {
+            publishTree()
+        }
+    }
+
     /** Forgets every listed level, e.g. when the panel closes or the session changes. */
     fun resetWorkspaceExplorer() {
         explorerGeneration++
         explorerLevels.clear()
+        explorerTreeFailures.clear()
         explorerPath = ""
         _workspaceExplorer.value = ExplorerState.Idle
+        _workspaceTree.value = WorkspaceTreeState()
     }
+
+    /**
+     * Re-derives the tree from the cache and the open set.
+     *
+     * Called after anything that changes either. The tree is a *derived* value, not
+     * a second source of truth: it is rebuilt from [explorerLevels],
+     * [explorerTreeOpen] and [explorerTreeFailures] every time, so the three can
+     * never disagree about what is on screen.
+     */
+    private fun publishTree() {
+        _workspaceTree.value = WorkspaceTreeState(
+            levels = explorerLevels.toMap(),
+            open = explorerTreeOpen,
+            failures = explorerTreeFailures.toMap(),
+            root = explorerRoot(),
+        )
+    }
+
+    /** The session's workspace root, as the host spelled it; empty when unknown. */
+    private fun explorerRoot(): String =
+        _ui.value.currentSessionId?.let { cwdOf(it) }.orEmpty()
 
     /**
      * One `workspaceFiles/list` reply.
