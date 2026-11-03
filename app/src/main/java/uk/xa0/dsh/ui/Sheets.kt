@@ -64,6 +64,7 @@ import uk.xa0.dsh.net.DoorFault
 import uk.xa0.dsh.ui.components.DshTextField
 import uk.xa0.dsh.ui.settings.MeSettingsActions
 import uk.xa0.dsh.ui.settings.MeSettingsState
+import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -621,14 +622,13 @@ fun PermissionSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = DshTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var confirming by remember { mutableStateOf<PermissionOption?>(null) }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
-    ) {
+    // The vendored sheet, not Material's. This is the first call site moved over; the
+    // body below is deliberately untouched, because this step is about the *container*
+    // and a content change smuggled into it is exactly what a "which baseline moved"
+    // question cannot answer.
+    DshSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
                 .fillMaxWidth()
