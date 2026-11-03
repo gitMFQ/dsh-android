@@ -13,4 +13,65 @@
     <string name="widget_description">Whether an agent needs you, and which sessions are running.</string>
     <string name="widget_initial_headline">DSH</string>
     <string name="widget_initial_stamp">Open the app</string>
+
+    <!--
+      ============================================================================
+      The Plugins page — the first screen whose copy lives in resources.
+
+      ## Why this page and not the settings sheet
+
+      `docs/I18N.md` measures the debt at roughly 1 100 hard-coded strings across
+      `ui/`, and the plan is "换哪个文件就抽哪个文件，不要先全换皮再统一抽". This
+      page is the right first one for two reasons that have nothing to do with size:
+
+        * it is the newest file in `ui/`, so extracting it cannot disturb a screen
+          anyone is mid-way through re-skinning; and
+        * it carries the two shapes every other page will need — a plain sentence,
+          and a **count** ("1 of 4 running") whose grammar differs between languages.
+
+      The count is a `<plurals>` on purpose. Chinese has one form and English has
+      two, and a sentence with `%d` baked into a single value is exactly the mistake
+      that makes a later translation impossible. This row is the template.
+
+      ## What is deliberately still not here
+
+      Plugin **names, module specifiers and host diagnostics** are not in this file,
+      and they never will be: they arrive from the host at runtime. A resource file
+      holds the app's own voice, not the deployment's data — and a diagnostic that
+      went through a translation table would stop being the string the reader
+      searches for.
+      ============================================================================
+    -->
+    <string name="plugins_title">Plugins</string>
+    <string name="plugins_refresh">Refresh</string>
+    <string name="plugins_reading">Reading this deployment\'s plugins…</string>
+    <string name="plugins_empty">This deployment has no plugins loaded.</string>
+    <string name="plugins_loaded">Loaded</string>
+
+    <!--
+      "1 of 4 running". Pluralised on the *running* count, which is the word that
+      changes; the total is a number in both forms.
+    -->
+    <plurals name="plugins_running_summary">
+        <item quantity="one">%1$d of %2$d running</item>
+        <item quantity="other">%1$d of %2$d running</item>
+    </plurals>
+    <plurals name="plugins_failed_summary">
+        <item quantity="one">%1$d failed</item>
+        <item quantity="other">%1$d failed</item>
+    </plurals>
+
+    <!-- The four states a plugin row's dot can stand for. -->
+    <string name="plugins_state_running">Running</string>
+    <string name="plugins_state_idle">Idle</string>
+    <string name="plugins_state_off">Off</string>
+    <string name="plugins_state_failed">Failed</string>
+
+    <!--
+      The read-only statement, in two forms: the deployment exposes management and
+      this client still only lists, or the deployment itself has none. They are
+      different facts and the page has to say which one it is looking at.
+    -->
+    <string name="plugins_readonly_with_management">This page lists what is loaded. Installing and enabling plugins is a host-side operation, so it stays on the machine running DSH.</string>
+    <string name="plugins_readonly_without_management">This deployment does not expose plugin management, so this page is a read-only inventory.</string>
 </resources>

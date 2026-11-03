@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chinese translation of the Plugins page — the first translated screen.
+
+  ## What this file is, and what it is not
+
+  It is **proof that the pipeline works end to end**: a device set to Chinese draws
+  this page in Chinese today, with no in-app language switch and no appcompat
+  backport, because these are ordinary Android resources and the app sets no locale
+  override anywhere.
+
+  It is **not** a translated app. Every other screen is still hard-coded English
+  (`docs/I18N.md` measures it), so a Chinese device gets one Chinese page among a
+  hundred English ones. That is the honest state of "i18n 起步" and the reason this
+  file is introduced together with an extraction of exactly one screen rather than
+  with a claim about the product.
+
+  ## Why the counts are plurals here too
+
+  Chinese has a single plural form, so `quantity` appears only once for `other`. The
+  *shape* stays identical to `values/strings.xml` on purpose: a translator editing
+  this file sees the same keys and the same `%1$d` placeholders, and the build fails
+  loudly if a placeholder goes missing rather than at runtime.
+-->
+<resources>
+    <string name="plugins_title">插件</string>
+    <string name="plugins_refresh">刷新</string>
+    <string name="plugins_reading">正在读取本部署的插件…</string>
+    <string name="plugins_empty">本部署未加载任何插件。</string>
+    <string name="plugins_loaded">已加载</string>
+
+    <plurals name="plugins_running_summary">
+        <item quantity="other">%1$d / %2$d 运行中</item>
+    </plurals>
+    <plurals name="plugins_failed_summary">
+        <item quantity="other">%1$d 个失败</item>
+    </plurals>
+
+    <string name="plugins_state_running">运行中</string>
+    <string name="plugins_state_idle">空闲</string>
+    <string name="plugins_state_off">已关闭</string>
+    <string name="plugins_state_failed">失败</string>
+
+    <string name="plugins_readonly_with_management">本页只列出已加载的内容。安装和启用插件需要在本机进行，因此留在运行 DSH 的机器上。</string>
+    <string name="plugins_readonly_without_management">本部署未开放插件管理，因此本页是只读清单。</string>
+</resources>
