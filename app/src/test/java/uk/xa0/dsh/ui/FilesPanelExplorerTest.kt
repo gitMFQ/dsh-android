@@ -189,7 +189,11 @@ class FilesPanelExplorerTest {
                 "out" to WorkspaceListing(
                     path = "out",
                     entries = listOf(
-                        WorkspaceEntry("REPORT.md", WorkspaceEntryKind.FILE, size = 2048L),
+                        // A name the root level does not carry: `REPORT.md` is already a
+                        // root row in this fixture, and two rows with one text would make
+                        // `onNodeWithText` ambiguous — the test would fail for a reason
+                        // that has nothing to do with the tree.
+                        WorkspaceEntry("inner.md", WorkspaceEntryKind.FILE, size = 512L),
                     ),
                     truncated = false,
                 ),
@@ -223,8 +227,8 @@ class FilesPanelExplorerTest {
         showTree()
 
         rule.onNodeWithText("out").assertExists()
-        // REPORT.md is a child of out; it is on screen only because that level is open.
-        rule.onNodeWithText("REPORT.md").assertExists()
+        // inner.md is a child of out; it is on screen only because that level is open.
+        rule.onNodeWithText("inner.md").assertExists()
         // And the root level's other rows are still there, below the subtree.
         rule.onNodeWithText("notes.txt").assertExists()
     }

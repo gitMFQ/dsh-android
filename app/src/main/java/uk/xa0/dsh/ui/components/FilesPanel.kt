@@ -664,10 +664,14 @@ private fun ExplorerPane(
                 // statement about the host's answer; "no match" is a statement about
                 // the filter, and it names the word that caused it so the reader does
                 // not have to work out that they are the reason the list is blank.
-                entries.isEmpty() && levelHasRows ->
+                // The tree has rows of its own: an open level can be empty while the
+                // tree as a whole is not, and judging "nothing to draw" by the top
+                // level alone would blank the list under a subtree that is showing.
+                (if (tree != null) rows.isEmpty() else entries.isEmpty()) && levelHasRows ->
                     ExplorerNote("Nothing here matches \"${query.trim()}\"", Modifier.fillMaxSize())
 
-                entries.isEmpty() -> ExplorerNote("Empty directory", Modifier.fillMaxSize())
+                (if (tree != null) rows.isEmpty() else entries.isEmpty()) ->
+                    ExplorerNote("Empty directory", Modifier.fillMaxSize())
 
                 else -> {
                     val listState = rememberLazyListState()
