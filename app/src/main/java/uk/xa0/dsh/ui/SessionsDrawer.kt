@@ -126,6 +126,8 @@ import uk.xa0.dsh.diag.diagOffset
 import uk.xa0.dsh.ui.components.DotState
 import uk.xa0.dsh.ui.components.DshMark
 import uk.xa0.dsh.ui.components.DshTextField
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.components.StateDot
 import uk.xa0.dsh.ui.components.LocalAnimatedDots
 import uk.xa0.dsh.ui.search.SessionSearchCopy
@@ -407,6 +409,16 @@ fun SessionsDrawer(
      * reconciliation.
      */
     onMoveWorkspace: (String, String?) -> Unit = { _, _ -> },
+    /**
+     * The backdrop the sidebar samples, or null on a device that paints the flat tier.
+     *
+     * The drawer overlays the conversation, so it has a real thing to refract — which is
+     * what makes it a better candidate for the material than a surface that merely sits
+     * beside the content. `flatFill = sidebarFill` is the whole safety story: on every
+     * device that cannot blur, the drawer paints exactly the colour it painted before,
+     * so no baseline moves and no API 26 phone changes appearance.
+     */
+    backdrop: GlassBarBackdrop? = null,
 ) {
     val colors = DshTheme.colors
     var query by rememberSaveable { mutableStateOf("") }
@@ -870,7 +882,11 @@ fun SessionsDrawer(
     Column(
         Modifier
             .fillMaxSize()
-            .background(colors.sidebarFill)
+            .liquidPane(
+                backdrop = backdrop,
+                shape = RoundedCornerShape(0.dp),
+                flatFill = colors.sidebarFill,
+            )
             // The drawer sheet zeroes its window insets so the sidebar can paint to
             // the very top, which otherwise puts the brand row under the status bar
             // and makes its left edge disagree with the New Session button below it.

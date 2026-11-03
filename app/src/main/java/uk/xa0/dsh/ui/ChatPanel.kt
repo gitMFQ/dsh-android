@@ -1057,6 +1057,10 @@ internal fun ChatPanel(
                 drawerContainerColor = DshTheme.colors.sidebarFill,
             ) {
                 SessionsDrawer(
+                    // The same backdrop the bar and the header sample: one shell, one
+                    // recorded layer. The drawer overlays the conversation, so the blur
+                    // it shows is the thing it is actually covering.
+                    backdrop = glassBackdrop,
                     sessions = ui.sessions,
                     workspaces = ui.workspaces,
                     workspacesPhase = ui.workspacesPhase,
