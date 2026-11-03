@@ -12,6 +12,7 @@ import uk.xa0.dsh.UiState
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.ExplorerState
+import uk.xa0.dsh.model.WorkspaceTreeState
 import uk.xa0.dsh.model.FileDownloader
 import uk.xa0.dsh.model.ScheduleEntry
 import uk.xa0.dsh.model.GeneralSettings
@@ -75,6 +76,8 @@ data class ChatUiState(
     val directoryBusy: Boolean = false,
     val directoryError: String? = null,
     val workspaceExplorer: ExplorerState = ExplorerState.Idle,
+    /** The Files tree: every level the host has answered, plus which are open. */
+    val workspaceTree: WorkspaceTreeState = WorkspaceTreeState(),
     /**
      * The Plugins page's read of `pluginInventory/list`.
      *
@@ -195,6 +198,8 @@ data class ChatActions(
     val listWorkspaceDirectory: (String) -> Unit = {},
     val reloadWorkspaceExplorer: () -> Unit = {},
     val resetWorkspaceExplorer: () -> Unit = {},
+    /** Expands or collapses one directory in the Files tree. */
+    val toggleWorkspaceDirectory: (String) -> Unit = {},
     val workspaceFileLoader: () -> WorkspaceFileLoader? = { null },
     val workspaceFileDownloader: () -> FileDownloader? = { null },
     /** Reads `pluginInventory/list`; the Plugins page's one invalidation. */

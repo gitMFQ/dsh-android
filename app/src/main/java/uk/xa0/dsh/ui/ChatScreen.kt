@@ -101,6 +101,7 @@ fun ChatScreen(vm: DshViewModel) {
     // The Files panel's explorer half. A flow of its own, like the browser's: a listing
     // failure belongs to the panel, not to the session error banner.
     val workspaceExplorer by vm.workspaceExplorer.collectAsStateWithLifecycle()
+    val workspaceTree by vm.workspaceTree.collectAsStateWithLifecycle()
     // The Plugins page's inventory, a flow of its own for the same reason: a failed
     // read belongs to that page rather than to the session banner.
     val pluginInventory by vm.pluginInventory.collectAsStateWithLifecycle()
@@ -125,6 +126,7 @@ fun ChatScreen(vm: DshViewModel) {
         directoryBusy = directoryBusy,
         directoryError = directoryError,
         workspaceExplorer = workspaceExplorer,
+        workspaceTree = workspaceTree,
         pluginInventory = pluginInventory,
         // A field of `ui`, not a flow of its own: the restore belongs to the session's
         // state, and a second subscription to it would be a second source of truth.
@@ -193,6 +195,7 @@ fun ChatScreen(vm: DshViewModel) {
             listWorkspaceDirectory = vm::listWorkspaceDirectory,
             reloadWorkspaceExplorer = vm::reloadWorkspaceExplorer,
             resetWorkspaceExplorer = vm::resetWorkspaceExplorer,
+            toggleWorkspaceDirectory = vm::toggleWorkspaceDirectory,
             workspaceFileLoader = vm::workspaceFileLoader,
             workspaceFileDownloader = vm::workspaceFileDownloader,
             loadPluginInventory = vm::loadPluginInventory,
