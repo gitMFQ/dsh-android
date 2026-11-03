@@ -24,6 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import uk.xa0.dsh.R
 import uk.xa0.dsh.PluginInventoryState
 import uk.xa0.dsh.model.PluginEntry
 import uk.xa0.dsh.model.PluginInventoryWire
@@ -82,13 +85,13 @@ internal fun PluginsPage(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Plugins",
+                text = stringResource(R.string.plugins_title),
                 style = DshType.titleMedium,
                 color = colors.labelPrimary,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = "Refresh",
+                text = stringResource(R.string.plugins_refresh),
                 style = DshType.bodySmall,
                 color = colors.link,
                 modifier = Modifier
@@ -100,7 +103,7 @@ internal fun PluginsPage(
         Spacer(Modifier.height(DshSpacing.md))
         when (state) {
             PluginInventoryState.Idle, PluginInventoryState.Loading ->
-                PluginNote("Reading this deployment's plugins…")
+                PluginNote(stringResource(R.string.plugins_reading))
 
             is PluginInventoryState.Failed ->
                 PluginNote(state.message, tint = colors.error)
@@ -119,7 +122,7 @@ private fun PluginRows(state: PluginInventoryState.Ready) {
         // An empty deployment and a failed read are different facts, and this one is
         // the host's own answer: it has nothing loaded, which is a real state on a
         // fresh install.
-        PluginNote("This deployment has no plugins loaded.")
+        PluginNote(stringResource(R.string.plugins_empty))
         return
     }
     val active = rows.count { it.state == PluginState.ACTIVE }
@@ -127,9 +130,17 @@ private fun PluginRows(state: PluginInventoryState.Ready) {
     // The summary says the one thing a reader wants before scrolling: how much of this
     // is working, and whether anything needs them. A count of "twenty rows" would be
     // true and useless.
+    //
+    // Assembled from two resources rather than one concatenated sentence: the running
+    // count is a plural (English has two forms, Chinese one) and the failure clause is
+    // conditional. Concatenating inside `buildString` would bake the English word order
+    // and the "·" separator into a place no translator can reach.
     val summary = buildString {
-        append("$active of ${rows.size} running")
-        if (failed > 0) append(" · $failed failed")
+        append(pluralStringResource(R.plurals.plugins_running_summary, active, active, rows.size))
+        if (failed > 0) {
+            append(" · ")
+            append(pluralStringResource(R.plurals.plugins_failed_summary, failed, failed))
+        }
     }
     Text(
         text = summary,
@@ -138,7 +149,7 @@ private fun PluginRows(state: PluginInventoryState.Ready) {
         modifier = Modifier.padding(bottom = DshSpacing.lg),
     )
     SegmentedColumn(
-        title = "Loaded",
+        title = stringResource(R.string.plugins_loaded),
         content = rows.map { entry -> { PluginRow(entry) } },
     )
     Spacer(Modifier.height(DshSpacing.lg))
@@ -146,13 +157,13 @@ private fun PluginRows(state: PluginInventoryState.Ready) {
     // offers no controls leaves the reader guessing whether the app cannot do it or
     // the host cannot, and those are different answers.
     Text(
-        text = if (inventory.managementAvailable) {
-            "This page lists what is loaded. Installing and enabling plugins is a " +
-                "host-side operation, so it stays on the machine running DSH."
-        } else {
-            "This deployment does not expose plugin management, so this page is a " +
-                "read-only inventory."
-        },
+        text = stringResource(
+            if (inventory.managementAvailable) {
+                R.string.plugins_readonly_with_management
+            } else {
+                R.string.plugins_readonly_without_management
+            },
+        ),
         style = DshType.micro,
         color = colors.labelTertiary,
     )
@@ -226,10 +237,10 @@ private fun PluginRow(entry: PluginEntry) {
         trailing = {
             Text(
                 text = when (entry.state) {
-                    PluginState.ACTIVE -> "Running"
-                    PluginState.IDLE -> "Idle"
-                    PluginState.DISABLED -> "Off"
-                    PluginState.FAILED -> "Failed"
+                    PluginState.ACTIVE -> stringResource(R.string.plugins_state_running)
+                    PluginState.IDLE -> stringResource(R.string.plugins_state_idle)
+                    PluginState.DISABLED -> stringResource(R.string.plugins_state_off)
+                    PluginState.FAILED -> stringResource(R.string.plugins_state_failed)
                 },
                 style = DshType.micro,
                 color = tint,
