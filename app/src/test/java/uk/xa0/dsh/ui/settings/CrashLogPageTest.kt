@@ -3,11 +3,13 @@ package uk.xa0.dsh.ui.settings
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -105,9 +107,13 @@ class CrashLogPageTest {
         crash("boom")
         page()
         rule.onNodeWithText("java.lang.RuntimeException").performClick()
-        rule.onNodeWithText("Copy").assertIsDisplayed()
-        rule.onNodeWithText("Share").assertIsDisplayed()
-        rule.onNodeWithText("Delete").assertIsDisplayed()
+        // `assertExists`, not `assertIsDisplayed`: a real stack trace is tall enough to
+        // push the footer below the fold on a phone-sized viewport, and a node that is
+        // composed but scrolled off is exactly what the reader scrolls down to reach.
+        // What is asserted is that expanding *produced* the actions, not that they fit.
+        rule.onNodeWithText("Copy").assertExists()
+        rule.onNodeWithText("Share").assertExists()
+        rule.onNodeWithText("Delete").assertExists()
     }
 
     /**
@@ -143,7 +149,9 @@ class CrashLogPageTest {
         page()
 
         rule.onAllNodesWithText("java.lang.RuntimeException")[0].performClick()
-        rule.onNodeWithText("Delete").performClick()
+        // Scrolled to first: a real stack trace is tall enough to put the footer below the
+        // fold, and a click on an off-screen node lands on nothing.
+        rule.onNodeWithText("Delete").performScrollTo().performClick()
 
         assertEquals(1, CrashLog.reports().size)
         rule.onNodeWithText("java.lang.RuntimeException").assertIsDisplayed()

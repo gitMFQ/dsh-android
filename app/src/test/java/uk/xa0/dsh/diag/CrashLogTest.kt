@@ -58,7 +58,7 @@ class CrashLogTest {
         val reports = CrashLog.reports()
         assertEquals("one crash should produce one report", 1, reports.size)
         val report = reports.single()
-        assertEquals("IllegalStateException", report.summary)
+        assertEquals("java.lang.IllegalStateException", report.summary)
         assertTrue(
             "the stack must be in the report, or it cannot be diagnosed",
             report.text.contains("IllegalStateException"),
@@ -83,7 +83,7 @@ class CrashLogTest {
 
         val reports = CrashLog.reports()
         assertEquals(2, reports.size)
-        assertEquals("RuntimeException", reports[0].summary)
+        assertEquals("java.lang.RuntimeException", reports[0].summary)
         assertTrue(reports[0].text.contains("second"))
         assertTrue(reports[1].text.contains("first"))
     }
