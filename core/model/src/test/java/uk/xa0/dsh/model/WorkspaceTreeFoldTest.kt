@@ -176,15 +176,23 @@ class WorkspaceTreeFoldTest {
     }
 
     @Test
-    fun `a closed directory that does not match its own name is filtered out`() {
+    fun `a closed directory does not survive on a match inside it`() {
+        // `out` is cached and its level contains a match, but the reader has closed
+        // it — so nothing under it is on screen and the directory cannot justify
+        // itself by a row nobody can see. It is filtered out, and the root's own
+        // REPORT.md is what remains.
+        //
+        // This is what keeps "ancestor chain" from decaying into "every directory
+        // whose subtree happens to contain a match": the fold walks only what is
+        // open, so a closed directory reveals nothing to walk.
         val levels = mapOf(
-            "" to listing("", dir("out"), file("README.md")),
+            "" to listing("", dir("out"), file("REPORT.md")),
             "out" to listing("out", file("REPORT.md")),
         )
 
         val drawn = rows(levels, open = emptySet(), query = "report")
 
-        assertEquals(listOf("README.md"), drawn.map { it.entry.name })
+        assertEquals(listOf("REPORT.md"), drawn.map { it.entry.name })
     }
 
     @Test
