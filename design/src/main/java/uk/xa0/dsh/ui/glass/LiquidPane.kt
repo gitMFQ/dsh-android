@@ -56,8 +56,42 @@ fun Modifier.liquidPane(
     backdrop: GlassBarBackdrop?,
     shape: Shape,
     tint: Color? = null,
+    /**
+     * What this surface looked like *before* it had a material, painted on the flat
+     * tiers instead of [glassSurface].
+     *
+     * ## Why this seam exists
+     *
+     * Not every pane that wants the liquid tier wants `glassSurface`'s flat answer.
+     * `glassSurface` is fill-plus-hairline, and that is right for a pane that floats: the
+     * stroke is the only boundary between it and the page. But a surface that is already
+     * flush with the page — the header, which spans the full width and sits in the layout
+     * rather than over it — has no such boundary to draw, and an all-round hairline there
+     * puts a 0.5dp line along the screen's top edge and both side edges. That is not a
+     * surface, it is a frame.
+     *
+     * Adopting a material must not silently redraw a flat-tier screen. When a caller
+     * passes this, the flat branch paints exactly this fill and **no hairline**, so a
+     * capture recorded before the adoption is still byte-identical after it — which is
+     * the only way "the liquid tier gained glass" can be stated without also claiming
+     * "and every API 26 phone changed appearance".
+     *
+     * [Color.Transparent] is the honest value for a surface that was simply the page:
+     * it says "there was nothing here", not "there was a colour that happened to match".
+     */
+    flatFill: Color? = null,
 ): Modifier {
     if (backdrop == null || !LocalGlassEnabled.current) {
+        if (flatFill != null) {
+            // Exactly what the surface had before it had a material, and nothing else:
+            // no fill unless it was given one, no hairline. See the parameter's note.
+            val base = if (flatFill == Color.Transparent) {
+                this
+            } else {
+                this.background(flatFill, shape).clip(shape)
+            }
+            return if (tint == null) base else base.background(tint, shape)
+        }
         val base = glassSurface(shape)
         // Flat tiers have no surface layer to tint; the wash still reads as the control's
         // state, so it is painted on top of the tier's own fill.

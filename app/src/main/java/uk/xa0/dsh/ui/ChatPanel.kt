@@ -97,6 +97,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -2770,12 +2771,23 @@ private fun ChatHeader(
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
-    // The header wears the same material as the bar below it. `liquidPane` is the
-    // one entry point for that material, and its null/disabled branch is `glassSurface`
-    // — the flat fill this header had before — so the layout does not depend on the
-    // device. On the liquid tier the transcript sliding under the header is visible
-    // through it, which is the whole point of the shell floating.
-    Column(modifier.liquidPane(backdrop = backdrop, shape = RoundedCornerShape(0.dp))) {
+    // The header wears the same material as the bar below it.
+    //
+    // `flatFill = Color.Transparent` is the whole reason this can be added without
+    // redrawing every flat-tier screen. `glassSurface` — the material's flat answer —
+    // is fill-plus-hairline, and a hairline is right for a pane that floats: it is the
+    // only boundary between that pane and the page. The header is *flush* with the page
+    // and spans the full width, so an all-round stroke puts a 0.5dp line along the
+    // screen's top edge and both side edges — a frame, not a surface. Passing the fill
+    // the header actually had (none) keeps the flat tier byte-identical and leaves the
+    // material to the tier that can show it.
+    Column(
+        modifier.liquidPane(
+            backdrop = backdrop,
+            shape = RoundedCornerShape(0.dp),
+            flatFill = Color.Transparent,
+        ),
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
