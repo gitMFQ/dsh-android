@@ -1,11 +1,12 @@
 # 交接文档（给新会话）
 
-> 写于 **2026-11-03 傍晚**（#50 合入之后），本版为 **第九版**。
+> 写于 **2026-11-03 深夜**（#58 合入之后），本版为 **第十版**。
 > 沿革：一版「接管 + 工具链全量升级」→ 二版「结构拆分」→ 三版「1.2b」→ 四版「阶段 1 完成」
 > → 五版「阶段 2.5 完成 + 2.6 清单」→ 六版「2.6 被 3.0 取代」→
 > 七版「输入框/底栏三轮重做 + 一次 RPC 取消崩溃修复之后」→
 > 八版「3.5b：Me 的八个设置页签变成真页面」→
-> **本版「七连 PR：深色基线 / Files 工具栏 / 状态胶囊 / Plugins 真页 / i18n 起步 / 玻璃顶栏 / 换装 sheet」**。
+> 九版「七连 PR：深色基线 / Files 工具栏 / 状态胶囊 / Plugins 真页 / i18n 起步 / 玻璃顶栏 / 换装 sheet」→
+> **本版「第九版的账全部结清：#52/#54 换装收尾、#56 抽屉外观、#57 顶栏折叠、#58 抽屉玻璃」**。
 >
 > **新会话先读本文件**，再读 [PHASE-3-PLAN.md](PHASE-3-PLAN.md)。注意：该计划的 §4 PR 表
 > **没有记录第 1–3 轮输入框改造**（那是计划写成之后按用户真机反馈做的），当前外壳状态以本文件为准。
@@ -13,10 +14,11 @@
 ## 1. 一句话现状
 
 仓库 <https://github.com/gitMFQ/dsh-android>（私有）是整仓 GPL-3.0 的 **DSH 原生安卓客户端**。
-阶段 1、阶段 2.0–2.5、阶段 3 的 3.0–3.8 全部合入。3.5b（Me 的设置页签）之后，第八版列出的六项
-一次做完（PR #44–#50），当前 master `e11afca`。
+阶段 1、阶段 2.0–2.5、阶段 3 的 **3.0–3.9 全部合入**（3.6 只做了 A3、3.10 只做了外观，见 §4.2）。
+3.5b（Me 的设置页签）之后，第八版列出的六项一次做完（PR #44–#50），第九版的第七项
+（3.7 顶栏折叠）也已随 #57 落地，抽屉玻璃由 #58 收尾。当前 master `16b6484`。
 
-**CI 实测（master `e11afca`）**：`tests=1239 failures=0` / `screenshots=26` / Debug APK 绿。
+**CI 实测（master `16b6484`）**：`tests=1239 failures=0` / `screenshots=27` / Debug APK 绿。
 本机 aarch64 只能编译 Kotlin 和跑 `:design`/`:core:protocol` 测试，**测试真值以 CI 为准**。
 
 ## 2. 已合入（master）
@@ -45,6 +47,8 @@
 | #51 | 第九版交接文档（本文件） |
 | #52 | **D1 完成（sheet 部分）**：其余 **11 处** `ModalBottomSheet` 全部换 `DshSheet`；`sheetState` 纯透传、无人回读，所以删掉没有行为变化；12 处的 `containerColor` 都是 `bgBase` |
 | #54 | **3.9 完成（dialog 部分）**：7 处 `AlertDialog` 全换；`ConfirmDialogVisuals` 补 `confirmEnabled` + `confirmTone`（kit 原来把每个 confirm 都画成 accent，会把「Force quit」这类销毁动作也染成品牌色） |
+| #56 | **3.10 外观部分**：抽屉搜索框换胶囊（`DshTextField` 新增 `shape` 参数）+ New Session 变 `sendFill` 填充胶囊。**只换观感，不动交互**——`SuperSearchBar` 的随滚动展开会和 `drawerDrag` 抢手势。预期动 `drawer`/`drawer-empty`/`drawer-dark` 三张，实测只动这三张 |
+| #57 | **3.7 完成**：顶栏折叠**随页变、不随滚动**——折叠在调用点由 `destination != CHAT \|\| chatView != CHAT` 推导；只折叠第二行（`cwd`），高度走 `animateDpAsState` 经既有 `onSizeChanged` 传导。新增 `chat-trajectory` 基线（折叠此前零像素覆盖），26 → 27 |
 
 ## 3. 当前外壳长什么样（接手 UI 必读）
 
@@ -157,14 +161,17 @@
 | **Plugins 页** | `ui/PluginsPage.kt` + `:core:model/PluginInventory.kt` + `DshViewModel.loadPluginInventory` | 只读接 `pluginInventory/list`；排序 **Failed → Active → Idle → Disabled**（枚举声明顺序即排序顺序）；`enabled` 与 `fiberPhase` **分开画**，两者不合并成一个灯 |
 | **Files 工具栏** | `FilesPanel.kt` 的 `ExplorerPane` + `:core:model/WorkspaceExplorer.kt` | Up / Copy path / 排序循环 / 名称过滤；目录在每个排序里都排最前；`RECENT` 是**转录的 seq**、不是 mtime（host 不报 mtime） |
 | **`DshSheet`** | `design/.../ui/overlay/Sheet.kt` | 包的是 miuix **`WindowBottomSheet`**（window 级），**不是** `OverlayBottomSheet`（后者要 `MiuixPopupUtils` 的 popup host / miuix Scaffold）。**全 app 12 处 sheet 已全用它**，`ModalBottomSheet` 归零 |
+| **抽屉玻璃** | `SessionsDrawer.kt` 的 `Sidebar` | #58：`liquidPane(flatFill = colors.sidebarFill)`。**安全故事就是一个参数**——不能模糊的设备画回原来的颜色，基线不动、API 26 外观不变。底下 `ModalDrawerSheet` 的 `drawerContainerColor` **不会**被采样：`drawBackdrop` 采的是 `glassBarLayer` **记录下来的**那一层（pager），不是合成后的像素 |
 
 > **`liquidPane` 新增 `flatFill` 参数**：材质面板在平档退化时用 `glassSurface`（填充 + 四边 0.5dp 描边），
 > 那对**浮动**面板是对的；但顶栏是**齐平**页面的全宽条，四边描边会变成屏幕上下左右的一道框。
 > 传 `flatFill = Color.Transparent` 表示「这里本来什么都没有」，平档就逐字节不变——**这是 S2 能落地的前提**。
 > 实测证据：不加这个参数时 `chat-transcript` 动了 932 像素，全在 y=0..57 的顶栏带，颜色 `#FFFFFF→#E0E0E0`。
 
-> **没有任何基线包含对话框** —— 所以 #54 里 `confirmTone` 这类「颜色被换掉」的回归，基线**抓不到**。
-> 给一张确认框基线（销毁动作 + 两个按钮）是下一步最划算的测试投资。
+> **基线里的窗口级表面是可以被 `onRoot()` 看见的** —— `permission.png` 就是证据：`ModalBottomSheet`
+> 是独立 window，`onRoot()` 仍能连窗口一起截（灰底 + sheet 全在画面里）。所以给确认框补基线在
+> 机制上没有障碍，`permission` 那条注释里「if `onRoot()` cannot see the sheet, the record fails
+> loudly」的说法已经过实测。
 
 > **i18n 只覆盖了 Plugins 一页**。`values-zh-rCN` 是证明链路通了（真机切中文这一页就是中文，不需要 App 内切换、不需要 appcompat backport，因为本 app 没有任何 locale override）。**其余约 1100 条仍是英文硬编码**，别把「一页可翻译」当成「已翻译」。
 
@@ -198,10 +205,10 @@
 | # | 内容 | 备注 |
 |---|---|---|
 | ~~3.6~~ | ~~Files 页 → 类 VSCode 树~~ | **本版只做了 A3（工具栏/排序/过滤），没建树**（用户选的）。真树仍待做 |
-| 3.7 | TopBar 折叠：**随页变，不随滚动** | 见 PHASE-3-PLAN §6；**仍未做** |
+| ~~3.7~~ | ~~TopBar 折叠：随页变，不随滚动~~ | ✅ **#57**。新增 `chat-trajectory` 基线；聊天基线**没有**移动（对话始终展开，这是唯一「基线动了才是缺陷」的 PR） |
 | ~~3.8~~ | ~~状态胶囊~~ | ✅ #46 |
 | ~~3.9~~ | ~~Sheet/Dialog 换装~~ | ✅ **全完成**（#50 + #52 + #54）：`ModalBottomSheet` 与 `AlertDialog` 在本仓归零。**两种机制并存是刻意的**：`ConfirmDialogHost` 的 body 是 String，所以「重命名」（要输入框）和「上下文窗口」（要条形图）走 `DshDialog` 自绘 |
-| 3.10 | 抽屉换装 | **未做，且是另一类改动**：搜索框换 `SuperSearchBar` 是**交互变化**（展开/随滚动收起），不是换容器；抽屉还有自绘拖拽手势，会和第二个可滚动区域抢 |
+| 3.10 | 抽屉换装 | **外观已由 #56 完成**（胶囊搜索框 + 填充主按钮）；**玻璃材质在 #58**（`flatFill = colors.sidebarFill`，平档逐字节不变）。**剩下的只有 `SuperSearchBar` 本体，而且不该做**：它是交互变化（展开/随滚动收起），抽屉有自绘拖拽手势，会和第二个可滚动区域抢。kit 的 `SegmentedList` 同理——它面向设置行，装不下工作区、树缩进和每行 pending 态 |
 
 > **为什么 sheets 没一次换完**：34 处 `ModalBottomSheet` 调用点里不少是惰性列表（`ModelSheet`、
 > `AgentPresetSheet`），换容器会连带改内边距与滚动。一次一张、每次只看一张基线，比一次 34 处更容易定位。
@@ -235,7 +242,7 @@
 | **跨模块 smart cast 编不过** | 先把属性读进局部变量再判断；别加 `!!`。 |
 | **AGP 9 不允许 `org.jetbrains.kotlin.android`** | 内置 Kotlin，应用该插件直接 build fail。 |
 | **新增测试任务要写进 `verify.yml` / `build.yml`** | 依赖一个模块不会跑它的测试，CI 会「绿着丢测试」。 |
-| **`tests` 与 `screenshots` 是两个数** | CI 分开打印，不要合并引用。当前 `tests=1191` / `screenshots=20`。 |
+| **`tests` 与 `screenshots` 是两个数** | CI 分开打印，不要合并引用。当前 `tests=1239` / `screenshots=27`。 |
 | **基线里必须关 squircle** | miuix `Card` 用 AGSL shader 画圆角，Robolectric 会在 composition 阶段崩（`'color' is not a valid layout qualifier`）。两个基线类都 provide `LocalSquircleEnabled = false`；**新增基线类也要加**。 |
 | **换装不得动平档基线** | 给某表面加材质时，`liquidPane` 要传 `flatFill`（见 §3.6）。平档动了就是缺陷，不是预期差异——#48 第一次跑就是这么被抓回来的 |
 | **换装 PR 要写清「哪几张预期动」** | 跑完对着 `Screenshot gate` 的失败清单核对：**多动一张就是误伤**。#48/#50 都靠这条当场抓到问题 |
@@ -260,9 +267,9 @@ dispatch screenshots → 下载覆盖基线 → 提交 → verify 绿 → merge�
 ## 7. 仓库结构（只列本轮相关）
 
 ```
-app/                 主模块（1175 项功能测试里的 app 部分；19 张截图基线）
+app/                 主模块（1239 项功能测试里的 app 部分；27 张截图基线）
   src/main/java/uk/xa0/dsh/
-    ui/ChatPanel.kt       3840 行，外壳 + 聊天树 + 底栏/抽屉/rail 手势（最大的一块）
+    ui/ChatPanel.kt       4211 行，外壳 + 聊天树 + 底栏/抽屉/rail 手势（最大的一块）
     ui/settings/
       MeSettings.kt（MeSettingsState/Actions + 页签分发）/ SettingsCards.kt（九个主题卡片）
     ui/PluginsPage.kt       Plugins 目的地：只读插件清单（本版新增）
@@ -273,7 +280,7 @@ app/                 主模块（1175 项功能测试里的 app 部分；19 张�
       ChatRows.kt / QueueDock.kt / FilesPanel.kt / Sheets.kt / …
     ui/scroll/TailFollow.kt   尾部跟随（padding 边缘修正）
     ui/theme/SystemBars.kt    （在 :design）透明导航栏 / 图标明暗
-  src/test/screenshots/      26 张 PNG（本版 +6：4 张深色/AMOLED、chat-transcript-waiting、plugins-tab-empty）
+  src/test/screenshots/      27 张 PNG（#44 起 +4 深色/AMOLED，#47 +2 plugins，#57 +1 chat-trajectory）
   src/test/java/.../screenshot/ScreenBaselineTest.kt / WideBaselineTest.kt
 core/model/          领域模型 + 测试；本版新增 StatusCapsule.kt（胶囊排名）/ PluginInventory.kt（插件清单）/ WorkspaceExplorer 的 ExplorerOrder + 过滤
 core/term/           终端（纯 JVM，本机可跑）
