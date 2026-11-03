@@ -73,6 +73,7 @@ import uk.xa0.dsh.ui.AboutContent
 import uk.xa0.dsh.ui.ChatActions
 import uk.xa0.dsh.ui.DESTINATION_ITEMS
 import uk.xa0.dsh.ui.Destination
+import uk.xa0.dsh.ui.ForceQuitDialog
 import uk.xa0.dsh.ui.ChatPanel
 import uk.xa0.dsh.ui.ChatUiState
 import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
@@ -558,6 +559,38 @@ class ScreenBaselineTest {
      * column alignment here is not proof that a cell is the right width on a device.
      * It can say the same cells land in the same places as last time.
      */
+    /**
+     * The confirmation dialog, in the one tone a capture can prove.
+     *
+     * This is the gap the ninth handoff named and the tenth measured. #54 added
+     * `confirmTone` because the vendored kit painted **every** confirm in the accent
+     * colour — which is right for "Rename" and wrong for "Force quit", where the button
+     * that ends the process would have worn the brand's colour. A regression there
+     * repaints a destructive action as an inviting one, and no capture could see it,
+     * because no capture contained a dialog.
+     *
+     * `ForceQuitDialog` rather than a hand-built `ConfirmDialogHost`: it is the one
+     * caller in the app that uses [ConfirmTone.Error], so the pixels pin the real
+     * decision (a destructive confirm is red) instead of a fixture's opinion of it.
+     * The title, body, both button labels and the two-tone button row are all on screen,
+     * which is the whole surface `ConfirmDialogHost` draws.
+     *
+     * The body is deliberately the long one. `ConfirmDialogHost` caps the body at
+     * "whatever is left after the buttons" through its own `Layout`, so a capture with
+     * two short lines would prove the drawing and leave that cap untested — the exact
+     * rule that keeps a long change-log from pushing the buttons off the screen.
+     *
+     * The dialog is a window-level surface (`WindowDialog`), and `onRoot()` is expected
+     * to see it: `permission` already captures a `ModalBottomSheet` the same way, and
+     * that baseline is the evidence rather than a hope.
+     */
+    @Test
+    fun confirmDialog() {
+        capture("confirm-dialog") {
+            ForceQuitDialog(onDismiss = {}, onConfirm = {})
+        }
+    }
+
     @Test
     fun terminal() {
         capture("terminal") {
