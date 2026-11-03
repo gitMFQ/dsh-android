@@ -129,7 +129,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import uk.xa0.dsh.BalanceState
 import uk.xa0.dsh.PENDING_DRAFT_KEY
+import uk.xa0.dsh.PendingKind
 import uk.xa0.dsh.ReferenceCandidate
+import uk.xa0.dsh.UiState
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.diag.DiagFrames
 import uk.xa0.dsh.diag.DiagLazyList
@@ -137,11 +139,15 @@ import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.diag.diagDrag
 import uk.xa0.dsh.diag.diagOffset
 import uk.xa0.dsh.diag.diagRowGrowth
+import uk.xa0.dsh.model.CapsuleState
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.DisplayRow
 import uk.xa0.dsh.model.GeneralSettings
 import uk.xa0.dsh.model.LiveAttempt
 import uk.xa0.dsh.model.SessionFiles
+import uk.xa0.dsh.model.StatusCapsule
+import uk.xa0.dsh.model.StatusCapsules
+import uk.xa0.dsh.model.PendingKindWire
 import uk.xa0.dsh.model.SessionTarget
 import uk.xa0.dsh.model.SubagentComposerState
 import uk.xa0.dsh.model.SubagentReadOnlyReason
@@ -1243,6 +1249,39 @@ internal fun ChatPanel(
                 onLineage = { showLineage = true },
                 parent = subagentParent,
                 onParent = { subagentParent?.let { actions.openSession(it.sessionId) } },
+                // One status fact, ranked. The derivation reads the whole `UiState`
+                // because the four facts it ranks are held in four different places —
+                // the attention mirrors, the mux poll, the running flag and the
+                // session id — and doing that ranking at the call site is what keeps
+                // `ChatHeader` a pure function of its arguments.
+                //
+                // `isDrawn` is the filter, not an extra `if` here: "an idle session
+                // shows nothing" is one statement in `:core:model`, and a second copy
+                // of it at the call site is how the two would drift.
+                capsule = StatusCapsules
+                    .derive(
+                        pending = pendingKindOf(ui.pendingInteractions[ui.currentSessionId]),
+                        connectionLabel = ui.connectionLabel,
+                        running = ui.running,
+                        sessionOpen = ui.currentSessionId != null,
+                    )
+                    .takeIf { StatusCapsules.isDrawn(it.state) },
+                // Only one of the four states has somewhere to go, and the capsule is
+                // a button for that one and a plain chip for the rest rather than a
+                // button that does nothing:
+                //
+                //  * OFFLINE opens About, whose "Restart connection" is the action
+                //    this state actually has. It is the same destination the drawer's
+                //    footer already offers, reached from the place the symptom shows.
+                //  * WAITING has no tap: the card that answers it is *already* floating
+                //    over the conversation (the attention stack, #43), and opening a
+                //    second surface that repeats its words would be a worse button.
+                //  * WORKING and UNKNOWN have no action at all.
+                onCapsule = if (capsuleStateIsOffline(ui)) {
+                    { showAbout = true }
+                } else {
+                    null
+                },
                 // Feeds the loading offset above: the header is the top half of
                 // the chrome, and its own height is not a constant.
                 modifier = Modifier.onSizeChanged { headerPx = it.height },
@@ -2684,6 +2723,24 @@ private fun ChatHeader(
      */
     parent: SubagentParent? = null,
     onParent: () -> Unit = {},
+    /**
+     * The one status fact this header wears, or null when there is nothing to say.
+     *
+     * One, not four: see [uk.xa0.dsh.model.StatusCapsules] for the ranking and the
+     * argument. The derivation happens at the call site because it needs the whole
+     * `UiState`; this composable only draws what it is handed, which is also what
+     * keeps the header fixture-able in a screenshot test.
+     */
+    capsule: StatusCapsule? = null,
+    /**
+     * What the capsule opens, or **null** when it opens nothing.
+     *
+     * Null rather than an empty lambda on purpose: a chip that looks tappable and
+     * does nothing is worse than a chip that plainly is not a button, and the three
+     * states that have no action are the majority. The composable drops the
+     * `clickable` when this is null, so the two are structurally the same decision.
+     */
+    onCapsule: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
@@ -2806,6 +2863,14 @@ private fun ChatHeader(
                 Spacer(Modifier.width(HEADER_SEAT_GAP))
             }
             JobsSeat(jobs = jobs, finishedUnseen = jobsFinishedUnseen, onClick = onJobs)
+            // The capsule is the *last* seat, after the utilities, because it is the
+            // one that changes width with its label: putting it before them would
+            // shift every utility sideways as states change. A fixed-width seat with
+            // a variable label inside it is the same shape the bar's readings use.
+            if (capsule != null) {
+                Spacer(Modifier.width(HEADER_SEAT_GAP))
+                StatusCapsuleChip(capsule, onClick = onCapsule)
+            }
             // No separate running-turn dot here on purpose. `JobsSeat` already
             // draws a `StateDot(ONGOING)` while a job runs, and this glyph is the
             // same one, so a running turn plus a running job painted two identical
@@ -3657,6 +3722,105 @@ private fun ErrorBanner(
             )
         }
         Text("Dismiss", style = DshType.bodySmall, color = colors.link)
+    }
+}
+
+/**
+ * The app's `PendingKind` as the model layer's mirror of it.
+ *
+ * Two enums rather than one because the ranking lives in `:core:model` (where it can
+ * be tested without Android) and the kind is minted in `AttentionCenter`, next to the
+ * event stream that produces it. This is the one place the two meet; an unmapped value
+ * becomes null rather than throwing, because a kind this build does not know is a
+ * reason to draw no capsule, not a reason to crash the header.
+ */
+private fun pendingKindOf(kind: PendingKind?): PendingKindWire? = when (kind) {
+    PendingKind.APPROVAL -> PendingKindWire.APPROVAL
+    PendingKind.QUESTION -> PendingKindWire.QUESTION
+    PendingKind.PLAN_REVIEW -> PendingKindWire.PLAN_REVIEW
+    null -> null
+}
+
+/**
+ * Whether the capsule would be showing the offline state, computed from the same
+ * inputs `StatusCapsules.derive` reads.
+ *
+ * Recomputed rather than read off the derived value because the derived value is
+ * passed inline as an argument and the tap handler is chosen in the same expression
+ * list — naming it would need a local outside the call, and a `remember`ed capsule
+ * would go stale against `UiState`. The duplication is two boolean reads against one
+ * source of truth (`connectionLabel`), which is the smaller of the two evils.
+ */
+private fun capsuleStateIsOffline(ui: UiState): Boolean =
+    ui.connectionLabel != null && ui.pendingInteractions[ui.currentSessionId] == null
+
+/**
+ * The header's status capsule: one fact, one word, one tint.
+ *
+ * ## Why a chip and not a dot
+ *
+ * A coloured dot is the cheapest status indicator and the worst one here: the four
+ * states this can show are not a severity ramp (an approval is not "redder" than a
+ * dropped socket), and a dot cannot say *which* interaction is waiting. The word is
+ * the payload; the tint only groups the state.
+ *
+ * ## Why the tint is not the palette's semantic colour alone
+ *
+ * [CapsuleState.WAITING] wears the warning tint because the agent is stopped until a
+ * human answers — the same colour the Full-access option and the truncated-entry note
+ * wear, which is the app's existing vocabulary for "this is on you". [OFFLINE] wears
+ * the error tint, [WORKING] the accent, and [UNKNOWN] tertiary ink: a state the client
+ * cannot name should not be loud.
+ *
+ * The dot is the same `StateDot` the rest of the app uses, so a waiting approval
+ * chases exactly like a running job does rather than inventing a second animation.
+ */
+@Composable
+private fun StatusCapsuleChip(capsule: StatusCapsule, onClick: (() -> Unit)? = null) {
+    val colors = DshTheme.colors
+    val tint = when (capsule.state) {
+        CapsuleState.WAITING -> colors.warn
+        CapsuleState.OFFLINE -> colors.error
+        CapsuleState.WORKING -> colors.accent
+        CapsuleState.UNKNOWN -> colors.labelTertiary
+        // Not drawn — `StatusCapsules.isDrawn` says so and the caller filters it — but
+        // the branch has to exist, and tertiary ink is the honest choice for a state
+        // that is deliberately not shown.
+        CapsuleState.IDLE -> colors.labelTertiary
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(DshRadius.pill))
+            .background(colors.bgLayer1)
+            .then(if (onClick != null) Modifier.clickableNoRipple(onClick = onClick) else Modifier)
+            .semantics { contentDescription = capsule.label }
+            .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // A chase for the two states that are *moving* — a blocked agent that the host
+        // is still holding, and a socket that is redialling. A still dot for the two
+        // that are not: a running turn is motion but its indicator does not need to
+        // animate twice (the composer's stop affordance already does), and "no session"
+        // is a standing fact.
+        when (capsule.state) {
+            CapsuleState.WAITING, CapsuleState.OFFLINE ->
+                StateDot(state = DotState.ONGOING, size = 6.dp)
+
+            else -> Box(
+                Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(tint),
+            )
+        }
+        Spacer(Modifier.width(DshSpacing.xs))
+        Text(
+            text = capsule.label,
+            style = DshType.micro,
+            color = tint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
