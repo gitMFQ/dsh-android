@@ -28,10 +28,8 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,12 +78,9 @@ fun SettingsSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = DshTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         // The web sections and their order live in `SettingsContent`; this entry point
         // stays in `uk.xa0.dsh.ui` because ChatScreen opens it by that name. The
@@ -123,11 +118,8 @@ fun RouterSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = DshTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         RouterTab(
             target = target,
@@ -199,12 +191,9 @@ fun AboutSheet(
     onForgetCertificate: ((String) -> Unit)? = null,
 ) {
     val colors = DshTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         AboutContent(
             baseUrl = baseUrl,
@@ -256,7 +245,6 @@ fun ModelSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = DshTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val grouped = remember(models, providerOrder) {
         models.groupBy { it.providerName }
@@ -270,10 +258,8 @@ fun ModelSheet(
         modelSheetStatus(choice, selected, selectedEffort, sessionOpen)
     }
 
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         Column(Modifier.fillMaxWidth().padding(bottom = DshSpacing.xxl)) {
             Text(
@@ -457,14 +443,11 @@ fun WorkspaceSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = DshTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var custom by remember { mutableStateOf(false) }
     var customPath by remember { mutableStateOf("") }
 
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         Column(
             Modifier
@@ -752,12 +735,9 @@ fun AgentPresetSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = DshTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         Column(
             Modifier

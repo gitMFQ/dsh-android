@@ -74,13 +74,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -209,6 +207,7 @@ import uk.xa0.dsh.ui.scroll.TailFollow
 import uk.xa0.dsh.ui.settings.MeSettingsActions
 import uk.xa0.dsh.ui.settings.MeSettingsPage
 import uk.xa0.dsh.ui.settings.MeSettingsState
+import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -2268,10 +2267,8 @@ internal fun ChatPanel(
     }
 
     if (showLineage && current != null) {
-        ModalBottomSheet(
+        DshSheet(
             onDismissRequest = { showLineage = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = DshTheme.colors.bgBase,
         ) {
             LineageSheet(
                 rootId = current.id,
@@ -2295,7 +2292,7 @@ internal fun ChatPanel(
     }
 
     if (showJobs) {
-        ModalBottomSheet(
+        DshSheet(
             // Closing the sheet stops the observation: the web closes its job
             // popover's stream on unmount for the same reason, and a stream left open
             // here would keep pulling output nobody is looking at.
@@ -2303,8 +2300,6 @@ internal fun ChatPanel(
                 showJobs = false
                 actions.observeJob(null)
             },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = DshTheme.colors.bgBase,
         ) {
             JobsSheet(
                 jobs = ui.jobs,

@@ -21,10 +21,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +52,7 @@ import uk.xa0.dsh.model.scheduleStatusLabel
 import uk.xa0.dsh.model.parseScheduleInstant
 import uk.xa0.dsh.ScheduleHistoryState
 import uk.xa0.dsh.SchedulePageState
+import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
@@ -113,12 +112,9 @@ fun AutomationSheet(
     onOpenSession: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = DshTheme.colors
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         // One read per open: the sheet is composed while it is shown, so this is the
         // moment the list can be stale, and the moment it is cheapest to replace.

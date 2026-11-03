@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +25,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import uk.xa0.dsh.BalanceState
 import uk.xa0.dsh.model.DEEPSEEK_TOP_UP_URL
 import uk.xa0.dsh.ui.components.DshTextField
+import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
@@ -58,12 +57,9 @@ fun BalanceSheet(
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = DshTheme.colors
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         BalanceContent(state = state, onKey = onKey, onRefresh = onRefresh, onDismiss = onDismiss)
     }
