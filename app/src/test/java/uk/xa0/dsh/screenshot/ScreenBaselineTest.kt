@@ -815,6 +815,32 @@ class ScreenBaselineTest {
     }
 
     /**
+     * The Trajectory reading, which is also the **folded header** (3.7).
+     *
+     * The fold is per page, not per scroll: Chat keeps two lines (title and directory)
+     * and every other reading gets one. That rule had no pixel coverage at all — the
+     * header is shared by four destinations and three views, and every existing capture
+     * happens to be the expanded one — so this capture is what makes the fold
+     * observable rather than merely asserted.
+     *
+     * Captured by *tapping* the view pill rather than by driving a flag: the fold is
+     * derived from the selected view at the call site, and a capture that set the flag
+     * directly would prove the drawing while leaving the wiring untested.
+     */
+    @Test
+    fun chatTrajectory() {
+        capture(
+            "chat-trajectory",
+            before = {
+                rule.onNodeWithContentDescription("Trajectory").performClick()
+                rule.waitForIdle()
+            },
+        ) {
+            ChatTranscriptContent()
+        }
+    }
+
+    /**
      * The same transcript with the dock's other shape: the four destinations back, the
      * composer folded to its circle.
      *

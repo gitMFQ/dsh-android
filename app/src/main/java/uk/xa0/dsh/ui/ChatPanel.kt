@@ -3,6 +3,7 @@ package uk.xa0.dsh.ui
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -1294,6 +1295,13 @@ internal fun ChatPanel(
                 // per surface. Null on the flat tier, which is why every capture keeps
                 // drawing the fill this header had before.
                 backdrop = glassBackdrop,
+                // Folded everywhere except the conversation. Chat is the one page whose
+                // header has two facts worth showing — what this is and where it runs —
+                // and it is also the only one the reader scrolls; the other four are one
+                // line, so switching pages is a step rather than a jump. The rule is
+                // §6's "随页变，不随滚动", and the reason it is not scroll-driven is that
+                // Trajectory and Shell have no scroll position to drive it with.
+                compact = destination != Destination.CHAT || chatView != ChatView.CHAT,
                 // Feeds the loading offset above: the header is the top half of
                 // the chrome, and its own height is not a constant.
                 modifier = Modifier.onSizeChanged { headerPx = it.height },
@@ -2764,6 +2772,21 @@ private fun ChatHeader(
      * fill the header had before, so the layout is identical either way.
      */
     backdrop: GlassBarBackdrop? = null,
+    /**
+     * Whether the header is folded to its one-line form.
+     *
+     * **Per page, not per scroll.** `docs/PHASE-3-PLAN.md` §6 settles the semantics and
+     * the reason: the three readings share one header, and only Chat has a scroll
+     * position, so a fold that followed scrolling would jump every time the reader
+     * switched to a view that has no transcript to scroll. The fold follows the *page*
+     * instead — Chat is the one that has something worth two lines (a title and a
+     * directory), and Trajectory, Shell, Files, Plugins and Me are one line.
+     *
+     * The second line is the session's `cwd`, and dropping it is the whole of the fold:
+     * it is the only variable-height thing in this bar, and the seats on either side are
+     * fixed 40dp circles.
+     */
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
@@ -2777,6 +2800,14 @@ private fun ChatHeader(
     // screen's top edge and both side edges — a frame, not a surface. Passing the fill
     // the header actually had (none) keeps the flat tier byte-identical and leaves the
     // material to the tier that can show it.
+    // Animated rather than swapped: the header is the top of a very tall scroll view,
+    // and a 8dp jump between two states reads as the whole screen twitching. Measured
+    // through `onSizeChanged` at the call site, so the loading offset the transcript uses
+    // follows the animation frame by frame rather than moving once at the end.
+    val rowHeight by animateDpAsState(
+        targetValue = if (compact) 48.dp else 56.dp,
+        label = "HeaderHeight",
+    )
     Column(
         modifier.liquidPane(
             backdrop = backdrop,
@@ -2787,7 +2818,7 @@ private fun ChatHeader(
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(rowHeight),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -2842,9 +2873,11 @@ private fun ChatHeader(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (!cwd.isNullOrBlank()) {
+                // The folded half. Animated out rather than dropped, so the title does
+                // not slide from a two-line block to a one-line block in one frame.
+                AnimatedVisibility(visible = !compact && !cwd.isNullOrBlank()) {
                     Text(
-                        text = shortenPath(cwd),
+                        text = shortenPath(cwd.orEmpty()),
                         style = DshType.bodySmall,
                         color = colors.labelTertiary,
                         maxLines = 1,
