@@ -30,9 +30,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +51,7 @@ import uk.xa0.dsh.diag.diagOffset
 import uk.xa0.dsh.DirectoryEntry
 import uk.xa0.dsh.DirectoryLevel
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -85,7 +84,6 @@ fun WorkspaceBrowser(
     onDismiss: () -> Unit,
 ) {
     val colors = DshTheme.colors
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showHidden by remember { mutableStateOf(false) }
     // null = the breadcrumb is showing; a string = the path being edited.
     var pathDraft by remember { mutableStateOf<String?>(null) }
@@ -133,10 +131,8 @@ fun WorkspaceBrowser(
     val targetName = crumbs.lastOrNull()?.name?.takeIf { it.isNotEmpty() }
         ?: targetPath?.trimEnd('/', '\\')?.substringAfterLast('/').orEmpty()
 
-    ModalBottomSheet(
+    DshSheet(
         onDismissRequest = { if (!busy) onDismiss() },
-        sheetState = sheetState,
-        containerColor = colors.bgBase,
     ) {
         Column(
             Modifier
