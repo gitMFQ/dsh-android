@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -152,9 +153,17 @@ fun DshTextField(
     onClear: (() -> Unit)? = null,
     /** The clear affordance's accessibility label; callers pass the surface's own copy. */
     clearContentDescription: String = "Clear",
+    /**
+     * The field's own outer shape.
+     *
+     * A form field is a card (12dp); a **search** field is a capsule, and that is the
+     * only difference between the two in the shell's vocabulary — the kit's search bar
+     * is a pill and its editors are cards. Defaulted rather than required so the
+     * eleven existing callers are untouched.
+     */
+    shape: Shape = RoundedCornerShape(DshRadius.card),
 ) {
     val colors = DshTheme.colors
-    val shape = RoundedCornerShape(DshRadius.card)
     // The text itself is the focus target clearing hands focus back to. The
     // affordance is a clickable, which is focusable in its own right, so on a
     // device that moves focus to whatever was tapped the caret would otherwise

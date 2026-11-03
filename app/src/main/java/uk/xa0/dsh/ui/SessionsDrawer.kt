@@ -966,7 +966,11 @@ fun SessionsDrawer(
         // that never delivers a baseline would otherwise take it away. The target is
         // only recorded until the seat is first used (`startSession`), by which time the
         // registry has usually answered and the session lands in its Workspace.
-        val newShape = RoundedCornerShape(DshRadius.card)
+        // A capsule filled with the send token, which is this app's existing word for
+        // "the one action on this surface": the composer's send button wears the same
+        // pair, so the drawer's primary action and the conversation's are the same
+        // object in two places rather than two different buttons that happen to be bold.
+        val newShape = RoundedCornerShape(DshRadius.pill)
         // The button's own visibility gates the separator below it: in the common
         // case there is no button, so there is nothing to separate from the field.
         val showNewButton = !grouping.groupsByWorkspace || workspaces.isEmpty()
@@ -976,15 +980,14 @@ fun SessionsDrawer(
                 .fillMaxWidth()
                 .height(38.dp)
                 .clip(newShape)
-                .background(colors.bgLayer1)
-                .border(0.5.dp, colors.borderL3, newShape)
+                .background(colors.sendFill)
                 .clickableNoRipple(onClick = onNew),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.labelPrimary, modifier = Modifier.size(16.dp))
+            Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.sendGlyph, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(DshSpacing.sm))
-            Text("New Session", style = DshType.labelLarge, color = colors.labelPrimary)
+            Text("New Session", style = DshType.labelLarge, color = colors.sendGlyph)
         }
         }
 
@@ -999,6 +1002,10 @@ fun SessionsDrawer(
             value = query,
             onValueChange = { query = it },
             placeholder = SessionSearchCopy.PLACEHOLDER,
+            // The shell's search idiom is a capsule, not a card: the kit's search bar is
+            // a pill and its editors are cards, and that one difference is most of what
+            // makes a search field read as a search field rather than a form.
+            shape = RoundedCornerShape(DshRadius.pill),
             minHeight = 40.dp,
             // Tighter than a form field: the drawer's chrome above it is a 48dp
             // centred lockup, so its own inset is most of the remaining gap.
