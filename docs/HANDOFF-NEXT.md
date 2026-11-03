@@ -1,10 +1,11 @@
 # 交接文档（给新会话）
 
-> 写于 **2026-11-03 凌晨**（3.5b 合入之后），本版为 **第八版**。
+> 写于 **2026-11-03 傍晚**（#50 合入之后），本版为 **第九版**。
 > 沿革：一版「接管 + 工具链全量升级」→ 二版「结构拆分」→ 三版「1.2b」→ 四版「阶段 1 完成」
 > → 五版「阶段 2.5 完成 + 2.6 清单」→ 六版「2.6 被 3.0 取代」→
 > 七版「输入框/底栏三轮重做 + 一次 RPC 取消崩溃修复之后」→
-> **本版「3.5b：Me 的八个设置页签变成真页面」**。
+> 八版「3.5b：Me 的八个设置页签变成真页面」→
+> **本版「七连 PR：深色基线 / Files 工具栏 / 状态胶囊 / Plugins 真页 / i18n 起步 / 玻璃顶栏 / 换装 sheet」**。
 >
 > **新会话先读本文件**，再读 [PHASE-3-PLAN.md](PHASE-3-PLAN.md)。注意：该计划的 §4 PR 表
 > **没有记录第 1–3 轮输入框改造**（那是计划写成之后按用户真机反馈做的），当前外壳状态以本文件为准。
@@ -12,10 +13,10 @@
 ## 1. 一句话现状
 
 仓库 <https://github.com/gitMFQ/dsh-android>（私有）是整仓 GPL-3.0 的 **DSH 原生安卓客户端**。
-阶段 1、阶段 2.0–2.5、阶段 3 的 3.0–3.5a 全部合入；输入框/底栏三轮重做（PR #38 / #39 / #40）之后，
-**3.5b 把 Me 的八个设置页签做成了真页面**（PR #42），当前 master `0cc9a86`。
+阶段 1、阶段 2.0–2.5、阶段 3 的 3.0–3.8 全部合入。3.5b（Me 的设置页签）之后，第八版列出的六项
+一次做完（PR #44–#50），当前 master `0e5569f`。
 
-**CI 实测（master `0cc9a86`）**：`tests=1191 failures=0` / `screenshots=20` / Debug APK 绿。
+**CI 实测（master `0e5569f`）**：`tests=1239 failures=0` / `screenshots=26` / Debug APK 绿。
 本机 aarch64 只能编译 Kotlin 和跑 `:design`/`:core:protocol` 测试，**测试真值以 CI 为准**。
 
 ## 2. 已合入（master）
@@ -33,6 +34,14 @@
 | #39 | **输入框第 2 轮**：默认改为**消息条展开**、导航折成当前页圆；`+` 进输入条；药丸行加**速度 / Cache** 两颗读数、权限/模型只留图标；To-dos/回到底部玻璃化；**修对话底部被底栏挡住**（栈高度量在 padding 内侧）；**修流式输出"一会抬一下"**（TailFollow 对 padding 边缘修正） |
 | #40 | **第 3 轮**：长按菜单加**全屏输入**；点铅笔/圆图标不弹键盘；turn rail 可跳转；收起态导航**拉伸填满**；**系统导航栏透明 + 对话滑到其后**；**抽屉跟手**、底栏不响应抽屉；修长按放大玻璃被裁；**液态档去描边**；排队消息条玻璃化；会话统计速度药丸常驻；**RPC 取消竞态闪退修复**；`localbuild.sh` 锁修复 |
 | #42 | **3.5b**：Me 的八个页签变真页面；`SettingsContent.kt` 的段落提权成 `ui/settings/` 的卡片，**sheet 与页签共用同一套卡片**；Me 页行分组卡片化；`MeSubPage` 换真返回箭头 + trailing 槽；**Terminal 页签接管 shell 字号** |
+| #43 | 两个闪退：To-dos 卡片的液态玻璃（在 pager 内采样自己）+ 设置下拉的 `NavigationEventDispatcher` 缺失（`androidx.activity` 1.9→1.12）；顺带 **Crash log 页**（debug 写 `files/diag/crash-*.txt`，Me 里可 Copy/Share/Delete） |
+| #44 | **F1 深色基线**：`capture()` 的 `themeMode` 变成参数，补 `drawer-dark` / `chat-transcript-dark` / `me-tab-dark` / `me-tab-amoled` 四张；20→24 |
+| #45 | **Files 页 A3**：目录工具栏（Up / Copy path / Name·Size·Recent 循环）+ 名称过滤 + 两个不同的空态；`ExplorerOrder` 与过滤在 `:core:model`，8 条测试 |
+| #46 | **状态胶囊 + Plugins 真页**：`StatusCapsules`（`:core:model`，13 条测试）排出「等待 > 离线 > 运行 > 空闲(不画) > 未知」；Plugins 接 `pluginInventory/list`，`PluginInventoryWire` 16 条测试 |
+| #47 | 录 `plugins-tab`（占位页已被替换）+ 新增 `plugins-tab-empty`；24→26 |
+| #48 | **S2 玻璃顶栏**：`ChatHeader` 走 `liquidPane`；新增 `flatFill` 缝隙使平档逐字节不变 |
+| #49 | **F2 i18n 起步**：Plugins 页文案进 `values/strings.xml`（含一条 `<plurals>`）+ `values-zh-rCN`；首个可翻译屏 |
+| #50 | **D1 起步**：`DshSheet`（`:design` 里包 `WindowBottomSheet`，**window 级，不需要 miuix Scaffold**），`PermissionSheet` 换容器、内容不动 |
 
 ## 3. 当前外壳长什么样（接手 UI 必读）
 
@@ -137,6 +146,22 @@
 > 然后把它交给自己的 native 编译器 → `IllegalArgumentException: 'color' is not a valid
 > layout qualifier`，**整个屏幕在 composition 阶段就崩**。两个基线类都 provide
 > `LocalSquircleEnabled = false`（miuix 自带的降级开关，回退到 `RoundedCornerShape`）。
+### 3.6 本版新增的四处表面（读代码前先知道这些）
+
+| 表面 | 文件 | 要点 |
+|---|---|---|
+| **状态胶囊** | `:core:model/StatusCapsule.kt` + `ChatPanel.kt` 的 `StatusCapsuleChip` | 顶栏 trailing **一颗**，按「等待 > 离线 > 运行 > 空闲(不画) > 未知」排名。**只有离线态可点**（开 About 的 Restart connection），等待态故意不可点——那张卡已经浮在对话上（#43） |
+| **Plugins 页** | `ui/PluginsPage.kt` + `:core:model/PluginInventory.kt` + `DshViewModel.loadPluginInventory` | 只读接 `pluginInventory/list`；排序 **Failed → Active → Idle → Disabled**（枚举声明顺序即排序顺序）；`enabled` 与 `fiberPhase` **分开画**，两者不合并成一个灯 |
+| **Files 工具栏** | `FilesPanel.kt` 的 `ExplorerPane` + `:core:model/WorkspaceExplorer.kt` | Up / Copy path / 排序循环 / 名称过滤；目录在每个排序里都排最前；`RECENT` 是**转录的 seq**、不是 mtime（host 不报 mtime） |
+| **`DshSheet`** | `design/.../ui/overlay/Sheet.kt` | 包的是 miuix **`WindowBottomSheet`**（window 级），**不是** `OverlayBottomSheet`（后者要 `MiuixPopupUtils` 的 popup host / miuix Scaffold） |
+
+> **`liquidPane` 新增 `flatFill` 参数**：材质面板在平档退化时用 `glassSurface`（填充 + 四边 0.5dp 描边），
+> 那对**浮动**面板是对的；但顶栏是**齐平**页面的全宽条，四边描边会变成屏幕上下左右的一道框。
+> 传 `flatFill = Color.Transparent` 表示「这里本来什么都没有」，平档就逐字节不变——**这是 S2 能落地的前提**。
+> 实测证据：不加这个参数时 `chat-transcript` 动了 932 像素，全在 y=0..57 的顶栏带，颜色 `#FFFFFF→#E0E0E0`。
+
+> **i18n 只覆盖了 Plugins 一页**。`values-zh-rCN` 是证明链路通了（真机切中文这一页就是中文，不需要 App 内切换、不需要 appcompat backport，因为本 app 没有任何 locale override）。**其余约 1100 条仍是英文硬编码**，别把「一页可翻译」当成「已翻译」。
+
 ## 4. 下一步（建议顺序）
 
 ### 4.1 先做真机验收（第 1–3 轮 + 3.5b 的账还没结）
@@ -166,10 +191,15 @@
 
 | # | 内容 | 备注 |
 |---|---|---|
-| 3.6 | Files 页从「复用面板」变成类 VSCode 树浏览器 | |
-| 3.7 | TopBar 折叠：**随页变，不随滚动** | 见 PHASE-3-PLAN §6 |
-| 3.8 | 状态胶囊（连接 / 运行 / 待审批） | |
-| 3.9 / 3.10 | Sheet/Dialog 与抽屉换装 | 依赖 3.5a 的 `overlay/` `list/` |
+| ~~3.6~~ | ~~Files 页 → 类 VSCode 树~~ | **本版只做了 A3（工具栏/排序/过滤），没建树**（用户选的）。真树仍待做 |
+| 3.7 | TopBar 折叠：**随页变，不随滚动** | 见 PHASE-3-PLAN §6；**仍未做** |
+| ~~3.8~~ | ~~状态胶囊~~ | ✅ #46 |
+| 3.9 | Sheet/Dialog 换装 | **配方已成型**（#50 的 `DshSheet`）：还剩另外 6 张 sheet 是**机械重复**；7 处 `AlertDialog` 要换 `DshDialog`，但移植的 `ConfirmDialogHost` 用平台英文 OK/Cancel，**直接换会改可见文案** |
+| 3.10 | 抽屉换装 | **未做，且是另一类改动**：搜索框换 `SuperSearchBar` 是**交互变化**（展开/随滚动收起），不是换容器；抽屉还有自绘拖拽手势，会和第二个可滚动区域抢 |
+
+> **为什么 sheets 没一次换完**：34 处 `ModalBottomSheet` 调用点里不少是惰性列表（`ModelSheet`、
+> `AgentPresetSheet`），换容器会连带改内边距与滚动。一次一张、每次只看一张基线，比一次 34 处更容易定位。
+> **判据就是 `permission` 那张**：只它动 = 只改了它。
 
 ### 4.3 已知隐患 / 可选的收尾
 
@@ -201,6 +231,9 @@
 | **新增测试任务要写进 `verify.yml` / `build.yml`** | 依赖一个模块不会跑它的测试，CI 会「绿着丢测试」。 |
 | **`tests` 与 `screenshots` 是两个数** | CI 分开打印，不要合并引用。当前 `tests=1191` / `screenshots=20`。 |
 | **基线里必须关 squircle** | miuix `Card` 用 AGSL shader 画圆角，Robolectric 会在 composition 阶段崩（`'color' is not a valid layout qualifier`）。两个基线类都 provide `LocalSquircleEnabled = false`；**新增基线类也要加**。 |
+| **换装不得动平档基线** | 给某表面加材质时，`liquidPane` 要传 `flatFill`（见 §3.6）。平档动了就是缺陷，不是预期差异——#48 第一次跑就是这么被抓回来的 |
+| **换装 PR 要写清「哪几张预期动」** | 跑完对着 `Screenshot gate` 的失败清单核对：**多动一张就是误伤**。#48/#50 都靠这条当场抓到问题 |
+| **基线录制是一轮 CI，不是一条命令** | `gh workflow run screenshots.yml` → `gh run download <id> -n roborazzi-baselines` → 覆盖 `app/src/test/screenshots/` → 提交 → 再等 Verify。覆盖后 `git status` 里**只该出现预期的那几张** |
 | **`SegmentedColumn` 的卡片用 `codeBlock` 不用 `bgLayer1`** | 浅色调色板里 `bgLayer1 == bgBase == 纯白`，卡片会看不见。 |
 | **基线只手动录** | `gh workflow run screenshots.yml --ref <分支> -f branch=<分支>`；下载 `roborazzi-baselines` 覆盖 `app/src/test/screenshots/` 后提交。本机录不了。 |
 | **`pluginManagement` 必须是 settings 第一个语句** | 所以 `DSH_LOCAL_MIRRORS` 在两个块里各读一次。 |
@@ -226,15 +259,17 @@ app/                 主模块（1175 项功能测试里的 app 部分；19 张�
     ui/ChatPanel.kt       3840 行，外壳 + 聊天树 + 底栏/抽屉/rail 手势（最大的一块）
     ui/settings/
       MeSettings.kt（MeSettingsState/Actions + 页签分发）/ SettingsCards.kt（九个主题卡片）
+    ui/PluginsPage.kt       Plugins 目的地：只读插件清单（本版新增）
+    ui/overlay 的同层改用 design/.../ui/overlay/Sheet.kt 的 DshSheet（本版新增）
     ui/components/
       Composer.kt / ComposerDock.kt / ComposerAccessories.kt / ComposerFullScreen.kt
       SessionStatsPills.kt（速度/Cache 药丸） QueueDock.kt（液态玻璃） ChatRows.kt（TodoCard 玻璃）
       ChatRows.kt / QueueDock.kt / FilesPanel.kt / Sheets.kt / …
     ui/scroll/TailFollow.kt   尾部跟随（padding 边缘修正）
     ui/theme/SystemBars.kt    （在 :design）透明导航栏 / 图标明暗
-  src/test/screenshots/      19 张 PNG（含 chat-transcript-collapsed、composer-fullscreen）
+  src/test/screenshots/      26 张 PNG（本版 +6：4 张深色/AMOLED、chat-transcript-waiting、plugins-tab-empty）
   src/test/java/.../screenshot/ScreenBaselineTest.kt / WideBaselineTest.kt
-core/model/          领域模型 + 413 测试（CI 数）
+core/model/          领域模型 + 测试；本版新增 StatusCapsule.kt（胶囊排名）/ PluginInventory.kt（插件清单）/ WorkspaceExplorer 的 ExplorerOrder + 过滤
 core/term/           终端（纯 JVM，本机可跑）
 core/config/         DshConfig + ThemeMode + AcceptedCert
 core/protocol/       net/ + 79 测试（含 RpcCancellationTest 6 条）
