@@ -14,9 +14,9 @@
 
 仓库 <https://github.com/gitMFQ/dsh-android>（私有）是整仓 GPL-3.0 的 **DSH 原生安卓客户端**。
 阶段 1、阶段 2.0–2.5、阶段 3 的 3.0–3.8 全部合入。3.5b（Me 的设置页签）之后，第八版列出的六项
-一次做完（PR #44–#50），当前 master `29b1419`。
+一次做完（PR #44–#50），当前 master `e11afca`。
 
-**CI 实测（master `29b1419`）**：`tests=1239 failures=0` / `screenshots=26` / Debug APK 绿。
+**CI 实测（master `e11afca`）**：`tests=1239 failures=0` / `screenshots=26` / Debug APK 绿。
 本机 aarch64 只能编译 Kotlin 和跑 `:design`/`:core:protocol` 测试，**测试真值以 CI 为准**。
 
 ## 2. 已合入（master）
@@ -44,6 +44,7 @@
 | #50 | **D1 起步**：`DshSheet`（`:design` 里包 `WindowBottomSheet`，**window 级，不需要 miuix Scaffold**），`PermissionSheet` 换容器、内容不动 |
 | #51 | 第九版交接文档（本文件） |
 | #52 | **D1 完成（sheet 部分）**：其余 **11 处** `ModalBottomSheet` 全部换 `DshSheet`；`sheetState` 纯透传、无人回读，所以删掉没有行为变化；12 处的 `containerColor` 都是 `bgBase` |
+| #54 | **3.9 完成（dialog 部分）**：7 处 `AlertDialog` 全换；`ConfirmDialogVisuals` 补 `confirmEnabled` + `confirmTone`（kit 原来把每个 confirm 都画成 accent，会把「Force quit」这类销毁动作也染成品牌色） |
 
 ## 3. 当前外壳长什么样（接手 UI 必读）
 
@@ -162,6 +163,9 @@
 > 传 `flatFill = Color.Transparent` 表示「这里本来什么都没有」，平档就逐字节不变——**这是 S2 能落地的前提**。
 > 实测证据：不加这个参数时 `chat-transcript` 动了 932 像素，全在 y=0..57 的顶栏带，颜色 `#FFFFFF→#E0E0E0`。
 
+> **没有任何基线包含对话框** —— 所以 #54 里 `confirmTone` 这类「颜色被换掉」的回归，基线**抓不到**。
+> 给一张确认框基线（销毁动作 + 两个按钮）是下一步最划算的测试投资。
+
 > **i18n 只覆盖了 Plugins 一页**。`values-zh-rCN` 是证明链路通了（真机切中文这一页就是中文，不需要 App 内切换、不需要 appcompat backport，因为本 app 没有任何 locale override）。**其余约 1100 条仍是英文硬编码**，别把「一页可翻译」当成「已翻译」。
 
 ## 4. 下一步（建议顺序）
@@ -196,7 +200,7 @@
 | ~~3.6~~ | ~~Files 页 → 类 VSCode 树~~ | **本版只做了 A3（工具栏/排序/过滤），没建树**（用户选的）。真树仍待做 |
 | 3.7 | TopBar 折叠：**随页变，不随滚动** | 见 PHASE-3-PLAN §6；**仍未做** |
 | ~~3.8~~ | ~~状态胶囊~~ | ✅ #46 |
-| ~~3.9~~ | ~~Sheet/Dialog 换装~~ | **sheet 一半已全部完成**（#50 + #52，12 处）。**dialog 一半没做**：7 处 `AlertDialog` 要换 `DshDialog`，注意移植的 `ConfirmDialogHost` 用平台英文 OK/Cancel，**直接换会改可见文案**，得自己写按钮行 |
+| ~~3.9~~ | ~~Sheet/Dialog 换装~~ | ✅ **全完成**（#50 + #52 + #54）：`ModalBottomSheet` 与 `AlertDialog` 在本仓归零。**两种机制并存是刻意的**：`ConfirmDialogHost` 的 body 是 String，所以「重命名」（要输入框）和「上下文窗口」（要条形图）走 `DshDialog` 自绘 |
 | 3.10 | 抽屉换装 | **未做，且是另一类改动**：搜索框换 `SuperSearchBar` 是**交互变化**（展开/随滚动收起），不是换容器；抽屉还有自绘拖拽手势，会和第二个可滚动区域抢 |
 
 > **为什么 sheets 没一次换完**：34 处 `ModalBottomSheet` 调用点里不少是惰性列表（`ModelSheet`、
