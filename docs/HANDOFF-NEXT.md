@@ -14,9 +14,9 @@
 
 仓库 <https://github.com/gitMFQ/dsh-android>（私有）是整仓 GPL-3.0 的 **DSH 原生安卓客户端**。
 阶段 1、阶段 2.0–2.5、阶段 3 的 3.0–3.8 全部合入。3.5b（Me 的设置页签）之后，第八版列出的六项
-一次做完（PR #44–#50），当前 master `0e5569f`。
+一次做完（PR #44–#50），当前 master `29b1419`。
 
-**CI 实测（master `0e5569f`）**：`tests=1239 failures=0` / `screenshots=26` / Debug APK 绿。
+**CI 实测（master `29b1419`）**：`tests=1239 failures=0` / `screenshots=26` / Debug APK 绿。
 本机 aarch64 只能编译 Kotlin 和跑 `:design`/`:core:protocol` 测试，**测试真值以 CI 为准**。
 
 ## 2. 已合入（master）
@@ -42,6 +42,8 @@
 | #48 | **S2 玻璃顶栏**：`ChatHeader` 走 `liquidPane`；新增 `flatFill` 缝隙使平档逐字节不变 |
 | #49 | **F2 i18n 起步**：Plugins 页文案进 `values/strings.xml`（含一条 `<plurals>`）+ `values-zh-rCN`；首个可翻译屏 |
 | #50 | **D1 起步**：`DshSheet`（`:design` 里包 `WindowBottomSheet`，**window 级，不需要 miuix Scaffold**），`PermissionSheet` 换容器、内容不动 |
+| #51 | 第九版交接文档（本文件） |
+| #52 | **D1 完成（sheet 部分）**：其余 **11 处** `ModalBottomSheet` 全部换 `DshSheet`；`sheetState` 纯透传、无人回读，所以删掉没有行为变化；12 处的 `containerColor` 都是 `bgBase` |
 
 ## 3. 当前外壳长什么样（接手 UI 必读）
 
@@ -153,7 +155,7 @@
 | **状态胶囊** | `:core:model/StatusCapsule.kt` + `ChatPanel.kt` 的 `StatusCapsuleChip` | 顶栏 trailing **一颗**，按「等待 > 离线 > 运行 > 空闲(不画) > 未知」排名。**只有离线态可点**（开 About 的 Restart connection），等待态故意不可点——那张卡已经浮在对话上（#43） |
 | **Plugins 页** | `ui/PluginsPage.kt` + `:core:model/PluginInventory.kt` + `DshViewModel.loadPluginInventory` | 只读接 `pluginInventory/list`；排序 **Failed → Active → Idle → Disabled**（枚举声明顺序即排序顺序）；`enabled` 与 `fiberPhase` **分开画**，两者不合并成一个灯 |
 | **Files 工具栏** | `FilesPanel.kt` 的 `ExplorerPane` + `:core:model/WorkspaceExplorer.kt` | Up / Copy path / 排序循环 / 名称过滤；目录在每个排序里都排最前；`RECENT` 是**转录的 seq**、不是 mtime（host 不报 mtime） |
-| **`DshSheet`** | `design/.../ui/overlay/Sheet.kt` | 包的是 miuix **`WindowBottomSheet`**（window 级），**不是** `OverlayBottomSheet`（后者要 `MiuixPopupUtils` 的 popup host / miuix Scaffold） |
+| **`DshSheet`** | `design/.../ui/overlay/Sheet.kt` | 包的是 miuix **`WindowBottomSheet`**（window 级），**不是** `OverlayBottomSheet`（后者要 `MiuixPopupUtils` 的 popup host / miuix Scaffold）。**全 app 12 处 sheet 已全用它**，`ModalBottomSheet` 归零 |
 
 > **`liquidPane` 新增 `flatFill` 参数**：材质面板在平档退化时用 `glassSurface`（填充 + 四边 0.5dp 描边），
 > 那对**浮动**面板是对的；但顶栏是**齐平**页面的全宽条，四边描边会变成屏幕上下左右的一道框。
@@ -194,7 +196,7 @@
 | ~~3.6~~ | ~~Files 页 → 类 VSCode 树~~ | **本版只做了 A3（工具栏/排序/过滤），没建树**（用户选的）。真树仍待做 |
 | 3.7 | TopBar 折叠：**随页变，不随滚动** | 见 PHASE-3-PLAN §6；**仍未做** |
 | ~~3.8~~ | ~~状态胶囊~~ | ✅ #46 |
-| 3.9 | Sheet/Dialog 换装 | **配方已成型**（#50 的 `DshSheet`）：还剩另外 6 张 sheet 是**机械重复**；7 处 `AlertDialog` 要换 `DshDialog`，但移植的 `ConfirmDialogHost` 用平台英文 OK/Cancel，**直接换会改可见文案** |
+| ~~3.9~~ | ~~Sheet/Dialog 换装~~ | **sheet 一半已全部完成**（#50 + #52，12 处）。**dialog 一半没做**：7 处 `AlertDialog` 要换 `DshDialog`，注意移植的 `ConfirmDialogHost` 用平台英文 OK/Cancel，**直接换会改可见文案**，得自己写按钮行 |
 | 3.10 | 抽屉换装 | **未做，且是另一类改动**：搜索框换 `SuperSearchBar` 是**交互变化**（展开/随滚动收起），不是换容器；抽屉还有自绘拖拽手势，会和第二个可滚动区域抢 |
 
 > **为什么 sheets 没一次换完**：34 处 `ModalBottomSheet` 调用点里不少是惰性列表（`ModelSheet`、
