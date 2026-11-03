@@ -32,6 +32,7 @@ import org.robolectric.annotation.GraphicsMode
 import uk.xa0.dsh.AppPhase
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.PendingAttachment
+import uk.xa0.dsh.PendingKind
 import uk.xa0.dsh.PermissionOption
 import uk.xa0.dsh.TerminalPhase
 import uk.xa0.dsh.TerminalUiState
@@ -771,6 +772,28 @@ class ScreenBaselineTest {
     }
 
     /**
+     * The header wearing its one status capsule, in the state that outranks everything:
+     * an approval the agent is blocked on.
+     *
+     * A capture of its own rather than a variation of the transcript above, because
+     * the capsule is the only part of the header that changes with live state and no
+     * existing fixture reaches it — every other capture has either no session or a
+     * session that is neither running nor pending. That is precisely the coverage gap
+     * the ranking exists to fill, so leaving it unpinned would make the ranking
+     * unobservable in a diff.
+     *
+     * What it pins: the capsule sits **after** the utilities (so a changing label
+     * cannot shift them), it is the last thing on the row, and its warning tint is the
+     * same one the Full-access option wears.
+     */
+    @Test
+    fun chatTranscriptWaiting() {
+        capture("chat-transcript-waiting") {
+            ChatTranscriptContent(pending = PendingKind.APPROVAL)
+        }
+    }
+
+    /**
      * The transcript in the dark appearance — the pills and the glass in the palette
      * they are actually worn in at night.
      *
@@ -814,21 +837,31 @@ class ScreenBaselineTest {
      * Extracted so the two dock shapes are the same screen with one interaction between
      * them: a second copy of these rows would let the collapsed capture drift from the
      * open one without anyone noticing.
+     *
+     * [pending] puts an approval in the header's way. It is a parameter rather than a
+     * second fixture because the capsule's whole point is that it *replaces* a status
+     * rather than adding one: the capture that proves it is the same screen with one
+     * fact changed.
      */
     @Composable
-    private fun ChatTranscriptContent() {
+    private fun ChatTranscriptContent(
+        pending: PendingKind? = null,
+        running: Boolean = false,
+    ) {
         ChatPanel(
             state = ChatUiState(
                 ui = UiState(
                     phase = AppPhase.READY,
                     currentSessionId = "s1",
+                    running = running,
+                    pendingInteractions = if (pending != null) mapOf("s1" to pending) else emptyMap(),
                     sessions = listOf(
                         SessionItem(
                             id = "s1",
                             title = "Re-skin the shell",
                             cwd = "/home/user/var/work/dsh-android",
                             updatedAt = 1_000L,
-                            running = false,
+                            running = running,
                             isSubagent = false,
                         ),
                     ),

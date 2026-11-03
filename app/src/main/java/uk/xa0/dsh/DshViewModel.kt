@@ -49,6 +49,8 @@ import uk.xa0.dsh.model.ModelChoice
 import uk.xa0.dsh.model.ModelRef
 import uk.xa0.dsh.model.ModelSelectionState
 import uk.xa0.dsh.model.PendingSessionTarget
+import uk.xa0.dsh.model.PluginInventory
+import uk.xa0.dsh.model.PluginInventoryWire
 import uk.xa0.dsh.model.QUEUE_PREVIEW_CHARS
 import uk.xa0.dsh.model.inboxQueueItems
 import uk.xa0.dsh.model.parseHostModelSelection
@@ -305,6 +307,26 @@ sealed interface SchedulePageState {
     /** The rows a list can draw; empty for every state that has none to show. */
     val rows: List<ScheduleEntry>
         get() = (this as? Ready)?.entries ?: emptyList()
+}
+
+/**
+ * The Plugins page's read of the deployment's plugin inventory.
+ *
+ * [Idle] is "nobody has asked yet" and is **not** an empty deployment: the page draws
+ * the first as a prompt and the second as a fact, and collapsing them would make an
+ * unread page look like a host with no plugins.
+ */
+sealed interface PluginInventoryState {
+    data object Idle : PluginInventoryState
+    data object Loading : PluginInventoryState
+    data class Ready(val inventory: PluginInventory) : PluginInventoryState
+
+    /** The read failed; [message] is the host's wording or ours. */
+    data class Failed(val message: String) : PluginInventoryState
+
+    /** The inventory a page can draw, or null for every state that has none. */
+    val value: PluginInventory?
+        get() = (this as? Ready)?.inventory
 }
 
 /**
@@ -1416,6 +1438,41 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     /** Bumped on every listing so a superseded scan cannot land after a newer one. */
     private var directoryGeneration = 0
 
+    /**
+     * Reads the deployment's plugin inventory.
+     *
+     * `pluginInventory/list` with no arguments, answered as
+     * `{managementAvailable?, entries[], agentPresets?}`. Read-only: this asks what the
+     * host has loaded, not to change it. The write half (`pluginManager` and its
+     * sixteen Remotes) is a different feature with a different risk —
+     * `docs/BLOCK-SCHEMA.md` puts it on the permanent blocklist for the panel protocol,
+     * and the same judgement applies to a page: listing is enough to answer "what is in
+     * this deployment".
+     *
+     * The result is a flow of its own, like the directory browser's, because only the
+     * Plugins page reads it and a failed inventory must not take over the session
+     * error banner. The page asks on first open; its Refresh re-asks.
+     */
+    fun loadPluginInventory() {
+        if (_pluginInventory.value is PluginInventoryState.Loading) return
+        _pluginInventory.value = PluginInventoryState.Loading
+        uiScope.launch {
+            runCatching { client.rpc("pluginInventory/list", JSONObject()) }
+                .onSuccess { reply ->
+                    _pluginInventory.value =
+                        PluginInventoryState.Ready(PluginInventoryWire.parse(reply))
+                }
+                .onFailure { error ->
+                    _pluginInventory.value = if (error is DshAuthException) {
+                        onAuthFailure("pluginInventory/list", error)
+                        PluginInventoryState.Failed(AUTH_ERROR)
+                    } else {
+                        PluginInventoryState.Failed(describe(error))
+                    }
+                }
+        }
+    }
+
     // -------------------------------------------------- workspace file explorer
 
     /**
@@ -1430,6 +1487,18 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     private val _workspaceExplorer = MutableStateFlow<ExplorerState>(ExplorerState.Idle)
     val workspaceExplorer: StateFlow<ExplorerState> = _workspaceExplorer.asStateFlow()
+
+    /**
+     * The Plugins page's read of `pluginInventory/list`.
+     *
+     * A flow of its own for the same reason [workspaceExplorer] is: only one page reads
+     * it, and a failed inventory is that page's business rather than a session error
+     * that takes over the banner above the conversation. [Idle] is "nobody has asked
+     * yet", which is different from an empty deployment — the page draws the first as
+     * a prompt and the second as a fact.
+     */
+    private val _pluginInventory = MutableStateFlow<PluginInventoryState>(PluginInventoryState.Idle)
+    val pluginInventory: StateFlow<PluginInventoryState> = _pluginInventory.asStateFlow()
 
     /**
      * Levels already listed, keyed by their workspace-relative path — `""` is the
