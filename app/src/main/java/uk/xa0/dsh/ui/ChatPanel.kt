@@ -57,6 +57,7 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Badge
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Extension
@@ -1766,29 +1767,57 @@ internal fun ChatPanel(
                             )
                         }
 
-                    // Everything docked to the composer floats over the transcript instead of
-                    // sitting below it. Stacked below, the list's box ends at the stack's top
-                    // edge, so nothing the reader scrolls ever passes behind the composer —
-                    // which is the entire reason for giving it the glass material at all.
-                    //
-                    // Since the composer moved into the bottom dock (outside this page), the
-                    // stack's job is the transient cards above it: approval, questions, todos,
-                    // goal and queue. Its bottom padding is the measured height of the dock
-                    // area — accessory pills, popups and the dock row — so the last card still
-                    // rests just above what is actually on screen, whatever the input is doing.
-                    Column(
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            // The measurement sits *outside* the padding, so the number is
-                            // the whole footprint the transcript must clear — cards plus
-                            // the dock area they are lifted above. With it inside the
-                            // padding (as it was) the list reserved the cards only and the
-                            // last row sat behind the dock, which is the reported defect.
-                            .onSizeChanged { composerStackPx = it.height }
-                            .padding(bottom = dockAreaDp),
-                    ) {
+                    }
+                }
+                        }
+                    }
+                }
+            }
+        }
 
+            // Everything docked to the composer floats over the transcript instead of
+            // sitting below it. Stacked below, the list's box ends at the stack's top
+            // edge, so nothing the reader scrolls ever passes behind the composer —
+            // which is the entire reason for giving it the glass material at all.
+            //
+            // ## Why this is *outside* the pager (the To-dos crash)
+            //
+            // These cards wear the liquid material, and the liquid material samples the
+            // layer the pager records. Composed inside the pager they were sampling a
+            // layer they were themselves painted into, and the To-dos card is the first
+            // surface in this stack whose geometry changes while it is being recorded:
+            // it is composed the moment the agent first writes a to-do list, so its
+            // appearance *is* the frame that goes wrong — which is exactly what was
+            // reported, the app closing as soon as the To-dos appeared.
+            //
+            // The back-to-bottom button had the same defect and was moved out for the
+            // same reason (42bbd10). This is the rest of the stack.
+            //
+            // Nothing moves on screen: this box is the pager's sibling under the same
+            // `Box(Modifier.weight(1f))`, fills the same width, and is bottom-aligned the
+            // same way. The one thing that had to be reproduced by hand is the pager's
+            // bottom inset — a page stops above the system navigation bar (each page
+            // applies `navigationBarsPadding` itself), so a bottom-anchored overlay must
+            // pay that same inset or the stack would sit behind the bar on a page that
+            // does not.
+            //
+            // The cards are only meaningful over the conversation, which is what the gate
+            // says: on the hero there is no transcript to float over, and no to-dos, goal
+            // or queue either.
+            if (destination == Destination.CHAT && chatView == ChatView.CHAT && !awaitingTranscript) {
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        // The measurement sits *outside* the padding, so the number is
+                        // the whole footprint the transcript must clear — cards plus
+                        // the dock area they are lifted above. With it inside the
+                        // padding (as it was) the list reserved the cards only and the
+                        // last row sat behind the dock, which is the reported defect.
+                        .onSizeChanged { composerStackPx = it.height }
+                        .padding(bottom = dockAreaDp),
+                ) {
                     if (ui.approval != null) {
                         ApprovalCard(
                             toolName = ui.approval!!.toolName,
@@ -1825,7 +1854,7 @@ internal fun ChatPanel(
                             goal = goal,
                             onPause = actions.pauseGoal,
                             onResume = actions.resumeGoal,
-                            onEdit = actions.editGoal,
+                            onEdit = { actions.editGoal(it) },
                             onClear = actions.clearGoal,
                             modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
                         )
@@ -1848,14 +1877,8 @@ internal fun ChatPanel(
                             .padding(horizontal = DshSpacing.xl + DshSpacing.md)
                             .fillMaxWidth(),
                     )
-                    }
-                    }
-                }
-                        }
-                    }
                 }
             }
-        }
 
             // The bottom dock: the destination bar and the composer share one row, in the
             // shape BiliPai's liquid-glass search dock uses. **The open bar is the resting
@@ -3911,6 +3934,7 @@ internal val ME_ENTRIES: List<MeEntry> = listOf(
     MeEntry("agent", "Agent", "Presets, and the permission level a session starts at.", Icons.Rounded.Badge),
     MeEntry("terminal", "Terminal", "The shell's font size and cells.", Icons.Rounded.Terminal),
     MeEntry("plugins", "Plugins", "The surfaces this client is allowed to draw.", Icons.Rounded.Extension),
+    MeEntry("crashes", "Crash log", "What closed the app, kept so it can be shared.", Icons.Rounded.BugReport),
     MeEntry("archived", "Archived sessions", "Sessions put away, and how to bring one back.", Icons.Rounded.Archive),
     MeEntry("about", "About", "Connection, account, version and the way out.", Icons.Rounded.Info),
 )

@@ -209,7 +209,24 @@ dependencies {
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.0")
+    // 1.12.0 is a floor, not a preference. miuix's `WindowListPopup` (what a settings
+    // dropdown opens) registers a `NavigationBackHandler`, which reads
+    // `LocalNavigationEventDispatcherOwner` and throws
+    //
+    //   IllegalStateException: No NavigationEventDispatcher was provided via
+    //   LocalNavigationEventDispatcherOwner
+    //
+    // when nothing provides it. That local resolves through the view-tree tag
+    // `view_tree_navigation_event_dispatcher_owner`, which only `ComponentActivity`
+    // from **androidx.activity 1.12.0** onwards sets — it is the release that made
+    // `ComponentActivity` implement `NavigationEventDispatcherOwner`. On 1.9.0 every
+    // dropdown tap in the Settings sheet and on the Me page's settings tabs took the
+    // process down, which is the reported crash.
+    //
+    // Verified by decompiling both artifacts: 1.9.0's `ComponentActivity` implements
+    // `OnBackPressedDispatcherOwner` and not `NavigationEventDispatcherOwner`; 1.12.0's
+    // implements both.
+    implementation("androidx.activity:activity-compose:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")

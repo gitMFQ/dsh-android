@@ -141,6 +141,7 @@ internal fun MeSettingsPage(
                 "agent" -> AgentSettingCards(state, actions)
                 "terminal" -> TerminalSettingCards(state, actions)
                 "plugins" -> PluginSettingCards()
+                "crashes" -> CrashLogSettingCards()
                 "archived" -> ArchivedSettingCards(state, actions)
                 // "about" is not a page: it opens the About sheet, which is a document
                 // about the host rather than a setting. See MeDestination in ChatPanel.kt.
