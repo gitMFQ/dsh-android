@@ -224,20 +224,25 @@ class PluginInventoryTest {
 
     @Test
     fun `a label prefers the display name so sorting uses what the reader sees`() {
+        // The two specifiers are deliberately ordered the *opposite* way to the two
+        // display names, or this would pass on an implementation that sorted by
+        // `moduleName`: "zzz-module" carries the display name "Aardvark", so sorting
+        // by label puts it first while sorting by specifier would put it last.
         val inventory = PluginInventoryWire.parse(
             snapshot(
                 """
                 [
                   {"entryId":"e1","moduleName":"zzz-module","meta":{"name":"Aardvark"},
                    "enabled":true,"fiberPhase":"active"},
-                  {"entryId":"e2","moduleName":"aaa-module","enabled":true,"fiberPhase":"active"}
+                  {"entryId":"e2","moduleName":"aaa-module","meta":{"name":"Zebra"},
+                   "enabled":true,"fiberPhase":"active"}
                 ]
                 """,
             ),
         )
 
         assertEquals(
-            listOf("Aardvark", "aaa-module"),
+            listOf("Aardvark", "Zebra"),
             PluginInventoryWire.sorted(inventory.entries).map { it.label },
         )
     }

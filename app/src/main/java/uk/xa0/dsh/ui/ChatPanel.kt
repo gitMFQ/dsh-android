@@ -330,6 +330,8 @@ internal fun ChatPanel(
     // The Files panel's explorer half. A flow of its own, like the browser's: a
     // listing failure belongs to the panel, not to the session error banner.
     val workspaceExplorer = state.workspaceExplorer
+    // The Plugins page's inventory, a flow of its own for the same reason.
+    val pluginInventory = state.pluginInventory
 
     // The running turn's elapsed time. Tick-tocked by the shell, not here: a clock is
     // an act against the host's timeline, and a screenshot fixture has to be able to
@@ -1414,13 +1416,17 @@ internal fun ChatPanel(
                 )
                     }
 
-                    Destination.PLUGINS -> PlaceholderTab(
-                        title = "Plugins",
-                        summary = "Plugin surfaces will live here. The panel and block " +
-                            "protocol already exist; this page is where they land.",
-                        icon = Icons.Rounded.Extension,
-                        modifier = Modifier.navigationBarsPadding(),
-                    )
+                    // The deployment's loaded plugins. A page rather than a sheet
+                    // because it is a list you scan, and read-only on purpose: the
+                    // write half (`pluginManager`) is on the permanent blocklist for a
+                    // remote client — see `docs/BLOCK-SCHEMA.md` and the page's own
+                    // note.
+                    Destination.PLUGINS -> Box(Modifier.fillMaxSize().navigationBarsPadding()) {
+                        PluginsPage(
+                            state = pluginInventory,
+                            onRefresh = actions.loadPluginInventory,
+                        )
+                    }
 
                     // The conversation page is the one that runs behind the system
                     // navigation bar (its transcript is the content worth showing through

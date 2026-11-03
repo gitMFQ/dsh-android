@@ -132,8 +132,19 @@ data class PluginEntry(
     }
 }
 
-/** What a plugin row's dot means: four states, in the order the page sorts them. */
+/**
+ * What a plugin row's dot means, **in the order the page sorts them**.
+ *
+ * Declaration order is the sort order (`PluginInventoryWire.sorted` reads `ordinal`),
+ * so this is not an arbitrary list: **trouble leads, then the running ones, then the
+ * rest**. A plugin page is consulted when something is wrong, so a failed entry has to
+ * be the first thing on it — burying it under twenty healthy rows is how a page becomes
+ * something a reader stops opening.
+ */
 enum class PluginState {
+    /** Failed to start; the row carries the host's own message. */
+    FAILED,
+
     /** Started and running. */
     ACTIVE,
 
@@ -142,9 +153,6 @@ enum class PluginState {
 
     /** Switched off — by its own row or by a disabled ancestor group. */
     DISABLED,
-
-    /** Failed to start; the row carries the host's own message. */
-    FAILED,
 }
 
 /**
@@ -193,13 +201,14 @@ object PluginInventoryWire {
     }
 
     /**
-     * The order the page draws: **trouble first, then running, then the rest**.
+     * The order the page draws, which is [PluginState]'s own declaration order:
+     * **failed, then running, then idle, then off**.
      *
      * A plugin page is consulted when something is wrong, so a failed entry has to be
      * the first thing on it — burying it under twenty healthy rows is how a page
      * becomes something a reader stops opening. Within a state the order is the
      * package's own label, so the list is stable between two reads of the same
-     * deployment.
+     * deployment, and a reader looking for a name finds it where they saw it last.
      */
     fun sorted(entries: List<PluginEntry>): List<PluginEntry> =
         entries.sortedWith(

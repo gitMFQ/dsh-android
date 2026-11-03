@@ -5,6 +5,7 @@ import uk.xa0.dsh.DirectoryLevel
 import uk.xa0.dsh.DraftRestore
 import uk.xa0.dsh.HostCommand
 import uk.xa0.dsh.ModelOption
+import uk.xa0.dsh.PluginInventoryState
 import uk.xa0.dsh.ReferenceCandidate
 import uk.xa0.dsh.TerminalUiState
 import uk.xa0.dsh.UiState
@@ -74,6 +75,14 @@ data class ChatUiState(
     val directoryBusy: Boolean = false,
     val directoryError: String? = null,
     val workspaceExplorer: ExplorerState = ExplorerState.Idle,
+    /**
+     * The Plugins page's read of `pluginInventory/list`.
+     *
+     * A field of its own rather than part of [ui] for the same reason the explorer is:
+     * only one page reads it, and a failed inventory is that page's business rather
+     * than a session error that takes over the banner above the conversation.
+     */
+    val pluginInventory: PluginInventoryState = PluginInventoryState.Idle,
     /**
      * The running turn's elapsed milliseconds, or null when no turn of this session's
      * own is in flight.
@@ -188,6 +197,8 @@ data class ChatActions(
     val resetWorkspaceExplorer: () -> Unit = {},
     val workspaceFileLoader: () -> WorkspaceFileLoader? = { null },
     val workspaceFileDownloader: () -> FileDownloader? = { null },
+    /** Reads `pluginInventory/list`; the Plugins page's one invalidation. */
+    val loadPluginInventory: () -> Unit = {},
     val renameSession: (String, String) -> Unit = { _, _ -> },
     val forkSession: (String) -> Unit = {},
     val archiveSession: (String) -> Unit = {},
