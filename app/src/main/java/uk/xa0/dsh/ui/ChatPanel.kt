@@ -2876,11 +2876,22 @@ private fun ChatHeader(
             JobsSeat(jobs = jobs, finishedUnseen = jobsFinishedUnseen, onClick = onJobs)
             // The capsule is the *last* seat, after the utilities, because it is the
             // one that changes width with its label: putting it before them would
-            // shift every utility sideways as states change. A fixed-width seat with
-            // a variable label inside it is the same shape the bar's readings use.
+            // shift every utility sideways as states change.
+            //
+            // It is capped rather than free to grow. The header row has no trailing
+            // inset — every other seat is a fixed 40dp circle, so none of them ever
+            // needed one — and a label as long as "Waiting for approval" ran off the
+            // right edge the first time it was recorded. A maximum width plus the
+            // row's own end padding is what makes the longest of the four labels fit;
+            // the ellipsis then covers a label a future state adds that does not.
             if (capsule != null) {
                 Spacer(Modifier.width(HEADER_SEAT_GAP))
-                StatusCapsuleChip(capsule, onClick = onCapsule)
+                StatusCapsuleChip(
+                    capsule,
+                    onClick = onCapsule,
+                    modifier = Modifier.widthIn(max = CAPSULE_MAX_WIDTH),
+                )
+                Spacer(Modifier.width(DshSpacing.sm))
             }
             // No separate running-turn dot here on purpose. `JobsSeat` already
             // draws a `StateDot(ONGOING)` while a job runs, and this glyph is the
@@ -3324,6 +3335,18 @@ private val DRAWER_COMMIT = 40.dp
  */
 private val HEADER_SEAT = 40.dp
 private val HEADER_SEAT_GAP = DshSpacing.xs
+
+/**
+ * The widest the status capsule may be.
+ *
+ * The header row has no trailing inset — every other seat is a fixed 40dp circle, so
+ * none of them ever needed one — and the first recorded capture of the capsule showed
+ * "Waiting for approval" running off the right edge. This is the width that fits the
+ * longest of the four labels alongside the utilities on a 411dp phone, with the row's
+ * own end padding after it. A label a future state adds that does not fit ellipsizes
+ * rather than clipping.
+ */
+private val CAPSULE_MAX_WIDTH = 148.dp
 
 /**
  * The drawer's edge drag, on the screen **and** on the sheet.
@@ -3787,7 +3810,11 @@ private fun capsuleStateIsOffline(ui: UiState): Boolean =
  * chases exactly like a running job does rather than inventing a second animation.
  */
 @Composable
-private fun StatusCapsuleChip(capsule: StatusCapsule, onClick: (() -> Unit)? = null) {
+private fun StatusCapsuleChip(
+    capsule: StatusCapsule,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
     val colors = DshTheme.colors
     val tint = when (capsule.state) {
         CapsuleState.WAITING -> colors.warn
@@ -3800,7 +3827,7 @@ private fun StatusCapsuleChip(capsule: StatusCapsule, onClick: (() -> Unit)? = n
         CapsuleState.IDLE -> colors.labelTertiary
     }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(DshRadius.pill))
             .background(colors.bgLayer1)
             .then(if (onClick != null) Modifier.clickableNoRipple(onClick = onClick) else Modifier)
