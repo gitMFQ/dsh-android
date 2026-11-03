@@ -16,9 +16,9 @@
 仓库 <https://github.com/gitMFQ/dsh-android>（私有）是整仓 GPL-3.0 的 **DSH 原生安卓客户端**。
 阶段 1、阶段 2.0–2.5、阶段 3 的 **3.0–3.9 全部合入**（3.6 只做了 A3、3.10 只做了外观，见 §4.2）。
 3.5b（Me 的设置页签）之后，第八版列出的六项一次做完（PR #44–#50），第九版的第七项
-（3.7 顶栏折叠）也已随 #57 落地，抽屉玻璃由 #58 收尾。当前 master `16b6484`。
+（3.7 顶栏折叠）也已随 #57 落地，抽屉玻璃由 #58 收尾，确认框基线由 #60 补上。当前 master `a9a175d`。
 
-**CI 实测（master `16b6484`）**：`tests=1239 failures=0` / `screenshots=27` / Debug APK 绿。
+**CI 实测（master `a9a175d`）**：`tests=1239 failures=0` / `screenshots=28` / Debug APK 绿。
 本机 aarch64 只能编译 Kotlin 和跑 `:design`/`:core:protocol` 测试，**测试真值以 CI 为准**。
 
 ## 2. 已合入（master）
@@ -168,10 +168,12 @@
 > 传 `flatFill = Color.Transparent` 表示「这里本来什么都没有」，平档就逐字节不变——**这是 S2 能落地的前提**。
 > 实测证据：不加这个参数时 `chat-transcript` 动了 932 像素，全在 y=0..57 的顶栏带，颜色 `#FFFFFF→#E0E0E0`。
 
-> **基线里的窗口级表面是可以被 `onRoot()` 看见的** —— `permission.png` 就是证据：`ModalBottomSheet`
-> 是独立 window，`onRoot()` 仍能连窗口一起截（灰底 + sheet 全在画面里）。所以给确认框补基线在
-> 机制上没有障碍，`permission` 那条注释里「if `onRoot()` cannot see the sheet, the record fails
-> loudly」的说法已经过实测。
+> **确认框基线已补（#60）** —— 此前「没有任何基线包含对话框」，`confirmTone` 这类「颜色被换掉」的
+> 回归基线抓不到。现在 `confirm-dialog.png` 截的是 `ForceQuitDialog`（全 app 唯一用 `ConfirmTone.Error`
+> 的调用点），图上那颗按钮是**红色**，不是品牌色——这正是 #54 之前差点丢掉的东西。
+> 它同时钉住 `ConfirmDialogHost` 的「body 高度上限」（长正文 + 两个按钮仍在屏内）。
+> 窗口级表面能被 `onRoot()` 看见这件事，`permission.png` 早就证明了：`ModalBottomSheet` 是独立
+> window，`onRoot()` 仍连窗口一起截（灰底 + sheet 全在画面里）。
 
 > **i18n 只覆盖了 Plugins 一页**。`values-zh-rCN` 是证明链路通了（真机切中文这一页就是中文，不需要 App 内切换、不需要 appcompat backport，因为本 app 没有任何 locale override）。**其余约 1100 条仍是英文硬编码**，别把「一页可翻译」当成「已翻译」。
 
@@ -242,7 +244,7 @@
 | **跨模块 smart cast 编不过** | 先把属性读进局部变量再判断；别加 `!!`。 |
 | **AGP 9 不允许 `org.jetbrains.kotlin.android`** | 内置 Kotlin，应用该插件直接 build fail。 |
 | **新增测试任务要写进 `verify.yml` / `build.yml`** | 依赖一个模块不会跑它的测试，CI 会「绿着丢测试」。 |
-| **`tests` 与 `screenshots` 是两个数** | CI 分开打印，不要合并引用。当前 `tests=1239` / `screenshots=27`。 |
+| **`tests` 与 `screenshots` 是两个数** | CI 分开打印，不要合并引用。当前 `tests=1239` / `screenshots=28`。 |
 | **基线里必须关 squircle** | miuix `Card` 用 AGSL shader 画圆角，Robolectric 会在 composition 阶段崩（`'color' is not a valid layout qualifier`）。两个基线类都 provide `LocalSquircleEnabled = false`；**新增基线类也要加**。 |
 | **换装不得动平档基线** | 给某表面加材质时，`liquidPane` 要传 `flatFill`（见 §3.6）。平档动了就是缺陷，不是预期差异——#48 第一次跑就是这么被抓回来的 |
 | **换装 PR 要写清「哪几张预期动」** | 跑完对着 `Screenshot gate` 的失败清单核对：**多动一张就是误伤**。#48/#50 都靠这条当场抓到问题 |
@@ -267,7 +269,7 @@ dispatch screenshots → 下载覆盖基线 → 提交 → verify 绿 → merge�
 ## 7. 仓库结构（只列本轮相关）
 
 ```
-app/                 主模块（1239 项功能测试里的 app 部分；27 张截图基线）
+app/                 主模块（1239 项功能测试里的 app 部分；28 张截图基线）
   src/main/java/uk/xa0/dsh/
     ui/ChatPanel.kt       4211 行，外壳 + 聊天树 + 底栏/抽屉/rail 手势（最大的一块）
     ui/settings/
@@ -280,7 +282,7 @@ app/                 主模块（1239 项功能测试里的 app 部分；27 张�
       ChatRows.kt / QueueDock.kt / FilesPanel.kt / Sheets.kt / …
     ui/scroll/TailFollow.kt   尾部跟随（padding 边缘修正）
     ui/theme/SystemBars.kt    （在 :design）透明导航栏 / 图标明暗
-  src/test/screenshots/      27 张 PNG（#44 起 +4 深色/AMOLED，#47 +2 plugins，#57 +1 chat-trajectory）
+  src/test/screenshots/      28 张 PNG（#44 起 +4 深色/AMOLED，#47 +2 plugins，#57 +1 chat-trajectory，#60 +1 confirm-dialog）
   src/test/java/.../screenshot/ScreenBaselineTest.kt / WideBaselineTest.kt
 core/model/          领域模型 + 测试；本版新增 StatusCapsule.kt（胶囊排名）/ PluginInventory.kt（插件清单）/ WorkspaceExplorer 的 ExplorerOrder + 过滤
 core/term/           终端（纯 JVM，本机可跑）
