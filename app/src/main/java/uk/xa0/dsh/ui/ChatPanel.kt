@@ -97,6 +97,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -1289,6 +1290,10 @@ internal fun ChatPanel(
                 } else {
                     null
                 },
+                // The same handle the bar samples: one backdrop for the shell, not one
+                // per surface. Null on the flat tier, which is why every capture keeps
+                // drawing the fill this header had before.
+                backdrop = glassBackdrop,
                 // Feeds the loading offset above: the header is the top half of
                 // the chrome, and its own height is not a constant.
                 modifier = Modifier.onSizeChanged { headerPx = it.height },
@@ -2752,10 +2757,37 @@ private fun ChatHeader(
      * `clickable` when this is null, so the two are structurally the same decision.
      */
     onCapsule: (() -> Unit)? = null,
+    /**
+     * The backdrop the chrome samples, or null on a device that paints the flat tier.
+     *
+     * The header is chrome, not content: it sits *outside* the pager, so it is not part
+     * of what the bar records. Giving it the material is therefore not a second use of
+     * the same backdrop — it is the other half of "the shell floats over the
+     * conversation", which is the visual direction this step is about. Null is the
+     * honest value on API < 33 and in a capture, and [liquidPane] turns it into the flat
+     * fill the header had before, so the layout is identical either way.
+     */
+    backdrop: GlassBarBackdrop? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
-    Column(modifier) {
+    // The header wears the same material as the bar below it.
+    //
+    // `flatFill = Color.Transparent` is the whole reason this can be added without
+    // redrawing every flat-tier screen. `glassSurface` — the material's flat answer —
+    // is fill-plus-hairline, and a hairline is right for a pane that floats: it is the
+    // only boundary between that pane and the page. The header is *flush* with the page
+    // and spans the full width, so an all-round stroke puts a 0.5dp line along the
+    // screen's top edge and both side edges — a frame, not a surface. Passing the fill
+    // the header actually had (none) keeps the flat tier byte-identical and leaves the
+    // material to the tier that can show it.
+    Column(
+        modifier.liquidPane(
+            backdrop = backdrop,
+            shape = RoundedCornerShape(0.dp),
+            flatFill = Color.Transparent,
+        ),
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -2904,6 +2936,16 @@ private fun ChatHeader(
             // stop affordance, both of which this app already has.
             Spacer(Modifier.width(HEADER_SEAT_GAP))
         }
+        // The rule that separates the header from the content beneath it. The bar
+        // already floats; the header floating too is what makes the two read as one
+        // shell rather than a chrome strip with a bar under it.
+        //
+        // The hairline stays on every tier, unlike the pane's own edge stroke. The
+        // difference is what it is separating: a pane's rim is a boundary between two
+        // surfaces, which the lens already draws, while this line marks where chrome
+        // ends and scrolling content begins — a distinction the material does not
+        // express by itself. `borderL3` is the same rule the header had before it had
+        // a material.
         Box(
             Modifier
                 .fillMaxWidth()
