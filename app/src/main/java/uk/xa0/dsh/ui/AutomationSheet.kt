@@ -17,7 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,6 +51,9 @@ import uk.xa0.dsh.model.scheduleStatusLabel
 import uk.xa0.dsh.model.parseScheduleInstant
 import uk.xa0.dsh.ScheduleHistoryState
 import uk.xa0.dsh.SchedulePageState
+import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
+import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
+import uk.xa0.dsh.ui.overlay.ConfirmTone
 import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -852,33 +854,22 @@ private fun DeleteTaskDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val colors = DshTheme.colors
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = colors.bgBase,
-        title = { Text("Delete this task?", color = colors.labelPrimary, style = DshType.titleMedium) },
-        text = {
-            Text(
-                text = "\"${scheduleDisplayTitle(entry)}\" will stop triggering, and this task's " +
-                    "saved delivery records will be deleted with it. Its session and every " +
-                    "message in it remain, and queued messages are not withdrawn.",
-                style = DshType.bodyMedium,
-                color = colors.labelSecondary,
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm, enabled = !deleting) {
-                Text(
-                    text = if (deleting) "Deleting…" else "Confirm deletion",
-                    color = if (deleting) colors.labelTertiary else colors.warn,
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = colors.labelSecondary)
-            }
-        },
+    ConfirmDialogHost(
+        show = true,
+        visuals = ConfirmDialogVisuals(
+            title = "Delete this task?",
+            content = "\"${scheduleDisplayTitle(entry)}\" will stop triggering, and this task's " +
+                "saved delivery records will be deleted with it. Its session and every " +
+                "message in it remain, and queued messages are not withdrawn.",
+            // The label and the enabled flag are the in-flight state: a deletion already
+            // happening says so and cannot be asked for twice.
+            confirm = if (deleting) "Deleting…" else "Confirm deletion",
+            confirmEnabled = !deleting,
+            confirmTone = ConfirmTone.Warning,
+            dismiss = "Cancel",
+        ),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
     )
 }
 

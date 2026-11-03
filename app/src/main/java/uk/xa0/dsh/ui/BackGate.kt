@@ -1,16 +1,13 @@
 package uk.xa0.dsh.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import uk.xa0.dsh.ui.theme.DshTheme
-import uk.xa0.dsh.ui.theme.DshType
+import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
+import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
 
 /**
  * The last line of defence against a Back that was not meant to close the screen.
@@ -44,35 +41,25 @@ fun BackGate(onClose: () -> Unit) {
 
     BackHandler(enabled = true) { confirming = true }
 
-    if (!confirming) return
-    val colors = DshTheme.colors
-    AlertDialog(
+    // The vendored dialog rather than Material's `AlertDialog`, so a confirmation is
+    // drawn in the same design language as the sheets it sits over. The labels are
+    // passed rather than defaulted: `ConfirmDialogHost` falls back to the platform's
+    // English "OK"/"Cancel", and a "Close" that turns into "OK" on the one screen where
+    // the word is load-bearing would be a regression, not a re-skin.
+    ConfirmDialogHost(
+        show = confirming,
+        visuals = ConfirmDialogVisuals(
+            title = CLOSE_DSH_TITLE,
+            content = CLOSE_DSH_BODY,
+            confirm = CLOSE_DSH_CONFIRM,
+            dismiss = CLOSE_DSH_STAY,
+        ),
+        onConfirm = {
+            confirming = false
+            onClose()
+        },
         // Back, a tap outside, or Stay: all three mean "keep the screen open".
-        onDismissRequest = { confirming = false },
-        containerColor = colors.bgBase,
-        title = { Text(CLOSE_DSH_TITLE, color = colors.labelPrimary, style = DshType.titleMedium) },
-        text = {
-            Text(
-                text = CLOSE_DSH_BODY,
-                style = DshType.bodyMedium,
-                color = colors.labelSecondary,
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                confirming = false
-                onClose()
-            }) {
-                Text(CLOSE_DSH_CONFIRM, color = colors.warn)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { confirming = false }) {
-                // Named rather than "Cancel": the button that keeps the screen open is
-                // worth spelling out when Back is how you got here.
-                Text(CLOSE_DSH_STAY, color = colors.labelSecondary)
-            }
-        },
+        onDismiss = { confirming = false },
     )
 }
 

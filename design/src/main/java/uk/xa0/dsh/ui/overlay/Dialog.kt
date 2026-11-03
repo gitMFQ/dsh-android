@@ -83,6 +83,26 @@ data class ConfirmDialogVisuals(
     val content: String? = null,
     val confirm: String? = null,
     val dismiss: String? = null,
+    /**
+     * Whether the confirm button can be pressed.
+     *
+     * The kit's confirm had no such flag, and one caller needs it: a deletion that is
+     * already in flight says "Deleting…" and must not be pressed twice. Leaving it out
+     * forced that caller to keep Material's `AlertDialog`, which is the split this
+     * dialog exists to remove.
+     */
+    val confirmEnabled: Boolean = true,
+    /**
+     * How loud the confirm button is.
+     *
+     * The kit drew every confirm in the accent colour, which is right for "Rename" and
+     * wrong for "Force quit": this app's own rule is that a destructive action wears the
+     * error tint and a dangerous-but-reversible one wears warning (see the Full-access
+     * option and the truncated-entry note). Without this the re-skin would have quietly
+     * repainted every destructive confirmation in the brand colour — a regression a
+     * baseline would not catch, because dialogs are not in any capture.
+     */
+    val confirmTone: ConfirmTone = ConfirmTone.Primary,
 ) {
     /**
      * Whether there is anything to show.
@@ -92,6 +112,18 @@ data class ConfirmDialogVisuals(
      */
     val isEmpty: Boolean
         get() = title.isEmpty() && content.isNullOrEmpty()
+}
+
+/** Which of the palette's semantic roles the confirm button wears. */
+enum class ConfirmTone {
+    /** The ordinary "yes": rename, continue, save. Painted in the accent. */
+    Primary,
+
+    /** Dangerous but reversible: a full-access escalation, a discard. Warning. */
+    Warning,
+
+    /** Destructive: force quit, delete. Error. */
+    Error,
 }
 
 /** What the user did to a confirm dialog. */
@@ -454,8 +486,13 @@ fun ConfirmDialogHost(
                     TextButton(
                         text = visuals.confirm ?: stringResource(android.R.string.ok),
                         onClick = onConfirm,
+                        enabled = visuals.confirmEnabled,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColorsPrimary(),
+                        colors = when (visuals.confirmTone) {
+                            ConfirmTone.Primary -> ButtonDefaults.textButtonColorsPrimary()
+                            ConfirmTone.Warning -> ButtonDefaults.textButtonColors(color = colors.warn)
+                            ConfirmTone.Error -> ButtonDefaults.textButtonColors(color = colors.error)
+                        },
                     )
                 }
             },

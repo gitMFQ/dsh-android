@@ -70,7 +70,6 @@ import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
@@ -207,6 +206,8 @@ import uk.xa0.dsh.ui.scroll.TailFollow
 import uk.xa0.dsh.ui.settings.MeSettingsActions
 import uk.xa0.dsh.ui.settings.MeSettingsPage
 import uk.xa0.dsh.ui.settings.MeSettingsState
+import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
+import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
 import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -4044,36 +4045,18 @@ private fun BranchFromMessageDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val colors = DshTheme.colors
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = colors.bgBase,
-        title = {
-            Text(
-                "Branch into a new conversation?",
-                color = colors.labelPrimary,
-                style = DshType.titleMedium,
-            )
-        },
-        text = {
-            Text(
-                text = "This starts a new session holding this conversation up to the " +
-                    "end of this turn, and opens it straight away. This session is left " +
-                    "alone: it keeps every message and stays in your list.",
-                style = DshType.bodyMedium,
-                color = colors.labelSecondary,
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("Branch", color = colors.accent)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = colors.labelSecondary)
-            }
-        },
+    ConfirmDialogHost(
+        show = true,
+        visuals = ConfirmDialogVisuals(
+            title = "Branch into a new conversation?",
+            content = "This starts a new session holding this conversation up to the " +
+                "end of this turn, and opens it straight away. This session is left " +
+                "alone: it keeps every message and stays in your list.",
+            confirm = "Branch",
+            dismiss = "Cancel",
+        ),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
     )
 }
 

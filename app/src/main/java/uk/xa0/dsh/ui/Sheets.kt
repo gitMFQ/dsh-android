@@ -25,7 +25,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -62,6 +61,12 @@ import uk.xa0.dsh.net.DoorFault
 import uk.xa0.dsh.ui.components.DshTextField
 import uk.xa0.dsh.ui.settings.MeSettingsActions
 import uk.xa0.dsh.ui.settings.MeSettingsState
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextButton
+import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
+import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
+import uk.xa0.dsh.ui.overlay.ConfirmTone
+import uk.xa0.dsh.ui.overlay.DshDialog
 import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -688,32 +693,22 @@ fun PermissionSheet(
     }
 
     confirming?.let { option ->
-        AlertDialog(
-            onDismissRequest = { confirming = null },
-            containerColor = colors.bgBase,
-            title = { Text("Enable Full access?", color = colors.labelPrimary, style = DshType.titleMedium) },
-            text = {
-                Text(
-                    text = "Full access lets new sessions reduce confirmation steps and perform " +
-                        "more actions directly, including sensitive operations, file changes, or " +
-                        "external commands. Only use it when you trust subsequent tasks.",
-                    style = DshType.bodyMedium,
-                    color = colors.labelSecondary,
-                )
+        ConfirmDialogHost(
+            show = true,
+            visuals = ConfirmDialogVisuals(
+                title = "Enable Full access?",
+                content = "Full access lets new sessions reduce confirmation steps and perform " +
+                    "more actions directly, including sensitive operations, file changes, or " +
+                    "external commands. Only use it when you trust subsequent tasks.",
+                confirm = "Enable Full access",
+                confirmTone = ConfirmTone.Warning,
+                dismiss = "Cancel",
+            ),
+            onConfirm = {
+                confirming = null
+                onSelect(option.value)
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirming = null
-                    onSelect(option.value)
-                }) {
-                    Text("Enable Full access", color = colors.warn)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirming = null }) {
-                    Text("Cancel", color = colors.labelSecondary)
-                }
-            },
+            onDismiss = { confirming = null },
         )
     }
 }
@@ -840,33 +835,38 @@ fun ContextDialog(
     onDismiss: () -> Unit,
 ) {
     val colors = DshTheme.colors
-    AlertDialog(
+    // A reading, not a question: it has one button and a body made of rows, so
+    // `ConfirmDialogHost` (whose contract is a string body plus two answers) is the
+    // wrong shape. `DshDialog` is the plain one — that is what it is for.
+    DshDialog(
+        show = true,
         onDismissRequest = onDismiss,
-        containerColor = colors.bgBase,
-        title = { Text("Context window", color = colors.labelPrimary, style = DshType.titleMedium) },
-        text = {
-            Column {
-                Text(
-                    text = if (windowTokens > 0) {
-                        "$percent% · ${formatTokens(usedTokens)} of ${formatTokens(windowTokens)} tokens"
-                    } else {
-                        "The host has not reported a context window for this session yet."
-                    },
-                    style = DshType.bodyMedium,
-                    color = colors.labelSecondary,
-                )
-                if (breakdown != null) {
-                    Spacer(Modifier.height(DshSpacing.lg))
-                    BreakdownRow("System", breakdown.system, windowTokens, colors.accent)
-                    BreakdownRow("Tools", breakdown.tools, windowTokens, colors.synFunction)
-                    BreakdownRow("Messages", breakdown.messages, windowTokens, colors.success)
-                }
+        title = "Context window",
+    ) {
+        Column {
+            Text(
+                text = if (windowTokens > 0) {
+                    "$percent% · ${formatTokens(usedTokens)} of ${formatTokens(windowTokens)} tokens"
+                } else {
+                    "The host has not reported a context window for this session yet."
+                },
+                style = DshType.bodyMedium,
+                color = colors.labelSecondary,
+            )
+            if (breakdown != null) {
+                Spacer(Modifier.height(DshSpacing.lg))
+                BreakdownRow("System", breakdown.system, windowTokens, colors.accent)
+                BreakdownRow("Tools", breakdown.tools, windowTokens, colors.synFunction)
+                BreakdownRow("Messages", breakdown.messages, windowTokens, colors.success)
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close", color = colors.accent) }
-        },
-    )
+            TextButton(
+                text = "Close",
+                onClick = onDismiss,
+                modifier = Modifier.padding(top = DshSpacing.lg),
+                colors = ButtonDefaults.textButtonColorsPrimary(),
+            )
+        }
+    }
 }
 
 @Composable

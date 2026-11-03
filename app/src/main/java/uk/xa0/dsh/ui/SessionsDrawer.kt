@@ -45,7 +45,6 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SubdirectoryArrowRight
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -133,6 +132,9 @@ import uk.xa0.dsh.ui.search.SessionSearchCopy
 import uk.xa0.dsh.ui.search.SessionSearchRow
 import uk.xa0.dsh.ui.search.SessionSearchRowItem
 import uk.xa0.dsh.ui.search.SessionSearchStatus
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextButton
+import uk.xa0.dsh.ui.overlay.DshDialog
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -2171,39 +2173,36 @@ private fun RenameDialog(
 ) {
     val colors = DshTheme.colors
     var text by remember { mutableStateOf(initial) }
-    AlertDialog(
+    // A field, not a sentence: `ConfirmDialogHost` takes its body as a `String`, and a
+    // rename needs an editor inside the dialog. `DshDialog` is the plain one and takes
+    // arbitrary content, which is what the two remaining bespoke dialogs have in common.
+    DshDialog(
+        show = true,
         onDismissRequest = onDismiss,
-        containerColor = colors.menu,
-        title = { Text("Rename session", style = DshType.labelLarge, color = colors.labelPrimary) },
-        text = {
+        title = "Rename session",
+    ) {
+        Column {
             DshTextField(
                 value = text,
                 onValueChange = { text = it },
                 placeholder = "Session title",
                 minHeight = 44.dp,
             )
-        },
-        confirmButton = {
-            Text(
-                text = "Save",
-                style = DshType.labelLarge,
-                color = if (text.isBlank()) colors.labelTertiary else colors.accent,
-                modifier = Modifier
-                    .clickableNoRipple(enabled = text.isNotBlank()) { onConfirm(text.trim()) }
-                    .padding(DshSpacing.md),
-            )
-        },
-        dismissButton = {
-            Text(
-                text = "Cancel",
-                style = DshType.labelLarge,
-                color = colors.labelSecondary,
-                modifier = Modifier
-                    .clickableNoRipple(onClick = onDismiss)
-                    .padding(DshSpacing.md),
-            )
-        },
-    )
+            Row(
+                Modifier.fillMaxWidth().padding(top = DshSpacing.lg),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(text = "Cancel", onClick = onDismiss)
+                Spacer(Modifier.width(DshSpacing.sm))
+                TextButton(
+                    text = "Save",
+                    onClick = { onConfirm(text.trim()) },
+                    enabled = text.isNotBlank(),
+                    colors = ButtonDefaults.textButtonColorsPrimary(),
+                )
+            }
+        }
+    }
 }
 
 @Composable
