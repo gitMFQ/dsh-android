@@ -3857,6 +3857,12 @@ private fun StatusCapsuleChip(
             style = DshType.micro,
             color = tint,
             maxLines = 1,
+            // `weight` rather than a bare `Text`: a Text in a Row measures at its
+            // intrinsic width, so a `widthIn` on the Row only shrinks the *container*
+            // and the label keeps drawing past its edge. Weight is what makes the text
+            // take the remaining space and then ellipsize inside it — the same reason
+            // the composer's own labels carry it.
+            modifier = Modifier.weight(1f, fill = false),
             overflow = TextOverflow.Ellipsis,
         )
     }
