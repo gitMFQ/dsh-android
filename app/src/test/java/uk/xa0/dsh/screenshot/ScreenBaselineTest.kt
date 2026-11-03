@@ -33,6 +33,10 @@ import uk.xa0.dsh.AppPhase
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.PendingAttachment
 import uk.xa0.dsh.PendingKind
+import uk.xa0.dsh.ui.PluginsPage
+import uk.xa0.dsh.model.PluginInventory
+import uk.xa0.dsh.model.PluginEntry
+import uk.xa0.dsh.PluginInventoryState
 import uk.xa0.dsh.PermissionOption
 import uk.xa0.dsh.TerminalPhase
 import uk.xa0.dsh.TerminalUiState
@@ -1077,20 +1081,74 @@ class ScreenBaselineTest {
     }
 
     /**
-     * The Plugins destination, which is a placeholder on purpose (3.3).
+     * The Plugins destination, now a real inventory.
      *
-     * Captured for the same reason the MiuiX probe was: an empty page is a claim about
-     * the product, and a claim nobody can see is one that rots. When the plugin surfaces
-     * land, this capture is what shows what they replaced.
+     * This capture used to be the placeholder, on purpose: "an empty page is a claim
+     * about the product, and a claim nobody can see is one that rots". It is now the
+     * page that replaced it, which is what that argument said the capture would show
+     * when the surfaces landed.
+     *
+     * The fixture is the interesting mix rather than a healthy list: one running, one
+     * enabled-but-not-mounted, one disabled, and one **failed with the host's own
+     * message**. A page of four green rows would pin the happy path and none of the
+     * four states the row can be in.
      */
     @Test
     fun pluginsTab() {
         capture("plugins-tab") {
-            PlaceholderTab(
-                title = "Plugins",
-                summary = "Plugin surfaces will live here. The panel and block protocol " +
-                    "already exist; this page is where they land.",
-                icon = Icons.Rounded.Extension,
+            PluginsPage(
+                state = PluginInventoryState.Ready(
+                    PluginInventory(
+                        managementAvailable = true,
+                        entries = listOf(
+                            PluginEntry(
+                                entryId = "e1",
+                                moduleName = "@deepseek-ai/dsh-client-ui-jobs",
+                                displayName = "Jobs",
+                                description = "Background work, and the seat that shows it.",
+                                enabled = true,
+                                fiberPhase = "active",
+                            ),
+                            PluginEntry(
+                                entryId = "e2",
+                                moduleName = "@deepseek-ai/dsh-client-ui-schedule",
+                                displayName = "Schedule",
+                                description = "Timed tasks and their delivery history.",
+                                enabled = true,
+                                fiberPhase = null,
+                            ),
+                            PluginEntry(
+                                entryId = "e3",
+                                moduleName = "@deepseek-ai/dsh-experimental-plugin-market-bundle",
+                                enabled = false,
+                                fiberPhase = null,
+                            ),
+                            PluginEntry(
+                                entryId = "e4",
+                                moduleName = "@michengai/dsh-automation",
+                                displayName = "Automation",
+                                enabled = true,
+                                fiberPhase = "failed",
+                                diagnostic = "Cannot find module '@michengai/dsh-automation'",
+                            ),
+                        ),
+                    ),
+                ),
+                onRefresh = {},
+            )
+        }
+    }
+
+    /**
+     * The Plugins page with nothing to show, which is a different fact from a failed
+     * read and has to read as one.
+     */
+    @Test
+    fun pluginsTabEmpty() {
+        capture("plugins-tab-empty") {
+            PluginsPage(
+                state = PluginInventoryState.Ready(PluginInventory(managementAvailable = false)),
+                onRefresh = {},
             )
         }
     }
