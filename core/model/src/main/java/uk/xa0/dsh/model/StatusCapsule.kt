@@ -101,16 +101,23 @@ object StatusCapsules {
      * [connectionLabel] is `UiState.connectionLabel` — non-null only while the mux is
      * reconnecting — and is passed as the words the pill would show, so the capsule
      * and the pill cannot word the same state differently.
+     *
+     * [seatOpen] is **not** "a session id exists". A new-session hero has no session id
+     * yet and is still a real seat — the reader is looking at the place their next turn
+     * will go — so it must not be told "No session". The caller passes whether a seat
+     * is on screen at all: an open session, or the pending new-session target. The one
+     * state that is genuinely seatless is a cold start with nothing to reopen, which is
+     * a loading screen rather than a conversation.
      */
     fun derive(
         pending: PendingKindWire?,
         connectionLabel: String?,
         running: Boolean,
-        sessionOpen: Boolean,
+        seatOpen: Boolean,
     ): StatusCapsule = when {
         pending != null -> StatusCapsule(CapsuleState.WAITING, pending.label, pending)
         connectionLabel != null -> StatusCapsule(CapsuleState.OFFLINE, connectionLabel)
-        !sessionOpen -> StatusCapsule(CapsuleState.UNKNOWN, "No session")
+        !seatOpen -> StatusCapsule(CapsuleState.UNKNOWN, "No session")
         running -> StatusCapsule(CapsuleState.WORKING, "Working")
         else -> StatusCapsule(CapsuleState.IDLE, "Ready")
     }

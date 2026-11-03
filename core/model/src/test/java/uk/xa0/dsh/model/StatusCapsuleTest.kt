@@ -19,8 +19,8 @@ class StatusCapsuleTest {
         pending: PendingKindWire? = null,
         connection: String? = null,
         running: Boolean = false,
-        sessionOpen: Boolean = true,
-    ) = StatusCapsules.derive(pending, connection, running, sessionOpen)
+        seatOpen: Boolean = true,
+    ) = StatusCapsules.derive(pending, connection, running, seatOpen)
 
     @Test
     fun `an approval outranks a running turn`() {
@@ -80,14 +80,25 @@ class StatusCapsuleTest {
     }
 
     @Test
-    fun `no session is unknown rather than idle`() {
+    fun `no seat at all is unknown rather than idle`() {
         // "The client has no opinion" is a different fact from "the session is at
         // rest", and the capsule is drawn for the first because silence would be a
         // claim.
-        val capsule = derive(sessionOpen = false)
+        val capsule = derive(seatOpen = false)
 
         assertEquals(CapsuleState.UNKNOWN, capsule.state)
         assertTrue(StatusCapsules.isDrawn(capsule.state))
+    }
+
+    @Test
+    fun `a new-session hero is a seat, not a missing session`() {
+        // The hero has no session id yet — `session/create` is deferred to its first
+        // real use — but the reader is looking at the place their next turn will go.
+        // Telling them "No session" over a hero would be the header contradicting the
+        // screen: the pending target *is* a seat.
+        val capsule = derive(seatOpen = true)
+
+        assertEquals(CapsuleState.IDLE, capsule.state)
     }
 
     @Test

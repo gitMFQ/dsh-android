@@ -1263,7 +1263,12 @@ internal fun ChatPanel(
                         pending = pendingKindOf(ui.pendingInteractions[ui.currentSessionId]),
                         connectionLabel = ui.connectionLabel,
                         running = ui.running,
-                        sessionOpen = ui.currentSessionId != null,
+                        // A seat, not a session id. The new-session hero has no id yet
+                        // and is still a real seat; a cold start with nothing to reopen
+                        // has neither and is the one genuinely seatless case. Passing
+                        // `currentSessionId != null` here told the hero "No session",
+                        // which is how this was caught: `chat-hero` moved.
+                        seatOpen = ui.currentSessionId != null || ui.pendingSession != null,
                     )
                     .takeIf { StatusCapsules.isDrawn(it.state) },
                 // Only one of the four states has somewhere to go, and the capsule is
