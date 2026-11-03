@@ -3857,12 +3857,18 @@ private fun StatusCapsuleChip(
             style = DshType.micro,
             color = tint,
             maxLines = 1,
-            // `weight` rather than a bare `Text`: a Text in a Row measures at its
-            // intrinsic width, so a `widthIn` on the Row only shrinks the *container*
-            // and the label keeps drawing past its edge. Weight is what makes the text
-            // take the remaining space and then ellipsize inside it — the same reason
-            // the composer's own labels carry it.
-            modifier = Modifier.weight(1f, fill = false),
+            // `weight(1f)` — with `fill` left at its default `true` — is what makes the
+            // label take the space that is left and then ellipsize inside it. A bare
+            // `Text` measures at its intrinsic width, so a `widthIn` on the Row only
+            // shrinks the *container* and the label keeps drawing past its edge.
+            //
+            // `fill = false` was tried first and is wrong here: it asks for the
+            // intrinsic width, which is the very thing that overflows. The cost of
+            // `fill = true` is that a short label ("Working") reserves the cap's width
+            // and the pill reads slightly wide — accepted, because a pill that is a few
+            // dp too wide is a cosmetic imprecision and a label running off the screen
+            // is a bug.
+            modifier = Modifier.weight(1f),
             overflow = TextOverflow.Ellipsis,
         )
     }
