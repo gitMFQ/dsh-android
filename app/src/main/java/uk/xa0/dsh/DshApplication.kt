@@ -3,6 +3,7 @@ package uk.xa0.dsh
 import android.app.Application
 import android.os.Process
 import uk.xa0.dsh.data.ConfigStore
+import uk.xa0.dsh.diag.CrashLog
 import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.model.runForceQuit
 import uk.xa0.dsh.net.DshClient
@@ -69,6 +70,14 @@ class DshApplication : Application() {
         // Latent scroll diagnostics: invisible, additive, and off the main
         // thread. See uk.xa0.dsh.diag.ScrollDiag for how to read them back.
         ScrollDiag.attach(filesDir)
+        // The crash record. Debug only, and deliberately so: it observes an uncaught
+        // exception and writes it where the Me page can hand it back, which is the only
+        // way a stack trace reaches a development box with no adb. A release build never
+        // installs it, so a shipped app writes nothing.
+        //
+        // See uk.xa0.dsh.diag.CrashLog for why it is synchronous, and
+        // ui/settings/SettingsCards.kt for the page that reads it.
+        if (BuildConfig.DEBUG) CrashLog.install(filesDir)
     }
 
     /**

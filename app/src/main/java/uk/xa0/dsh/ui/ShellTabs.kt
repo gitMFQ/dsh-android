@@ -321,7 +321,7 @@ private fun MeEntryRow(entry: MeEntry, onClick: () -> Unit) {
 internal val ME_GROUPS: List<MeGroup> = listOf(
     MeGroup("This device", listOf("appearance", "general", "terminal")),
     MeGroup("What answers", listOf("model", "agent")),
-    MeGroup("Rare and dangerous", listOf("plugins", "archived")),
+    MeGroup("Rare and dangerous", listOf("plugins", "archived", "crashes")),
     MeGroup("Facts", listOf("about")),
 )
 
