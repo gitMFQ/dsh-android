@@ -61,6 +61,11 @@ import uk.xa0.dsh.model.SessionStats
 import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.SessionTarget
 import uk.xa0.dsh.model.StartupStep
+import uk.xa0.dsh.model.ExplorerState
+import uk.xa0.dsh.model.WorkspaceEntry
+import uk.xa0.dsh.model.WorkspaceEntryKind
+import uk.xa0.dsh.model.WorkspaceListing
+import uk.xa0.dsh.model.WorkspaceTreeState
 import uk.xa0.dsh.model.WorkspaceListPhase
 import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.term.SeatOption
@@ -91,6 +96,7 @@ import uk.xa0.dsh.ui.TerminalPanel
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.ComposerAccessoryRail
 import uk.xa0.dsh.ui.components.ComposerDock
+import uk.xa0.dsh.ui.components.ExplorerWiring
 import uk.xa0.dsh.ui.components.FilesPanel
 import uk.xa0.dsh.ui.components.FullScreenComposer
 import uk.xa0.dsh.ui.nav.FloatingBottomBar
@@ -505,6 +511,88 @@ class ScreenBaselineTest {
                     ),
                 ),
                 initialPath = path,
+            )
+        }
+    }
+
+    /**
+     * The workspace tree, with one directory open — the surface 3.6 added and the
+     * one the `files` capture cannot see.
+     *
+     * `files` opens through `initialPath`, which lands on **This session** by design,
+     * so every Browse pixel went uncovered until now. That matters more here than for
+     * most surfaces: the tree's whole statement is *indent*, and an indent that is one
+     * level wrong still draws. A capture is the only thing in this suite that can say
+     * a child sits under its parent rather than beside it.
+     *
+     * The fixture puts each state the fold can produce on screen at once:
+     *
+     *  * `app` — open, level arrived (READY): its children draw one indent in;
+     *  * `app/build` — open, level not arrived (LOADING): the row draws the spinner
+     *    rather than looking closed, which is the distinction the fold exists for;
+     *  * `app/node_modules` — closed: a row and nothing more;
+     *  * files at two depths, so the indent reads against a sibling that has none.
+     *
+     * The session's own mark is on `app/build/bundle.zip` — two levels down, which is
+     * the case a flat list could not express at all.
+     */
+    @Test
+    fun filesTree() {
+        val rootLevel = WorkspaceListing(
+            path = "",
+            entries = listOf(
+                WorkspaceEntry("app", WorkspaceEntryKind.DIRECTORY),
+                WorkspaceEntry("docs", WorkspaceEntryKind.DIRECTORY),
+                WorkspaceEntry("README.md", WorkspaceEntryKind.FILE, size = 4210L),
+            ),
+            truncated = false,
+        )
+        val tree = WorkspaceTreeState(
+            levels = mapOf(
+                "" to rootLevel,
+                "app" to WorkspaceListing(
+                    path = "app",
+                    entries = listOf(
+                        WorkspaceEntry("build", WorkspaceEntryKind.DIRECTORY),
+                        WorkspaceEntry("node_modules", WorkspaceEntryKind.DIRECTORY),
+                        WorkspaceEntry("build.gradle.kts", WorkspaceEntryKind.FILE, size = 1207L),
+                    ),
+                    truncated = false,
+                ),
+                "app/build" to WorkspaceListing(
+                    path = "app/build",
+                    entries = listOf(
+                        WorkspaceEntry("bundle.zip", WorkspaceEntryKind.FILE, size = 88214L),
+                    ),
+                    truncated = false,
+                ),
+            ),
+            open = setOf("app", "app/build"),
+            root = "/home/user/var/work/dsh-android",
+        )
+        val touched = "/home/user/var/work/dsh-android/app/build/bundle.zip"
+        capture("files-tree") {
+            FilesPanel(
+                files = listOf(
+                    SessionFile(
+                        path = touched,
+                        touches = listOf(FileTouch.WRITTEN),
+                        reads = 0,
+                        writes = 1,
+                        edits = 0,
+                        presents = 0,
+                        firstSeq = 7,
+                        lastSeq = 9,
+                    ),
+                ),
+                root = "/home/user/var/work/dsh-android",
+                explorer = ExplorerWiring(
+                    state = ExplorerState.Ready(rootLevel),
+                    onList = {},
+                    onReload = {},
+                    tree = tree,
+                    onToggle = {},
+                ),
             )
         }
     }
