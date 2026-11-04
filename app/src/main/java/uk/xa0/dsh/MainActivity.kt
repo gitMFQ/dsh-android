@@ -75,9 +75,28 @@ class MainActivity : ComponentActivity() {
         // Here rather than in composition: the marker must be written once per process,
         // and it must be written before the first frame can crash, not after it.
         BootBeacon.mark("activity.onCreate: begin")
-        // "This launch became usable" — the marker the guard reads next time is deleted
-        // here, and only here. See uk.xa0.dsh.diag.LaunchGuard for the whole mechanism.
-        LaunchGuard.markStarted(this)
+        // "This launch became usable" is **not** onCreate.
+        //
+        // It used to be deleted here, and that is why the guard never counted anything: the
+        // crash happens during the first rasterisation of the chat screen, which is *after*
+        // onCreate has returned and after composition has finished — so the marker was
+        // always already gone by the time the process died. The guard kept seeing clean
+        // starts, and its log said "no change" on every launch.
+        //
+        // The honest moment is the first *drawn* frame. `reportFullyDrawn` is too late
+        // (it waits for everything), so this hooks the view's first pre-draw instead: it
+        // fires when the frame is about to be rendered, which is exactly the boundary the
+        // crash sits on.
+        window.decorView.viewTreeObserver.addOnPreDrawListener(
+            object : android.view.ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
+                    LaunchGuard.markStarted(this@MainActivity)
+                    BootBeacon.mark("first frame: drawn")
+                    return true
+                }
+            },
+        )
         enableEdgeToEdge()
         BootBeacon.mark("activity: edge to edge")
         consume(intent)

@@ -82,7 +82,16 @@ object LaunchGuard {
      * @return true when this launch turned the material off, so the caller can say so.
      */
     fun check(context: Context): Boolean {
-        // The external marker wins over everything, and is checked first: it is the one
+        // An explicit level from the reader wins over every inference below.
+        levelOverride(context)?.let { wanted ->
+            if (currentLevel(context) != wanted) {
+                degradeTo(context, wanted)
+                Log.e(TAG, "glass-level.txt asked for " + wanted)
+                return true
+            }
+            return false
+        }
+        // The external marker wins over everything else, and is checked next: it is the
         // route that works when neither the preferences nor the UI can be reached.
         if (safeModeRequested(context)) {
             // The marker is a request for the flat tier specifically — a reader who made
@@ -288,6 +297,36 @@ object LaunchGuard {
     fun safeModeRequested(context: Context): Boolean = runCatching {
         context.getExternalFilesDir(null)?.let { File(it, SAFE_MODE_FILE).exists() } == true
     }.getOrDefault(false)
+
+    /**
+     * A glass level the reader set **from outside the app**, or null.
+     *
+     * ## Why a file beats every other route here
+     *
+     * The app closes during rasterisation of the chat screen, so the settings page is not
+     * reachable, the guard has to infer what happened, and every inference has been wrong
+     * once. A file has no inference in it: the reader states the level, the app obeys.
+     *
+     * Write one of `liquid`, `blur` or `off` into
+     *
+     *     Android/data/<pkg>/files/glass-level.txt
+     *
+     * and the next launch runs at that level. Delete the file to go back to whatever the
+     * app has stored. A trailing newline or stray whitespace is tolerated, because a file
+     * written by hand or by `echo` will have one.
+     *
+     * This is read *before* the launch guard, and wins over it: an explicit instruction
+     * from the person holding the phone outranks anything the app guessed.
+     */
+    fun levelOverride(context: Context): String? = runCatching {
+        val file = context.getExternalFilesDir(null)?.let { File(it, LEVEL_FILE) } ?: return null
+        if (!file.exists()) return null
+        val text = file.readText().trim().lowercase()
+        if (text in uk.xa0.dsh.data.LiquidGlassLevel.all) text else null
+    }.getOrDefault(null)
+
+    /** The file [levelOverride] reads. */
+    const val LEVEL_FILE = "glass-level.txt"
 
     private fun readLong(context: Context, key: String): Long = runCatching {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(key, 0L)

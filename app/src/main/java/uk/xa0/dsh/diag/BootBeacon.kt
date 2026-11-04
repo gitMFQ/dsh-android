@@ -42,22 +42,53 @@ object BootBeacon {
 
     private const val FILE = "boot.log"
 
+    /** How many launches the file keeps. Enough to show a pattern, small enough to send. */
+    private const val MAX_LAUNCHES = 8
+
     @Volatile
     private var target: File? = null
 
-    /** Start a new launch's record. Called first thing in Application.onCreate. */
+    /**
+     * Start a new launch's record. Called first thing in Application.onCreate.
+     *
+     * ## Why this appends instead of truncating
+     *
+     * The first version rewrote the file on every launch, so the only launch anyone could
+     * read was the newest one. That is the wrong half of the evidence: the question is not
+     * "how far did one launch get" but **"does the crash point move between launches"**,
+     * and a file that keeps only the latest answer cannot show a moving target. It also
+     * made the guard unreadable — three launches of "no change" followed by one "stepped
+     * down" is the whole story, and truncation threw it away.
+     *
+     * So: append, separate each launch with a visible marker, and keep the newest
+     * [MAX_LAUNCHES] blocks.
+     */
     fun begin(context: Context) {
         runCatching {
             val dir = context.getExternalFilesDir(null)?.let { File(it, "diag") }
                 ?: File(context.filesDir, "diag")
             if (!dir.exists()) dir.mkdirs()
             val file = File(dir, FILE)
-            // Truncated, not appended: the question is always "how far did *this* launch
-            // get", and a file that accumulates would need a timestamp parser to answer it.
-            file.writeText("")
+            val previous = if (file.exists()) file.readLines() else emptyList()
+            val kept = trimToLaunches(previous)
+            file.writeText(kept.joinToString("\n") + if (kept.isEmpty()) "" else "\n")
             target = file
         }
-        mark("application.onCreate: begin");
+        mark("===== launch " + STAMP.format(Date()) + " =====")
+        mark("application.onCreate: begin")
+    }
+
+    /**
+     * Keep only the newest [MAX_LAUNCHES] launch blocks.
+     *
+     * Split on the separator [begin] writes rather than counting lines: a launch that died
+     * immediately has one line and one that reached the transcript has thirty, so a line
+     * budget would cut the long ones in half.
+     */
+    private fun trimToLaunches(lines: List<String>): List<String> {
+        val starts = lines.indices.filter { lines[it].startsWith("===== launch ") }
+        if (starts.size <= MAX_LAUNCHES) return lines
+        return lines.subList(starts[starts.size - MAX_LAUNCHES], lines.size)
     }
 
     /**
