@@ -13,6 +13,7 @@ import uk.xa0.dsh.AgentPresetOption
 import uk.xa0.dsh.ModelOption
 import uk.xa0.dsh.PermissionOption
 import uk.xa0.dsh.data.BusyEnter
+import uk.xa0.dsh.data.LiquidGlassLevel
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.model.HostSettings
 import uk.xa0.dsh.model.SessionItem
@@ -56,6 +57,8 @@ data class MeSettingsState(
     val chatViewsEnabled: Boolean = true,
     /** Whether the floating chrome may paint liquid glass; see DshConfig. */
     val liquidGlassEnabled: Boolean = true,
+    /** How much of it may run; see DshConfig.liquidGlassLevel. */
+    val liquidGlassLevel: String = LiquidGlassLevel.LIQUID,
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     val busyEnter: String = BusyEnter.QUEUE,
@@ -104,6 +107,8 @@ data class MeSettingsActions(
     val onChatViews: (Boolean) -> Unit = {},
     /** The liquid-glass material switch. */
     val onLiquidGlass: (Boolean) -> Unit = {},
+    /** The material's level; see LiquidGlassLevel. */
+    val onLiquidGlassLevel: (String) -> Unit = {},
     /** The language row; blank clears the override. */
     val onLanguage: (String) -> Unit = {},
     val onBusyEnter: (String) -> Unit = {},

@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import uk.xa0.dsh.data.LiquidGlassLevel
 import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.ui.BackGate
@@ -28,6 +29,7 @@ import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassLiftEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassShaderEnabled
 import uk.xa0.dsh.ui.markdown.LocalImageBytes
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.SystemBars
@@ -193,11 +195,16 @@ class MainActivity : ComponentActivity() {
             // complete, correct app rather than a broken one.
             CompositionLocalProvider(
                 LocalImageBytes provides vm::markdownImageBytes,
-                LocalGlassEnabled provides ui.liquidGlassEnabled,
-                // The lift follows the same setting but is a separate local, so a
-                // fixture that says "no GPU" still photographs the shadow it always
-                // did — see LocalGlassLiftEnabled for why that distinction is measured.
-                LocalGlassLiftEnabled provides ui.liquidGlassEnabled,
+                // The material's three layers, from the one stored level.
+                //
+                // They are separate locals because they are separate GPU mechanisms and
+                // the crash on the test handset was a driver fault: "the glass crashes"
+                // can only be turned into "the *shader* crashes" by switching them
+                // independently. See LiquidGlassLevel for the bisect, and each local for
+                // why it is not folded into its neighbour.
+                LocalGlassEnabled provides LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel),
+                LocalGlassShaderEnabled provides LiquidGlassLevel.paintsShader(ui.liquidGlassLevel),
+                LocalGlassLiftEnabled provides LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel),
             ) {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // Composed before the screen so the screen's own Back handlers — the

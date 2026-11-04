@@ -103,6 +103,10 @@ fun Modifier.liquidPane(
     // Denser and the transcript stops reading as motion behind the chrome; thinner and
     // labels lose contrast on a light appearance. Same value as the bar's own container.
     val highlight = rememberDiagonalHighlight()
+    // Read once per composition, not per frame: the effects lambda runs on every draw and
+    // a composition local read inside it would be a snapshot read per frame for a value
+    // that only changes when a setting does.
+    val shaderEnabled = LocalGlassShaderEnabled.current
     return this
         .drawBackdrop(
             backdrop = backdrop.layer,
@@ -115,6 +119,7 @@ fun Modifier.liquidPane(
                 lens(
                     refractionHeight = 24.dp.toPx(),
                     refractionAmount = 24.dp.toPx(),
+                    enabled = shaderEnabled,
                 )
             },
             // The diagonal specular, i.e. the same one the bottom bar wears. Without it

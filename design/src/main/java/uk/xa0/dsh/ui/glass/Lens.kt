@@ -18,7 +18,15 @@ fun BackdropEffectScope.lens(
     refractionAmount: Float,
     depthEffect: Boolean = false,
     chromaticAberration: Float = 0f,
+    enabled: Boolean = true,
 ) {
+    // The shader switch, before anything else — see LocalGlassShaderEnabled.
+    //
+    // A parameter rather than a composition local read, because this is not a composable:
+    // it runs inside `drawBackdrop`'s effects lambda, at draw time. The caller reads the
+    // local and passes the answer, which also keeps the one thing that decides "may a
+    // shader run" in the call site that owns the effect chain.
+    if (!enabled) return
     if (!isRuntimeShaderSupported()) return
     if (refractionHeight <= 0f || refractionAmount <= 0f) return
 

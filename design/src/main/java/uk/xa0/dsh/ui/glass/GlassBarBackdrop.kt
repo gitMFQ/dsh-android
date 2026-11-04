@@ -129,6 +129,30 @@ val LocalGlassEnabled = compositionLocalOf { true }
  */
 val LocalGlassLiftEnabled = compositionLocalOf { true }
 
+/**
+ * Whether the panes may draw their **AGSL runtime shaders** — the lens and the specular rim.
+ *
+ * ## Why this is a third flag
+ *
+ * Because the two shader call sites are the only place this app hands a driver a compiled
+ * fragment shader to run against a recorded layer, and that is a different class of request
+ * from "blur this". A device can blur happily and still die the moment a `RuntimeShader`
+ * is bound — the crash on the test handset was a SIGSEGV on the RenderThread with nothing
+ * in the Java stack, which is what a driver fault looks like from up here.
+ *
+ * So the material has three independently switchable layers, and the settings page exposes
+ * them as one ordered choice:
+ *
+ *  - backdrop + blur            → [LocalGlassEnabled]
+ *  - AGSL lens and rim          → this local
+ *  - the `dropShadow` lift      → [LocalGlassLiftEnabled]
+ *
+ * A reader whose app dies on the full material can step down one layer at a time and the
+ * answer says which layer to fix. Defaults to on: a device that has never crashed should
+ * never see the difference.
+ */
+val LocalGlassShaderEnabled = compositionLocalOf { true }
+
 @Composable
 fun rememberGlassBarBackdrop(enabled: Boolean = true): GlassBarBackdrop? {
     if (!enabled || !LocalGlassEnabled.current || !glassBarSupported()) return null

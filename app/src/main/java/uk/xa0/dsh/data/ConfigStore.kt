@@ -85,6 +85,19 @@ class ConfigStore(context: Context) {
         } else {
             prefs.getBoolean(KEY_LIQUID_GLASS, true)
         },
+        // The guard's fallback is the *blur* level rather than "off", not the flat tier.
+        //
+        // The measured result on the device was that the app starts with the material off,
+        // which is a working app — but it also threw away the blur, and the blur is what
+        // makes the chrome read as a surface at all. Falling back to BLUR keeps the look
+        // and drops only the two AGSL shaders, which is both a better app and a sharper
+        // bisect: a reader who reports "it starts on the guard's level and still crashes"
+        // has said the backdrop or the blur is at fault, not the shader.
+        liquidGlassLevel = if (LaunchGuard.degradedAt(appContext) > 0L) {
+            LiquidGlassLevel.BLUR
+        } else {
+            LiquidGlassLevel.parse(prefs.getString(KEY_LIQUID_GLASS_LEVEL, null))
+        },
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),
@@ -128,6 +141,7 @@ class ConfigStore(context: Context) {
             .putBoolean(KEY_AMOLED, config.amoled)
             .putBoolean(KEY_CHAT_VIEWS, config.chatViewsEnabled)
             .putBoolean(KEY_LIQUID_GLASS, config.liquidGlassEnabled)
+            .putString(KEY_LIQUID_GLASS_LEVEL, config.liquidGlassLevel)
             .putString(KEY_LANGUAGE, config.appLanguage)
             .putString(KEY_HOST_THEME, config.hostThemeMode)
             .putString(KEY_PRESET, config.agentPreset)
@@ -173,6 +187,9 @@ class ConfigStore(context: Context) {
 
         /** Whether the floating chrome may paint liquid glass; see DshConfig. */
         const val KEY_LIQUID_GLASS = "liquidGlass"
+
+        /** How much of it may run; see DshConfig.liquidGlassLevel. */
+        const val KEY_LIQUID_GLASS_LEVEL = "liquidGlassLevel"
 
         /** The in-app language override; blank follows the device. */
         const val KEY_LANGUAGE = "appLanguage"

@@ -304,6 +304,7 @@ internal fun ChatPanel(
         amoled = ui.amoled,
         chatViewsEnabled = ui.chatViewsEnabled,
         liquidGlassEnabled = ui.liquidGlassEnabled,
+        liquidGlassLevel = ui.liquidGlassLevel,
         appLanguage = ui.appLanguage,
         // The system night setting, read here rather than inside the card so the
         // settings module stays a pure function of its arguments.
@@ -337,6 +338,7 @@ internal fun ChatPanel(
         onAmoled = actions.updateAmoled,
         onChatViews = actions.setChatViewsEnabled,
         onLiquidGlass = actions.setLiquidGlassEnabled,
+        onLiquidGlassLevel = actions.setLiquidGlassLevel,
         onLanguage = actions.setAppLanguage,
         onBusyEnter = actions.updateBusyEnter,
         onPreset = actions.updatePreset,

@@ -76,7 +76,10 @@
     <string name="settings_local_chat_views_title">Trajectory and Shell tabs</string>
     <string name="settings_local_chat_views_summary">Show the Trajectory and Shell readings beside Chat. Turn them off for a conversation that is only answers.</string>
     <string name="settings_local_liquid_glass_title">Liquid glass</string>
-    <string name="settings_local_liquid_glass_summary">The blurred, refracting material behind the floating chrome. Turn it off if the app closes on this device — the layout and the motion stay, only the material becomes flat.</string>
+    <string name="settings_local_liquid_glass_summary">The blurred, refracting material behind the floating chrome. Step it down if the app closes on this device: the layout and the motion stay at every level, only the material gets simpler.</string>
+    <string name="settings_liquid_glass_liquid">Liquid glass</string>
+    <string name="settings_liquid_glass_blur">Blur only</string>
+    <string name="settings_liquid_glass_off">Off</string>
 
     <!-- ===================================================================== -->
     <!-- Appearance                                                            -->

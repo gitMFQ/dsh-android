@@ -213,7 +213,10 @@
     <string name="settings_local_chat_views_title">运行轨迹与 Shell 页签</string>
     <string name="settings_local_chat_views_summary">在 Chat 旁显示运行轨迹与 Shell 读数。如果只看回答，可以关掉它们。</string>
     <string name="settings_local_liquid_glass_title">液态玻璃</string>
-    <string name="settings_local_liquid_glass_summary">悬浮控件背后的模糊与折射材质。如果本机会闪退，可以关掉它——布局与动效不变，只是材质变成不透明。</string>
+    <string name="settings_local_liquid_glass_summary">悬浮控件背后的模糊与折射材质。如果本机会闪退，可以逐级降低——每一级的布局与动效都相同，只是材质更简单。</string>
+    <string name="settings_liquid_glass_liquid">液态玻璃</string>
+    <string name="settings_liquid_glass_blur">仅模糊</string>
+    <string name="settings_liquid_glass_off">关闭</string>
     <string name="settings_appearance_title">外观</string>
     <string name="settings_theme_title">主题</string>
     <string name="settings_theme_summary">浅色与深色跟随系统；Monet 跟随壁纸取色。</string>

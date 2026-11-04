@@ -34,6 +34,7 @@ import org.json.JSONObject
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.data.DraftStore
 import uk.xa0.dsh.data.DshConfig
+import uk.xa0.dsh.data.LiquidGlassLevel
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.diag.ScrollDiag
@@ -844,6 +845,14 @@ data class UiState(
      * value, one place, and every glass surface below follows it without knowing it exists.
      */
     val liquidGlassEnabled: Boolean = true,
+    /**
+     * How much of the material may run — see [DshConfig.liquidGlassLevel].
+     *
+     * The boolean above is kept because it is what the launch guard and the older switch
+     * speak; this is the value the composition actually reads, and it is the one that can
+     * express "blur yes, runtime shader no".
+     */
+    val liquidGlassLevel: String = LiquidGlassLevel.LIQUID,
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     /**
@@ -3201,6 +3210,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             amoled = config.amoled,
             chatViewsEnabled = config.chatViewsEnabled,
             liquidGlassEnabled = config.liquidGlassEnabled,
+            liquidGlassLevel = config.liquidGlassLevel,
             appLanguage = config.appLanguage,
             hostThemeMode = config.hostThemeMode,
             agentPreset = config.agentPreset,
@@ -3685,6 +3695,32 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      * has excluded an entire class of causes; one who reports "it only crashes with glass
      * on" has named the cause.
      */
+    /**
+     * Sets how much of the liquid material may run.
+     *
+     * Three levels rather than a switch, because "the glass crashes" is not actionable and
+     * "the *runtime shader* crashes" is. See [LiquidGlassLevel]: LIQUID is everything,
+     * BLUR keeps the backdrop and the blur and drops both AGSL shaders, OFF is the flat
+     * tier. Each step down is a strictly smaller set of GPU features, so a reader stepping
+     * down one level at a time reports which mechanism their driver dislikes.
+     *
+     * Writing the level also clears the launch guard's fallback: choosing a level by hand
+     * is the reader saying they want to try again.
+     */
+    fun setLiquidGlassLevel(level: String) {
+        val parsed = LiquidGlassLevel.parse(level)
+        LaunchGuard.reset(app)
+        val config = configStore.load().copy(
+            liquidGlassLevel = parsed,
+            liquidGlassEnabled = LiquidGlassLevel.paintsMaterial(parsed),
+        )
+        configStore.save(config)
+        _ui.value = _ui.value.copy(
+            liquidGlassLevel = parsed,
+            liquidGlassEnabled = LiquidGlassLevel.paintsMaterial(parsed),
+        )
+    }
+
     fun setLiquidGlassEnabled(on: Boolean) {
         // Turning it back on is also the answer to the launch guard: the guard's whole
         // effect is to force this off, so a reader who turns it on has said the fallback

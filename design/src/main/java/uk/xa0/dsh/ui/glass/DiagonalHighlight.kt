@@ -55,6 +55,14 @@ import uk.xa0.dsh.ui.theme.DshTheme
 @Composable
 fun rememberDiagonalHighlight(): Highlight {
     val dark = DshTheme.colors.isDark
+    // No shader, no rim.
+    //
+    // A zero-width, zero-alpha [Highlight] is not a cosmetic no-op: miuix's own
+    // `drawHighlight` returns immediately when width or alpha is not positive, so this
+    // returns *before* any `RuntimeShader` is built or bound. That is what makes the
+    // BLUR level a real bisect — the specular rim is one of the two AGSL call sites, and
+    // "still crashes with the shader off" has to mean the shader genuinely never ran.
+    if (!LocalGlassShaderEnabled.current) return Highlight()
     return remember(dark) {
         Highlight(
             width = 1.dp,

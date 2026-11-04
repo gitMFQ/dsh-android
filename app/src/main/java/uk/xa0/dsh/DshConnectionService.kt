@@ -71,9 +71,54 @@ class DshConnectionService : Service() {
      * `START_STICKY` because a service the system killed for memory should come
      * back: the whole point is to be reachable when the user is not looking.
      */
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A stop request that raced the start: honour it here rather than in the caller,
+        // because by the time the caller's stopService arrived this service may not have
+        // been created yet — and a service that starts after being asked to stop would sit
+        // in the shade with a notification nobody wants.
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        return START_STICKY
+    }
 
+    /**
+     * Stop being a foreground service **first**, then clean up.
+     *
+     * ## The crash this prevents
+     *
+     * Recorded on the device, on the main thread, at a cold start:
+     *
+     *   android.app.RemoteServiceException$ForegroundServiceDidNotStopInTimeException:
+     *     A foreground service of type dataSync did not stop within its timeout:
+     *     ComponentInfo{uk.xa0.dsh.debug/uk.xa0.dsh.DshConnectionService}
+     *
+     * That exception is thrown by `ActivityThread` when a service was stopped while it
+     * still held a foreground-service state of type `dataSync` and did not leave it within
+     * the platform's deadline. The platform requires the app to say "I am done being
+     * foreground" explicitly — `stopForeground` — and it must be said *before* the
+     * teardown, because `super.onDestroy()` is what removes the service record and the
+     * deadline is measured against that.
+     *
+     * The previous code never called it at all. It got away with it most of the time
+     * because the process was usually killed or the service restarted; a start that stops
+     * the service promptly — which is exactly what [uk.xa0.dsh.model.runForceQuit] does —
+     * made the deadline miss reachable.
+     *
+     * `STOP_FOREGROUND_REMOVE` rather than `DETACH`: the ongoing notification is the
+     * price of the mechanism and has no meaning once the mechanism is stopping. Leaving a
+     * stale "DSH connected" in the shade would be a lie about the connection.
+     */
     override fun onDestroy() {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+        }
         keepAlive?.cancel()
         super.onDestroy()
     }
@@ -113,9 +158,29 @@ class DshConnectionService : Service() {
             }
         }
 
+        /**
+         * Stops the standing connection.
+         *
+         * [stopForeground] is not redundant with the service's own `onDestroy`: the
+         * platform's foreground-service deadline starts when the stop is *requested*, and
+         * a service that is busy in a coroutine may not reach `onDestroy` in time. Asking
+         * the platform to drop the state here — from the caller's thread, immediately —
+         * is what makes the deadline comfortably met instead of marginally met.
+         *
+         * The intent carries `ACTION_STOP` so a service that is somehow still starting
+         * can see why it was asked to go, rather than being torn down mid-`onCreate`.
+         */
         fun stop(context: Context) {
-            runCatching { context.stopService(Intent(context, DshConnectionService::class.java)) }
+            runCatching {
+                context.stopService(
+                    Intent(context, DshConnectionService::class.java)
+                        .setAction(ACTION_STOP),
+                )
+            }
         }
+
+        /** The action [stop] sends; see its note. */
+        const val ACTION_STOP = "uk.xa0.dsh.action.STOP_CONNECTION"
     }
 }
 
