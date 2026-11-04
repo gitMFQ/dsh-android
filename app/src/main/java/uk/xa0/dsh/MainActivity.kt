@@ -75,6 +75,8 @@ class MainActivity : ComponentActivity() {
         // Here rather than in composition: the marker must be written once per process,
         // and it must be written before the first frame can crash, not after it.
         BootBeacon.mark("activity.onCreate: begin")
+        // "This launch became usable" — the marker the guard reads next time is deleted
+        // here, and only here. See uk.xa0.dsh.diag.LaunchGuard for the whole mechanism.
         LaunchGuard.markStarted(this)
         enableEdgeToEdge()
         BootBeacon.mark("activity: edge to edge")

@@ -79,7 +79,12 @@ class DshApplication : Application() {
         // part of that config. Two starts that died before their first frame turn the
         // liquid glass off, which is the only way a reader who cannot reach the settings
         // page can still get a usable app. See uk.xa0.dsh.diag.LaunchGuard.
-        LaunchGuard.check(this)
+        // Check first, then write this launch's marker. The order is the mechanism: the
+        // marker found by check() is the *previous* launch's, and it is still there only
+        // if that launch died before its first frame.
+        val degraded = LaunchGuard.check(this)
+        LaunchGuard.markLaunching(this)
+        BootBeacon.mark("launch guard: " + if (degraded) "stepped down" else "no change")
         // The native half, which an uncaught-exception handler can never see: a
         // RenderThread SIGSEGV kills the process below the JVM. The platform keeps those
         // tombstones and hands them back through ApplicationExitInfo, so they are read on

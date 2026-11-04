@@ -66,8 +66,12 @@ object LaunchGuard {
 
     /** The guard's own bookkeeping, in its own store so the two cannot corrupt each other. */
     private const val PREFS = "dsh_launch_guard"
+    /** Non-zero while a launch is in progress; deleted once a first frame exists. */
     private const val KEY_STARTED_AT = "startedAt"
     private const val KEY_DEGRADED_AT = "degradedAt"
+
+    /** How many launches in a row have died without reaching a first frame. */
+    private const val KEY_CRASH_STREAK = "crashStreak"
 
     /**
      * Decide whether this launch needs to degrade, and do it.
@@ -89,28 +93,35 @@ object LaunchGuard {
             }
             return true
         }
-        val startedAt = readLong(context, KEY_STARTED_AT)
-        // Count the deaths that happened after the last *clean* start.
+        // Count **our own** unfinished starts, not the platform's death records.
         //
-        // ## The bug this replaces
+        // ## Why ApplicationExitInfo had to go
         //
-        // The first version required `info.timestamp > startedAt`, and `startedAt` is
-        // written by MainActivity. A crash that happens before the activity exists — which
-        // is the whole class of crash this guard is for, and the one that was actually
-        // happening — therefore left the marker at 0, so *no* exit was ever counted and the
-        // guard never fired. On the device the report was literally "it does not degrade
-        // by itself", while the crashes were right there in the same list.
+        // Two versions of this guard used it, and on the test handset it reports nothing:
+        // `dumpsys dropbox --print data_app_native_crash` answers "No entries found",
+        // every exit reason this app could see came back empty, and the guard therefore
+        // never fired once — three separate reports of "it does not degrade by itself",
+        // all with the crashes plainly happening.
         //
-        // The fix is to stop treating a missing marker as "everything is newer than zero
-        // and therefore fine". Zero means "this install has never reached a first frame",
-        // and in that case every recorded crash is evidence. A non-zero marker still
-        // excludes the crashes that happened while the app was genuinely usable, which is
-        // the discrimination the marker was added for.
-        val crashedBeforeStarting = recentExits(context).count { info ->
-            info.reason in CRASH_REASONS && (startedAt == 0L || info.timestamp > startedAt)
+        // The platform is allowed to be silent; the app is not. So the evidence is now
+        // local and unconditional: **every launch writes a start marker and deletes it
+        // only after the first frame.** A marker still present at the next launch means the
+        // previous launch died — no exit record, no permission, no API level, no OEM
+        // behaviour involved.
+        val pending = readLong(context, KEY_STARTED_AT)
+        val streak = if (pending > 0L) {
+            // The previous launch never reached its first frame.
+            val next = readInt(context, KEY_CRASH_STREAK) + 1
+            writeInt(context, KEY_CRASH_STREAK, next)
+            next
+        } else {
+            // No marker: either a clean previous run, or a launch that died before even
+            // writing one (the marker is written at the very top of onCreate). Neither is
+            // a streak, so it starts again.
+            0
         }
-        Log.i(TAG, "crashedBeforeStarting=" + crashedBeforeStarting + " startedAt=" + startedAt)
-        if (crashedBeforeStarting < CRASHES_BEFORE_DEGRADING) return false
+        Log.i(TAG, "unfinished streak=" + streak + " pending=" + pending)
+        if (streak < CRASHES_BEFORE_DEGRADING) return false
         // Step **down one level**, not "turn it off once".
         //
         // ## Why the first version could not help
@@ -142,12 +153,31 @@ object LaunchGuard {
         runCatching {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
+                // Delete the marker: this launch *did* reach a first frame, so it is not
+                // an unfinished start. This is the whole mechanism — see check().
+                .remove(KEY_STARTED_AT)
+                .putInt(KEY_CRASH_STREAK, 0)
+                .commit()
+        }
+    }
+
+    /**
+     * Write the marker that says "a launch is in progress".
+     *
+     * Called at the very top of [uk.xa0.dsh.DshApplication.onCreate], before anything that
+     * can fail. It is deleted by [markStarted] once the first frame is up, so its mere
+     * presence at the next launch is the evidence: **this process died before it ever
+     * became usable.**
+     *
+     * `commit`, not `apply`: the process is about to start work that may kill it, and a
+     * marker still queued in a background write is a marker that is not there when the
+     * next launch looks.
+     */
+    fun markLaunching(context: Context) {
+        runCatching {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
                 .putLong(KEY_STARTED_AT, System.currentTimeMillis())
-                // A start that got this far is the end of a crash streak. Clearing the
-                // fallback here would be wrong (the reader may still want the simpler
-                // material), but *recording* that the app works again is what keeps the
-                // next crash from being counted against a streak that has already been
-                // answered. `crashedBeforeStarting` uses the marker above for that.
                 .commit()
         }
     }
@@ -259,22 +289,18 @@ object LaunchGuard {
         context.getExternalFilesDir(null)?.let { File(it, SAFE_MODE_FILE).exists() } == true
     }.getOrDefault(false)
 
-    private val CRASH_REASONS = setOf(
-        android.app.ApplicationExitInfo.REASON_CRASH,
-        android.app.ApplicationExitInfo.REASON_CRASH_NATIVE,
-        android.app.ApplicationExitInfo.REASON_ANR,
-    )
-
-    private fun recentExits(context: Context): List<android.app.ApplicationExitInfo> {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return emptyList()
-        val am = context.getSystemService(Context.ACTIVITY_SERVICE)
-            as? android.app.ActivityManager ?: return emptyList()
-        return runCatching {
-            am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
-        }.getOrDefault(emptyList())
-    }
-
     private fun readLong(context: Context, key: String): Long = runCatching {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(key, 0L)
     }.getOrDefault(0L)
+
+    private fun readInt(context: Context, key: String): Int = runCatching {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(key, 0)
+    }.getOrDefault(0)
+
+    private fun writeInt(context: Context, key: String, value: Int) {
+        runCatching {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putInt(key, value).commit()
+        }
+    }
 }
