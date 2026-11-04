@@ -79,10 +79,24 @@ object LaunchGuard {
             return true
         }
         val startedAt = readLong(context, KEY_STARTED_AT)
-        // The marker is written by the previous successful first frame. An exit newer
-        // than it means the process that just died never got that far.
+        // Count the deaths that happened after the last *clean* start.
+        //
+        // ## The bug this replaces
+        //
+        // The first version required `info.timestamp > startedAt`, and `startedAt` is
+        // written by MainActivity. A crash that happens before the activity exists — which
+        // is the whole class of crash this guard is for, and the one that was actually
+        // happening — therefore left the marker at 0, so *no* exit was ever counted and the
+        // guard never fired. On the device the report was literally "it does not degrade
+        // by itself", while the crashes were right there in the same list.
+        //
+        // The fix is to stop treating a missing marker as "everything is newer than zero
+        // and therefore fine". Zero means "this install has never reached a first frame",
+        // and in that case every recorded crash is evidence. A non-zero marker still
+        // excludes the crashes that happened while the app was genuinely usable, which is
+        // the discrimination the marker was added for.
         val crashedBeforeStarting = recentExits(context).count { info ->
-            info.reason in CRASH_REASONS && info.timestamp > startedAt
+            info.reason in CRASH_REASONS && (startedAt == 0L || info.timestamp > startedAt)
         }
         Log.i(TAG, "crashedBeforeStarting=" + crashedBeforeStarting + " startedAt=" + startedAt)
         if (crashedBeforeStarting < CRASHES_BEFORE_DEGRADING) return false
@@ -105,6 +119,11 @@ object LaunchGuard {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putLong(KEY_STARTED_AT, System.currentTimeMillis())
+                // A start that got this far is the end of a crash streak. Clearing the
+                // fallback here would be wrong (the reader may still want the simpler
+                // material), but *recording* that the app works again is what keeps the
+                // next crash from being counted against a streak that has already been
+                // answered. `crashedBeforeStarting` uses the marker above for that.
                 .commit()
         }
     }

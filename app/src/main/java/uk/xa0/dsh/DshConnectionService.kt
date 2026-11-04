@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,20 @@ class DshConnectionService : Service() {
         super.onCreate()
         val app = application as DshApplication
         Attention.ensureChannel(this)
-        startForeground(ONGOING_ID, ongoingNotification())
+        // The type has to be passed explicitly: from API 29 the platform checks it against
+        // the manifest declaration, and on API 34+ a mismatch is a `SecurityException` at
+        // start. `remoteMessaging` rather than `dataSync` because dataSync is one of the
+        // types Android 15 puts a *time limit* on — see the manifest's note, and the
+        // ForegroundServiceDidNotStopInTimeException it caused on this device.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                ONGOING_ID,
+                ongoingNotification(),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING,
+            )
+        } else {
+            startForeground(ONGOING_ID, ongoingNotification())
+        }
         app.attention.start(app.client)
         // The centre's stream loop reconnects on its own; this only makes sure the
         // socket is actually open even if no other component ever asks for it.
@@ -71,6 +85,22 @@ class DshConnectionService : Service() {
      * `START_STICKY` because a service the system killed for memory should come
      * back: the whole point is to be reachable when the user is not looking.
      */
+    /**
+     * The platform's "you are over budget" callback.
+     *
+     * Only time-limited types get this, and `remoteMessaging` is not one of them — but the
+     * callback is the contract for *any* type that acquires a limit in a future release, and
+     * ignoring it is what turns a warning into a crash. The right answer is always the same:
+     * stop now, so the app keeps its process.
+     *
+     * API 35+ only; declared without an override annotation so this compiles against the
+     * same source on every level (the method simply never runs below 35).
+     */
+    override fun onTimeout(startId: Int) {
+        Log.w(TAG, "foreground service timed out; stopping instead of being killed")
+        stopSelf(startId)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // A stop request that raced the start: honour it here rather than in the caller,
         // because by the time the caller's stopService arrived this service may not have
@@ -143,6 +173,9 @@ class DshConnectionService : Service() {
     }
 
     companion object {
+        /** For the timeout callback and the start/stop trace. */
+        private const val TAG = "DshConnService"
+
         private const val ONGOING_ID = 1000
         private const val CONNECT_INTERVAL_MS = 15_000L
 

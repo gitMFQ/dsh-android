@@ -183,6 +183,14 @@ object NativeCrashLog {
                 // Said plainly: a missing trace is the platform's answer, not this app's
                 // failure, and a reader who sees the words knows not to go looking.
                 append("no trace: the platform returned none for this exit reason.\n")
+                // The platform keeps tombstones for native crashes only. Saying so here
+                // is what stops a reader concluding the record is broken when a Java
+                // crash is reported without one — the stack is in the crash-*.txt file
+                // CrashLog wrote at the same moment.
+                append(
+                    "note: for a Java crash this is expected. The stack, if there was one, " +
+                        "is in the crash-*.txt file CrashLog wrote at the same moment.\n",
+                )
             } else {
                 append(String(trace, Charsets.UTF_8))
             }
@@ -229,6 +237,10 @@ object NativeCrashLog {
         ApplicationExitInfo.REASON_CRASH_NATIVE -> "native crash"
         ApplicationExitInfo.REASON_CRASH -> "java crash"
         ApplicationExitInfo.REASON_ANR -> "ANR"
+        // What a foreground service over its time limit reports: the system ended the
+        // process for a service violation, not an exception of its own. A different
+        // investigation from a crash, and the one this app was actually in.
+        ApplicationExitInfo.REASON_OTHER -> "other (the system ended this process)"
         else -> "reason " + reason
     }
 
