@@ -107,6 +107,28 @@ fun glassBarSupported(): Boolean =
  */
 val LocalGlassEnabled = compositionLocalOf { true }
 
+/**
+ * Whether the floating panes may draw their **lift** — the `dropShadow` stack.
+ *
+ * ## Why this is not the same switch as [LocalGlassEnabled]
+ *
+ * The two answer different questions, and the difference was measured rather than
+ * reasoned about: folding the shadow into [LocalGlassEnabled] changed **twelve** recorded
+ * baselines, because every screenshot fixture passes `LocalGlassEnabled = false` to mean
+ * "no GPU pipeline here" — and the shadow is drawn by Compose in software, so it had
+ * always survived that flag. The baselines were right; the flag was being asked a
+ * question it does not answer.
+ *
+ * So: [LocalGlassEnabled] is the *material* (backdrop, blur, lens, specular rim), and
+ * this is the *lift*. A device that cannot sample a backdrop still gets its shadows —
+ * that is the flat and translucent tiers, and they have always looked that way. A reader
+ * who turns the material off to find a render crash gets both off, because a bisect that
+ * left half the RenderNodes in place would exclude nothing.
+ *
+ * Defaults to on, and the only caller that ever says otherwise is the app's own setting.
+ */
+val LocalGlassLiftEnabled = compositionLocalOf { true }
+
 @Composable
 fun rememberGlassBarBackdrop(enabled: Boolean = true): GlassBarBackdrop? {
     if (!enabled || !LocalGlassEnabled.current || !glassBarSupported()) return null

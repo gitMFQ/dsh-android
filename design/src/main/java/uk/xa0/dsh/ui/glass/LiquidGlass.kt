@@ -143,14 +143,17 @@ fun Modifier.glassLift(shape: Shape): Modifier {
     // shadow reaches it. A light page needs the lift more than a dark one does — white on
     // white has no other separation at all — which is why the reported defect was
     // "底栏的阴影好像浅色模式看不到".
-    // The switch, before the paint.
+    // The lift switch, before the paint.
     //
     // `dropShadow` is not free: it is a blurred copy of the shape, drawn through a
     // RenderNode, and it is the other half of the GPU work this material asks for (the
-    // first being the backdrop). A reader who turned the glass off to find a render crash
-    // has to get the shadows off too, or the bisect excludes nothing — which is exactly
-    // the mistake this line prevents.
-    if (!LocalGlassEnabled.current) return this
+    // first being the backdrop). A reader who turned the material off to find a render
+    // crash has to get the shadows off too, or the bisect excludes nothing.
+    //
+    // [LocalGlassLiftEnabled] rather than [LocalGlassEnabled] because a screenshot
+    // fixture says "no GPU pipeline" with the *material* flag and still expects the
+    // shadow it has always photographed — see that local's own note.
+    if (!LocalGlassLiftEnabled.current) return this
     val dark = DshTheme.colors.isDark
     return dropShadow(
         shape = shape,

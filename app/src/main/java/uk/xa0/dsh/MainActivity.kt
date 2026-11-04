@@ -26,6 +26,7 @@ import uk.xa0.dsh.ui.ChatScreen
 import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassLiftEnabled
 import uk.xa0.dsh.ui.markdown.LocalImageBytes
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.SystemBars
@@ -182,6 +183,10 @@ class MainActivity : ComponentActivity() {
             CompositionLocalProvider(
                 LocalImageBytes provides vm::markdownImageBytes,
                 LocalGlassEnabled provides ui.liquidGlassEnabled,
+                // The lift follows the same setting but is a separate local, so a
+                // fixture that says "no GPU" still photographs the shadow it always
+                // did — see LocalGlassLiftEnabled for why that distinction is measured.
+                LocalGlassLiftEnabled provides ui.liquidGlassEnabled,
             ) {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // Composed before the screen so the screen's own Back handlers — the
