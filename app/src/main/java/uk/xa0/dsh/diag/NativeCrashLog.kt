@@ -67,11 +67,21 @@ object NativeCrashLog {
     @Volatile
     private var dir: File? = null
 
+    /** A second, externally readable copy; see [install]. Null when there is none. */
+    @Volatile
+    private var mirrorDir: File? = null
+
     /** Point the reader at base/diag. A no-op without a usable directory, as in [CrashLog]. */
-    fun install(base: File) {
+    fun install(base: File, mirror: File? = null) {
         val d = File(base, DIR)
         if (!d.exists() && !d.mkdirs()) return
         dir = d
+        // The same external copy CrashLog writes: the tombstone is the report that
+        // matters most here, and it is the one a reader cannot reach when the app will
+        // not stay open. See CrashLog.install for why external app-specific storage.
+        mirrorDir = mirror?.let { target ->
+            File(target, DIR).also { if (!it.exists()) it.mkdirs() }
+        }
     }
 
     /**
@@ -181,6 +191,7 @@ object NativeCrashLog {
         }
 
         file.writeText(body)
+        mirrorDir?.let { target -> runCatching { File(target, name).writeText(body) } }
         Log.e(TAG, "recorded " + name + ": " + exceptionOf(info, trace))
     }
 

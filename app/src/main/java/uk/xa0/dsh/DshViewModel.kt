@@ -35,6 +35,7 @@ import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.data.DraftStore
 import uk.xa0.dsh.data.DshConfig
 import uk.xa0.dsh.data.ThemeMode
+import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.model.AccountBalance
 import uk.xa0.dsh.model.ApprovalAnswer
@@ -3685,6 +3686,11 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      * on" has named the cause.
      */
     fun setLiquidGlassEnabled(on: Boolean) {
+        // Turning it back on is also the answer to the launch guard: the guard's whole
+        // effect is to force this off, so a reader who turns it on has said the fallback
+        // is no longer wanted. Without this line the switch would appear to do nothing —
+        // the value would be saved and then overridden on the next read.
+        if (on) LaunchGuard.reset(app)
         val config = configStore.load().copy(liquidGlassEnabled = on)
         configStore.save(config)
         _ui.value = _ui.value.copy(liquidGlassEnabled = on)

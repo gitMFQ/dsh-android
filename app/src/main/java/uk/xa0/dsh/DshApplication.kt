@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Process
 import uk.xa0.dsh.data.ConfigStore
 import uk.xa0.dsh.diag.CrashLog
+import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.diag.NativeCrashLog
 import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.model.runForceQuit
@@ -60,12 +61,21 @@ class DshApplication : Application() {
         //
         // See uk.xa0.dsh.diag.CrashLog for why the write is synchronous, and
         // ui/settings/CrashLogCards.kt for the page that hands the report back.
-        if (BuildConfig.DEBUG) CrashLog.install(filesDir)
+        // The external copy is where a report goes when the app will not stay open long
+        // enough to be read: Android/data/<pkg>/files/diag, reachable by a file manager
+        // or a shell with no permission and no adb.
+        val external = getExternalFilesDir(null)
+        if (BuildConfig.DEBUG) CrashLog.install(filesDir, external)
+        // The launch guard runs *before* the config is read, because what it decides is
+        // part of that config. Two starts that died before their first frame turn the
+        // liquid glass off, which is the only way a reader who cannot reach the settings
+        // page can still get a usable app. See uk.xa0.dsh.diag.LaunchGuard.
+        LaunchGuard.check(this)
         // The native half, which an uncaught-exception handler can never see: a
         // RenderThread SIGSEGV kills the process below the JVM. The platform keeps those
         // tombstones and hands them back through ApplicationExitInfo, so they are read on
         // the *next* launch — hence a background thread and no ordering requirement.
-        if (BuildConfig.DEBUG) NativeCrashLog.install(filesDir)
+        if (BuildConfig.DEBUG) NativeCrashLog.install(filesDir, external)
         // The composer's selection menu is a custom `LocalTextToolbar` (it carries the
         // full-screen row); Compose's newer context menu is a different surface that
         // bypasses that seam. Pinned to the legacy path process-wide, before any text

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.net.AcceptedCert
 import uk.xa0.dsh.net.decodeAcceptedCerts
@@ -19,6 +20,13 @@ import uk.xa0.dsh.term.encodeHostShellSessions
  * is 24h).
  */
 class ConfigStore(context: Context) {
+
+    /**
+     * Kept because [load] has to ask the launch guard a question, and the guard's answer
+     * lives outside these encrypted preferences — see the comment on liquidGlassEnabled.
+     * The application context, not the caller's: this store outlives every activity.
+     */
+    private val appContext: Context = context.applicationContext
 
     private val prefs: SharedPreferences = run {
         val masterKey = MasterKey.Builder(context)
@@ -68,7 +76,15 @@ class ConfigStore(context: Context) {
         themeMode = prefs.getString(KEY_THEME, ThemeMode.SYSTEM) ?: ThemeMode.SYSTEM,
         amoled = prefs.getBoolean(KEY_AMOLED, false),
         chatViewsEnabled = prefs.getBoolean(KEY_CHAT_VIEWS, true),
-        liquidGlassEnabled = prefs.getBoolean(KEY_LIQUID_GLASS, true),
+        // The launch guard can force this off from outside this store — see
+        // uk.xa0.dsh.diag.LaunchGuard for why a recovery path may not go through the
+        // encrypted preferences it is trying to recover from. Its flag wins over the
+        // stored one, and it is read first for that reason.
+        liquidGlassEnabled = if (LaunchGuard.degradedAt(appContext) > 0L) {
+            false
+        } else {
+            prefs.getBoolean(KEY_LIQUID_GLASS, true)
+        },
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),

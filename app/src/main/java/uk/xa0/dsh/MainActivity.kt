@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.ui.BackGate
 import uk.xa0.dsh.ui.ChatScreen
@@ -61,6 +62,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // "This process got as far as a first frame."
+        //
+        // The launch guard needs exactly one fact it cannot get from the platform: whether
+        // a death happened *before* the app ever became usable, or after. An exit newer
+        // than this marker is the first kind, and two of those in a row is what turns the
+        // liquid glass off. See uk.xa0.dsh.diag.LaunchGuard.
+        //
+        // Here rather than in composition: the marker must be written once per process,
+        // and it must be written before the first frame can crash, not after it.
+        LaunchGuard.markStarted(this)
         enableEdgeToEdge()
         consume(intent)
         maybeAskForNotifications()

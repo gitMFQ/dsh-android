@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.diag.CrashLog
 import uk.xa0.dsh.diag.CrashReport
+import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.diag.NativeCrashLog
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.components.DshIconVectors
@@ -76,6 +77,7 @@ internal fun CrashLogSettingCards() {
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    val colors = DshTheme.colors
 
     if (reports.isEmpty()) {
         SettingNote("No crashes recorded on this device.")
@@ -86,6 +88,51 @@ internal fun CrashLogSettingCards() {
                 "launch, so they appear one start later than a Java crash.",
         )
         return
+    }
+
+    // The guard's own decision, said out loud.
+    //
+    // A reader whose material disappeared would otherwise be looking at an app that got
+    // worse for no stated reason. This is the sentence that turns it into a fact they can
+    // act on — and the row below is how they undo it once the cause is gone.
+    val degradedAt = LaunchGuard.degradedAt(context)
+    if (degradedAt > 0L) {
+        SettingNote(
+            "Liquid glass was turned off automatically: two launches in a row ended in a " +
+                "crash before the app finished starting. Turn it back on in This device " +
+                "once the cause is fixed.",
+        )
+        SegmentedColumn(
+            content = listOf(
+                {
+                    SegmentedListItem(
+                        onClick = {
+                            LaunchGuard.reset(context)
+                            reports = allCrashReports()
+                        },
+                        leading = {
+                            Icon(
+                                DshIconVectors.RefreshOutline,
+                                contentDescription = null,
+                                tint = colors.accent,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        headline = {
+                            Text("Re-enable liquid glass", style = DshType.rowTitle)
+                        },
+                        supporting = {
+                            Text(
+                                text = "Clears the automatic fallback. The app will try the " +
+                                    "material again on the next launch.",
+                                style = DshType.rowSummary,
+                                color = colors.labelTertiary,
+                            )
+                        },
+                    )
+                },
+            ),
+        )
     }
 
     SettingNote(
