@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Process
 import uk.xa0.dsh.data.ConfigStore
 import uk.xa0.dsh.diag.CrashLog
+import uk.xa0.dsh.diag.NativeCrashLog
 import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.model.runForceQuit
 import uk.xa0.dsh.net.DshClient
@@ -48,6 +49,23 @@ class DshApplication : Application() {
     @Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
     override fun onCreate() {
         super.onCreate()
+        // The crash record, installed **first**.
+        //
+        // It used to be the last statement in this method, and that made it blind to
+        // exactly the crashes it was written for: a process that dies in ConfigStore's
+        // keystore work, in DshClient's construction or in the theme read never reached
+        // the install, so the handler that would have written the report was not there
+        // yet. "It closes as soon as it opens" is that window. Two cheap file operations
+        // before anything else is the price of observing the whole of onCreate.
+        //
+        // See uk.xa0.dsh.diag.CrashLog for why the write is synchronous, and
+        // ui/settings/CrashLogCards.kt for the page that hands the report back.
+        if (BuildConfig.DEBUG) CrashLog.install(filesDir)
+        // The native half, which an uncaught-exception handler can never see: a
+        // RenderThread SIGSEGV kills the process below the JVM. The platform keeps those
+        // tombstones and hands them back through ApplicationExitInfo, so they are read on
+        // the *next* launch — hence a background thread and no ordering requirement.
+        if (BuildConfig.DEBUG) NativeCrashLog.install(filesDir)
         // The composer's selection menu is a custom `LocalTextToolbar` (it carries the
         // full-screen row); Compose's newer context menu is a different surface that
         // bypasses that seam. Pinned to the legacy path process-wide, before any text
@@ -70,14 +88,13 @@ class DshApplication : Application() {
         // Latent scroll diagnostics: invisible, additive, and off the main
         // thread. See uk.xa0.dsh.diag.ScrollDiag for how to read them back.
         ScrollDiag.attach(filesDir)
-        // The crash record. Debug only, and deliberately so: it observes an uncaught
-        // exception and writes it where the Me page can hand it back, which is the only
-        // way a stack trace reaches a development box with no adb. A release build never
-        // installs it, so a shipped app writes nothing.
-        //
-        // See uk.xa0.dsh.diag.CrashLog for why it is synchronous, and
-        // ui/settings/SettingsCards.kt for the page that reads it.
-        if (BuildConfig.DEBUG) CrashLog.install(filesDir)
+        // Reading the platform's death records is a binder round trip and a file read, so
+        // it never runs on the thread that is drawing the first frame.
+        if (BuildConfig.DEBUG) {
+            Thread({
+                runCatching { NativeCrashLog.capture(this) }
+            }, "dsh-native-crash-read").start()
+        }
     }
 
     /**

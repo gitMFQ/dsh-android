@@ -836,6 +836,13 @@ data class UiState(
     val amoled: Boolean = false,
     /** Whether the Trajectory and Shell readings are offered; see DshConfig. */
     val chatViewsEnabled: Boolean = true,
+    /**
+     * Whether the floating chrome may paint liquid glass — see [DshConfig.liquidGlassEnabled].
+     *
+     * Read at the root of the composition, where it becomes `LocalGlassEnabled`: one
+     * value, one place, and every glass surface below follows it without knowing it exists.
+     */
+    val liquidGlassEnabled: Boolean = true,
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     /**
@@ -3192,6 +3199,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             themeMode = ThemeMode.parse(config.themeMode),
             amoled = config.amoled,
             chatViewsEnabled = config.chatViewsEnabled,
+            liquidGlassEnabled = config.liquidGlassEnabled,
             appLanguage = config.appLanguage,
             hostThemeMode = config.hostThemeMode,
             agentPreset = config.agentPreset,
@@ -3660,6 +3668,26 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val config = configStore.load().copy(chatViewsEnabled = on)
         configStore.save(config)
         _ui.value = _ui.value.copy(chatViewsEnabled = on)
+    }
+
+    /**
+     * Turns the liquid glass material on or off.
+     *
+     * Off is the **flat tier**, not "no chrome": every pane keeps its fill, its hairline
+     * stroke and its layout, and the bottom bar keeps its slide and its squeeze — see
+     * `GlassTier.FLAT` in `ui/glass/LiquidGlass.kt`. What stops is the GPU work: the
+     * recorded backdrop layer, the blur, the refraction shader, the specular rim and the
+     * stacked shadow.
+     *
+     * The switch exists because the alternative was a build that died on the RenderThread
+     * with nothing to bisect on. A reader who reports "it still crashes with glass off"
+     * has excluded an entire class of causes; one who reports "it only crashes with glass
+     * on" has named the cause.
+     */
+    fun setLiquidGlassEnabled(on: Boolean) {
+        val config = configStore.load().copy(liquidGlassEnabled = on)
+        configStore.save(config)
+        _ui.value = _ui.value.copy(liquidGlassEnabled = on)
     }
 
     /**

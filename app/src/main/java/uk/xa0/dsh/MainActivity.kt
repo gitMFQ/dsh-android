@@ -25,6 +25,7 @@ import uk.xa0.dsh.ui.BackGate
 import uk.xa0.dsh.ui.ChatScreen
 import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
+import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.markdown.LocalImageBytes
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.SystemBars
@@ -169,7 +170,19 @@ class MainActivity : ComponentActivity() {
             // that can render one — the transcript, reasoning, tool output, the
             // trajectory. `vm::markdownImageBytes` is stable, so this is not a new
             // fetcher per recomposition.
-            CompositionLocalProvider(LocalImageBytes provides vm::markdownImageBytes) {
+            //
+            // Two providers, and the glass one is alongside it on purpose.
+            //
+            // `LocalGlassEnabled` is the app-wide answer to "may this device paint the
+            // liquid material", and it is provided *once*, above every screen, so no
+            // surface has to be told individually and none can be missed. It is also
+            // what the screenshot baselines already pass `false` to — see
+            // `ScreenBaselineTest` — which is why turning it off here is known to draw a
+            // complete, correct app rather than a broken one.
+            CompositionLocalProvider(
+                LocalImageBytes provides vm::markdownImageBytes,
+                LocalGlassEnabled provides ui.liquidGlassEnabled,
+            ) {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // Composed before the screen so the screen's own Back handlers — the
                 // drawer, the sheets, the Files panel, a non-Chat view — are asked

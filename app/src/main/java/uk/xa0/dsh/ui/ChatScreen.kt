@@ -201,6 +201,7 @@ fun ChatScreen(vm: DshViewModel) {
             translateFragment = vm::translateFragment,
             updateAmoled = vm::updateAmoled,
             setChatViewsEnabled = vm::setChatViewsEnabled,
+            setLiquidGlassEnabled = vm::setLiquidGlassEnabled,
             setAppLanguage = vm::setAppLanguage,
             workspaceFileDownloader = vm::workspaceFileDownloader,
             loadPluginInventory = vm::loadPluginInventory,

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.diag.CrashLog
 import uk.xa0.dsh.diag.CrashReport
+import uk.xa0.dsh.diag.NativeCrashLog
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.list.SegmentedColumn
@@ -66,7 +67,12 @@ import uk.xa0.dsh.ui.theme.DshType
 internal fun CrashLogSettingCards() {
     // Re-read on every composition rather than caching in a view model: the list only
     // changes when the process died and restarted, which is exactly a fresh composition.
-    var reports by remember { mutableStateOf(CrashLog.reports()) }
+    //
+    // Both kinds in one list, newest first. They are two files in one directory because
+    // they answer one question — "what killed the process" — and a reader who has to know
+    // which of the two halves to open first has been given a filing system instead of an
+    // answer. The names sort together because both prefixes are followed by a timestamp.
+    var reports by remember { mutableStateOf(allCrashReports()) }
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
@@ -75,14 +81,16 @@ internal fun CrashLogSettingCards() {
         SettingNote("No crashes recorded on this device.")
         SettingNote(
             "Reports are written only in debug builds. Reproduce the crash, reopen the " +
-                "app, and the report appears here.",
+                "app, and the report appears here. Native crashes (a SIGSEGV on the " +
+                "render thread, for instance) are read back from the system on the next " +
+                "launch, so they appear one start later than a Java crash.",
         )
         return
     }
 
     SettingNote(
-        "Crashes recorded since this install. Tap one to read it; Share sends the whole " +
-            "report to another app, Copy puts it on the clipboard.",
+        "Crashes recorded since this install, newest first. Tap one to read it; Share " +
+            "sends the whole report to another app, Copy puts it on the clipboard.",
     )
 
     val rows: List<@Composable () -> Unit> = reports.map { report ->
@@ -108,9 +116,9 @@ internal fun CrashLogSettingCards() {
                     )
                 },
                 onDelete = {
-                    CrashLog.delete(report)
+                    deleteCrashReport(report)
                     if (open == report.file.name) open = null
-                    reports = CrashLog.reports()
+                    reports = allCrashReports()
                 },
             )
         }
@@ -119,8 +127,34 @@ internal fun CrashLogSettingCards() {
 
     ClearRow {
         CrashLog.clear()
+        NativeCrashLog.clear()
         open = null
-        reports = CrashLog.reports()
+        reports = allCrashReports()
+    }
+}
+
+/**
+ * Both kinds of report, in one list.
+ *
+ * Sorted by file name rather than by the header's time, because both prefixes lead with a
+ * sortable timestamp and the name is what the two writers already guarantee; re-parsing a
+ * header to sort would be a second, weaker implementation of the same fact.
+ */
+private fun allCrashReports(): List<CrashReport> =
+    (CrashLog.reports() + NativeCrashLog.reports()).sortedByDescending { it.file.name }
+
+/**
+ * Delete one report, wherever it came from.
+ *
+ * The file's own prefix says which writer owns it, and neither delete needs the other, so
+ * this is a dispatch rather than a guess: a name that starts with "native-" belongs to
+ * [NativeCrashLog] and everything else to [CrashLog].
+ */
+private fun deleteCrashReport(report: CrashReport) {
+    if (report.file.name.startsWith("native-")) {
+        NativeCrashLog.delete(report)
+    } else {
+        CrashLog.delete(report)
     }
 }
 

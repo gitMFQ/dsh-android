@@ -54,6 +54,8 @@ data class MeSettingsState(
     val systemDark: Boolean = false,
     /** Whether the Trajectory and Shell readings are offered. */
     val chatViewsEnabled: Boolean = true,
+    /** Whether the floating chrome may paint liquid glass; see DshConfig. */
+    val liquidGlassEnabled: Boolean = true,
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     val busyEnter: String = BusyEnter.QUEUE,
@@ -100,6 +102,8 @@ data class MeSettingsActions(
     val onAmoled: (Boolean) -> Unit = {},
     /** The Trajectory/Shell tabs switch. */
     val onChatViews: (Boolean) -> Unit = {},
+    /** The liquid-glass material switch. */
+    val onLiquidGlass: (Boolean) -> Unit = {},
     /** The language row; blank clears the override. */
     val onLanguage: (String) -> Unit = {},
     val onBusyEnter: (String) -> Unit = {},

@@ -109,6 +109,26 @@ data class DshConfig(
      */
     val chatViewsEnabled: Boolean = true,
     /**
+     * Whether the floating chrome may paint its liquid glass — the backdrop blur, the
+     * lens refraction, the AGSL specular rim and the two-layer shadow.
+     *
+     * ## Why this is a setting and not a constant
+     *
+     * Because the alternative is what happened: a build that died on launch with
+     * `Fatal signal 11 (SIGSEGV)` on the RenderThread, no tombstone in dropbox, and no way
+     * to tell whether the fault was the driver or the material this app feeds it. One
+     * switch turns the whole GPU-heavy path into the flat tier — the same design, the same
+     * layout, the same motion — so a reader can answer "does it still crash with the glass
+     * off" in ten seconds instead of a debugger session.
+     *
+     * It is also a real preference for a real person: a phone whose GPU dislikes
+     * `RenderEffect` should be able to keep a working app rather than a beautiful one that
+     * closes. That is why it is on by default and stored, rather than a debug-only flag.
+     *
+     * Default `true`: turning a material off by default would be a silent redesign.
+     */
+    val liquidGlassEnabled: Boolean = true,
+    /**
      * The language this app draws in, as a BCP-47 tag, or blank for "follow the device".
      *
      * Client-local, and deliberately so: the host has a locale of its own for the web

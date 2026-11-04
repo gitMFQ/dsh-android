@@ -68,6 +68,7 @@ class ConfigStore(context: Context) {
         themeMode = prefs.getString(KEY_THEME, ThemeMode.SYSTEM) ?: ThemeMode.SYSTEM,
         amoled = prefs.getBoolean(KEY_AMOLED, false),
         chatViewsEnabled = prefs.getBoolean(KEY_CHAT_VIEWS, true),
+        liquidGlassEnabled = prefs.getBoolean(KEY_LIQUID_GLASS, true),
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),
@@ -110,6 +111,7 @@ class ConfigStore(context: Context) {
             .putString(KEY_THEME, config.themeMode)
             .putBoolean(KEY_AMOLED, config.amoled)
             .putBoolean(KEY_CHAT_VIEWS, config.chatViewsEnabled)
+            .putBoolean(KEY_LIQUID_GLASS, config.liquidGlassEnabled)
             .putString(KEY_LANGUAGE, config.appLanguage)
             .putString(KEY_HOST_THEME, config.hostThemeMode)
             .putString(KEY_PRESET, config.agentPreset)
@@ -152,6 +154,9 @@ class ConfigStore(context: Context) {
 
         /** Whether the Trajectory and Shell readings are offered; see DshConfig. */
         const val KEY_CHAT_VIEWS = "chatViews"
+
+        /** Whether the floating chrome may paint liquid glass; see DshConfig. */
+        const val KEY_LIQUID_GLASS = "liquidGlass"
 
         /** The in-app language override; blank follows the device. */
         const val KEY_LANGUAGE = "appLanguage"

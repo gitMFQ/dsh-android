@@ -162,6 +162,22 @@ internal fun LocalSettingCard(state: MeSettingsState, actions: MeSettingsActions
                     summary = stringResource(R.string.settings_local_chat_views_summary),
                 )
             },
+            {
+                // The material's own switch, and the reason it is a *setting* rather
+                // than a build flag: on a phone whose GPU dislikes RenderEffect the
+                // choice is between a beautiful app that closes and a flat one that
+                // works, and that is the reader's call to make, not ours.
+                //
+                // It is also the bisect tool. A crash on the render thread with this off
+                // cannot be the backdrop, the lens, the specular rim or the shadow.
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_local_liquid_glass_title),
+                    checked = state.liquidGlassEnabled,
+                    onCheckedChange = actions.onLiquidGlass,
+                    icon = DshIconVectors.PluginPinwheelOutline,
+                    summary = stringResource(R.string.settings_local_liquid_glass_summary),
+                )
+            },
         ),
     )
 }
