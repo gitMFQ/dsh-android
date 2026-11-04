@@ -55,6 +55,15 @@ object LaunchGuard {
     /** The preference key, the same string [uk.xa0.dsh.data.ConfigStore] uses. */
     private const val KEY_LIQUID_GLASS = "liquidGlass"
 
+    /** The level key, likewise; see [uk.xa0.dsh.data.ConfigStore]. */
+    private const val KEY_LIQUID_GLASS_LEVEL = "liquidGlassLevel"
+
+    /** The store the UI reads — the same file [uk.xa0.dsh.data.ConfigStore] uses. */
+    private const val CONFIG_PREFS = "dsh_config"
+
+    /** What the guard last chose, so the Diagnostics page can say which step it took. */
+    private const val KEY_DEGRADED_LEVEL = "degradedLevel"
+
     /** The guard's own bookkeeping, in its own store so the two cannot corrupt each other. */
     private const val PREFS = "dsh_launch_guard"
     private const val KEY_STARTED_AT = "startedAt"
@@ -72,9 +81,11 @@ object LaunchGuard {
         // The external marker wins over everything, and is checked first: it is the one
         // route that works when neither the preferences nor the UI can be reached.
         if (safeModeRequested(context)) {
-            if (readLong(context, KEY_DEGRADED_AT) == 0L) {
-                degrade(context)
-                Log.e(TAG, "safe-mode marker found; liquid glass is off")
+            // The marker is a request for the flat tier specifically — a reader who made
+            // it wants a *usable* app, not a prettier one that still crashes.
+            if (currentLevel(context) != uk.xa0.dsh.data.LiquidGlassLevel.OFF) {
+                degradeTo(context, uk.xa0.dsh.data.LiquidGlassLevel.OFF)
+                Log.e(TAG, "safe-mode marker found; glass is off")
             }
             return true
         }
@@ -100,10 +111,23 @@ object LaunchGuard {
         }
         Log.i(TAG, "crashedBeforeStarting=" + crashedBeforeStarting + " startedAt=" + startedAt)
         if (crashedBeforeStarting < CRASHES_BEFORE_DEGRADING) return false
-        // Already degraded on an earlier launch: doing it again would only rewrite the
-        // timestamp and make the Diagnostics note look newer than the crash it explains.
-        if (readLong(context, KEY_DEGRADED_AT) > 0) return false
-        degrade(context)
+        // Step **down one level**, not "turn it off once".
+        //
+        // ## Why the first version could not help
+        //
+        // It degraded once and then returned early forever (`if (degradedAt > 0) return
+        // false`). On the device the app kept crashing at the level it had been dropped
+        // to, and the guard had already spent its one shot — so it sat at "blur only"
+        // while the app died every launch, which is what "it does not degrade by itself"
+        // meant.
+        //
+        // The material has three levels and a crash is evidence about *one* of them. So
+        // each qualifying streak drops exactly one step: LIQUID -> BLUR -> OFF. If the app
+        // still dies after OFF, the material is not the cause and the guard stops trying,
+        // which is the honest answer rather than an infinite loop.
+        val current = currentLevel(context)
+        val next = nextLevelDown(current) ?: return false
+        degradeTo(context, next)
         return true
     }
 
@@ -131,12 +155,30 @@ object LaunchGuard {
     /** Whether an earlier launch already degraded the material, for the Diagnostics note. */
     fun degradedAt(context: Context): Long = readLong(context, KEY_DEGRADED_AT)
 
-    /** Undo the guard, so a reader who fixed the cause is not stuck on the flat tier. */
+    /** The level the guard last forced, or blank when it has never fired. */
+    fun degradedLevel(context: Context): String = runCatching {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_DEGRADED_LEVEL, null)
+    }.getOrNull().orEmpty()
+
+    /**
+     * Undo the guard, and put the material back where it started.
+     *
+     * Both halves matter. Clearing the flag alone would leave the *level* at whatever the
+     * last step-down chose — the reader would press "try the full material again", see the
+     * note disappear, and still be looking at the flat tier. The level is the setting; the
+     * flag is only the record of who wrote it.
+     */
     fun reset(context: Context) {
         runCatching {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .remove(KEY_DEGRADED_AT)
+                .remove(KEY_DEGRADED_LEVEL)
+                .commit()
+            context.getSharedPreferences(CONFIG_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LIQUID_GLASS_LEVEL, uk.xa0.dsh.data.LiquidGlassLevel.LIQUID)
                 .commit()
         }
     }
@@ -151,14 +193,43 @@ object LaunchGuard {
      * [uk.xa0.dsh.data.ConfigStore.load] prefers it when it is present; see the
      * degradation key there.
      */
-    private fun degrade(context: Context) {
+    private fun degradeTo(context: Context, level: String) {
         runCatching {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putLong(KEY_DEGRADED_AT, System.currentTimeMillis())
+                .putString(KEY_DEGRADED_LEVEL, level)
                 .commit()
-            Log.e(TAG, "two starts died before their first frame; liquid glass is off")
+            Log.e(TAG, "two starts died before their first frame; glass is now " + level)
         }
+    }
+
+    /**
+     * The level the app is currently on, from the plain preference.
+     *
+     * Read from the *store the UI reads*, not from a copy the guard keeps: a reader who
+     * chose a level by hand should be stepped down from where they actually are.
+     */
+    private fun currentLevel(context: Context): String {
+        val stored = runCatching {
+            context.getSharedPreferences(CONFIG_PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_LIQUID_GLASS_LEVEL, null)
+        }.getOrNull()
+        return uk.xa0.dsh.data.LiquidGlassLevel.parse(stored)
+    }
+
+    /**
+     * One step down, or null at the floor.
+     *
+     * The order is the material's own order of GPU cost — see LiquidGlassLevel. Null at
+     * OFF means "there is nothing left to turn off", and the guard then stays silent: an
+     * app that dies on the flat tier has a different problem and pretending otherwise
+     * would only hide it.
+     */
+    private fun nextLevelDown(level: String): String? = when (level) {
+        uk.xa0.dsh.data.LiquidGlassLevel.LIQUID -> uk.xa0.dsh.data.LiquidGlassLevel.BLUR
+        uk.xa0.dsh.data.LiquidGlassLevel.BLUR -> uk.xa0.dsh.data.LiquidGlassLevel.OFF
+        else -> null
     }
 
     /**

@@ -112,7 +112,7 @@ fun Modifier.liquidPane(
             backdrop = backdrop.layer,
             shape = { shape },
             effects = {
-                vibrancy()
+                vibrancy(enabled = shaderEnabled)
                 // A pane this small needs the vanilla blur rather than a big lens; the
                 // refraction is what makes the edge read as glass instead of frosting.
                 blur(4.dp.toPx(), 4.dp.toPx())

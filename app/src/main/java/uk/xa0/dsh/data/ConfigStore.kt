@@ -76,28 +76,20 @@ class ConfigStore(context: Context) {
         themeMode = prefs.getString(KEY_THEME, ThemeMode.SYSTEM) ?: ThemeMode.SYSTEM,
         amoled = prefs.getBoolean(KEY_AMOLED, false),
         chatViewsEnabled = prefs.getBoolean(KEY_CHAT_VIEWS, true),
-        // The launch guard can force this off from outside this store — see
-        // uk.xa0.dsh.diag.LaunchGuard for why a recovery path may not go through the
-        // encrypted preferences it is trying to recover from. Its flag wins over the
-        // stored one, and it is read first for that reason.
-        liquidGlassEnabled = if (LaunchGuard.degradedAt(appContext) > 0L) {
-            false
-        } else {
-            prefs.getBoolean(KEY_LIQUID_GLASS, true)
-        },
-        // The guard's fallback is the *blur* level rather than "off", not the flat tier.
+        // The level is the decision; the boolean is what the older call sites ask for, so
+        // it is derived rather than stored a second time.
         //
-        // The measured result on the device was that the app starts with the material off,
-        // which is a working app — but it also threw away the blur, and the blur is what
-        // makes the chrome read as a surface at all. Falling back to BLUR keeps the look
-        // and drops only the two AGSL shaders, which is both a better app and a sharper
-        // bisect: a reader who reports "it starts on the guard's level and still crashes"
-        // has said the backdrop or the blur is at fault, not the shader.
-        liquidGlassLevel = if (LaunchGuard.degradedAt(appContext) > 0L) {
-            LiquidGlassLevel.BLUR
-        } else {
-            LiquidGlassLevel.parse(prefs.getString(KEY_LIQUID_GLASS_LEVEL, null))
-        },
+        // **One source of truth, deliberately.** The guard's earlier version kept its own
+        // "degraded" flag *and* an override branch here, and the two disagreed often enough
+        // that the app could report a level it had not applied. The guard now writes the
+        // level into this same file — see LaunchGuard.degradeTo — so a stepped-down launch
+        // reads it here like any other preference.
+        liquidGlassLevel = LiquidGlassLevel.parse(
+            prefs.getString(KEY_LIQUID_GLASS_LEVEL, null),
+        ),
+        liquidGlassEnabled = LiquidGlassLevel.paintsMaterial(
+            LiquidGlassLevel.parse(prefs.getString(KEY_LIQUID_GLASS_LEVEL, null)),
+        ),
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),
@@ -140,7 +132,6 @@ class ConfigStore(context: Context) {
             .putString(KEY_THEME, config.themeMode)
             .putBoolean(KEY_AMOLED, config.amoled)
             .putBoolean(KEY_CHAT_VIEWS, config.chatViewsEnabled)
-            .putBoolean(KEY_LIQUID_GLASS, config.liquidGlassEnabled)
             .putString(KEY_LIQUID_GLASS_LEVEL, config.liquidGlassLevel)
             .putString(KEY_LANGUAGE, config.appLanguage)
             .putString(KEY_HOST_THEME, config.hostThemeMode)

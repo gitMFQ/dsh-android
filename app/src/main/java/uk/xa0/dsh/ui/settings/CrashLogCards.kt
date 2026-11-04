@@ -128,10 +128,13 @@ internal fun CrashLogSettingCards() {
     // act on — and the row below is how they undo it once the cause is gone.
     val degradedAt = LaunchGuard.degradedAt(context)
     if (degradedAt > 0L) {
+        val forced = LaunchGuard.degradedLevel(context)
         SettingNote(
-            "Liquid glass was turned off automatically: two launches in a row ended in a " +
-                "crash before the app finished starting. Turn it back on in This device " +
-                "once the cause is fixed.",
+            "The material was stepped down automatically to [" + forced + "]: two " +
+                "launches in a row ended in a crash before the app finished starting. " +
+                "Each such streak drops it one level, so if this build still crashes the " +
+                "next launch will drop it again. Pick a level in This device to stop the " +
+                "stepping down.",
         )
         SegmentedColumn(
             content = listOf(
@@ -150,12 +153,12 @@ internal fun CrashLogSettingCards() {
                             )
                         },
                         headline = {
-                            Text("Re-enable liquid glass", style = DshType.rowTitle)
+                            Text("Try the full material again", style = DshType.rowTitle)
                         },
                         supporting = {
                             Text(
-                                text = "Clears the automatic fallback. The app will try the " +
-                                    "material again on the next launch.",
+                                text = "Clears the automatic fallback and returns to liquid " +
+                                    "glass on the next launch.",
                                 style = DshType.rowSummary,
                                 color = colors.labelTertiary,
                             )

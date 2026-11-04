@@ -222,7 +222,11 @@ internal fun LiquidBottomBar(
                     backdrop = backdrop,
                     shape = { pillShape },
                     effects = {
-                        vibrancy()
+                        // Gated like the lens: miuix's colorControls builds a RenderEffect
+                        // around an AGSL shader whenever saturation is not 1, so leaving it
+                        // on would keep a runtime shader alive at the BLUR level. See
+                        // uk.xa0.dsh.ui.glass.vibrancy.
+                        vibrancy(enabled = shaderEnabled)
                         // Vanilla Gaussian blur; the lens below is what makes the edge read as
                         // refraction rather than as a frosted rectangle.
                         blur(4.dp.toPx(), 4.dp.toPx())
@@ -270,7 +274,7 @@ internal fun LiquidBottomBar(
                         backdrop = backdrop,
                         shape = { pillShape },
                         effects = {
-                            vibrancy()
+                            vibrancy(enabled = shaderEnabled)
                             blur(4.dp.toPx(), 4.dp.toPx())
                             lens(
                                 refractionHeight = 24.dp.toPx(),
