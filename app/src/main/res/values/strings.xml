@@ -46,7 +46,6 @@
     <string name="plugins_refresh">Refresh</string>
     <string name="plugins_reading">Reading this deployment\'s plugins…</string>
     <string name="plugins_empty">This deployment has no plugins loaded.</string>
-    <string name="plugins_loaded">Loaded</string>
 
     <!--
       "1 of 4 running". Pluralised on the *running* count, which is the word that

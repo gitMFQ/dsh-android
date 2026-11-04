@@ -19,8 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -39,22 +37,26 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
+import java.util.Locale
 import kotlinx.coroutines.delay
 import uk.xa0.dsh.ContextBreakdown
+import uk.xa0.dsh.model.AccessModeGlyph
 import uk.xa0.dsh.model.FamilyUsage
 import uk.xa0.dsh.model.SessionStats
 import uk.xa0.dsh.model.TokenRates
+import uk.xa0.dsh.model.accessModeGlyphOf
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
@@ -64,7 +66,17 @@ import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
-import java.util.Locale
+
+/**
+ * The one gap between the composer's pill rail and whatever docks against it.
+ *
+ * The input bar sits this far below the rail, and the cards that float above the rail
+ * (to-dos, goal, queue) should sit this far above it. They were two literals that
+ * happened to agree; naming the number is what keeps a change to one from silently
+ * unbalancing the other, which is the report that started this ("the goal bar and the
+ * to-dos sit further from the pills than the input does").
+ */
+val ComposerStackGap: Dp = DshSpacing.sm
 
 /**
  * The composer's controls, out of the input and above the bottom bar — one pill each.
@@ -101,12 +113,28 @@ fun ComposerAccessoryRail(
     contextPercent: Int,
     contextTokens: Int,
     contextWindow: Int,
-    contextBreakdown: ContextBreakdown?,
+    contextBreakdown: ContextBreakdown? = null,
     stats: SessionStats?,
     rates: TokenRates?,
     family: FamilyUsage?,
     onBalance: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Whether this session has a conversation to read out yet — in practice, whether the
+     * reader has sent their first message.
+     *
+     * The two session readings used to appear on the rail's first frame: a session nobody
+     * had asked anything reported "0 tok/s" and an empty cache share, which is a reading
+     * of nothing. They belong to a conversation, so they appear with one. The caller owns
+     * the judgement (the rail cannot see the transcript); defaulted true so a preview or a
+     * host that has no such concept keeps the previous always-on rail.
+     */
+    statsVisible: Boolean = true,
+    /**
+     * What identifies the conversation, so a held reading is forgotten when the reader
+     * moves to another one. Null keeps the reading for the life of the composition.
+     */
+    sessionKey: Any? = null,
 ) {
     Row(
         modifier
@@ -120,6 +148,15 @@ fun ComposerAccessoryRail(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (permissionLabel != null) {
+            // The glyph is the mode, not a generic shield.
+            //
+            // One shield for all three states meant the row's most consequential fact —
+            // may the agent write to the workspace, may it run anything at all — could
+            // only be read by opening the sheet. Three glyphs say it at a glance, and the
+            // tint carries the same distinction: the permissive mode is the one that
+            // should catch the eye rather than blend in.
+            val colors = DshTheme.colors
+            val glyph = accessModeGlyphOf(permissionLabel)
             GlassPill(
                 backdrop = backdrop,
                 onClick = onPermissionClick,
@@ -127,9 +164,14 @@ fun ComposerAccessoryRail(
                 pillDescription = "Change access mode, current $permissionLabel",
             ) {
                 Icon(
-                    Icons.Rounded.Security,
+                    glyph.image,
                     contentDescription = null,
-                    tint = DshTheme.colors.labelCaption,
+                    tint = when (glyph) {
+                        AccessModeGlyph.FULL_ACCESS -> colors.warn
+                        AccessModeGlyph.WORKSPACE_WRITE -> colors.accent
+                        AccessModeGlyph.READ_ONLY -> colors.labelSecondary
+                        AccessModeGlyph.OTHER -> colors.labelCaption
+                    },
                     modifier = Modifier.size(15.dp),
                 )
             }
@@ -149,7 +191,7 @@ fun ComposerAccessoryRail(
                 )
                 Spacer(Modifier.width(DshSpacing.sm))
                 Icon(
-                    Icons.Rounded.Close,
+                    DshIconVectors.CloseOutline,
                     contentDescription = null,
                     tint = DshTheme.colors.accent,
                     modifier = Modifier.size(12.dp),
@@ -169,7 +211,7 @@ fun ComposerAccessoryRail(
                 pillDescription = modelTrigger.description,
             ) {
                 Icon(
-                    Icons.Rounded.Psychology,
+                    DshIconVectors.ThinkOutline,
                     contentDescription = null,
                     tint = if (modelTrigger.alert) DshTheme.colors.error else DshTheme.colors.labelSecondary,
                     modifier = Modifier.size(15.dp),
@@ -185,17 +227,39 @@ fun ComposerAccessoryRail(
             breakdown = contextBreakdown,
         )
 
-        SessionSpeedPill(stats = stats, backdrop = backdrop)
+        SessionSpeedPill(
+            stats = stats,
+            backdrop = backdrop,
+            visible = statsVisible,
+            sessionKey = sessionKey,
+        )
         SessionCachePill(
             stats = stats,
             backdrop = backdrop,
             rates = rates,
             family = family,
             onBalance = onBalance,
+            visible = statsVisible,
+            sessionKey = sessionKey,
         )
     }
 }
 
+
+/**
+ * The icon each access mode wears.
+ *
+ * An extension rather than a field on the enum because the enum lives in `:core:model`,
+ * which has no Compose dependency and should not grow one for a picture. The *choice* of
+ * glyph is the model's answer; this is only the drawing.
+ */
+private val AccessModeGlyph.image: ImageVector
+    get() = when (this) {
+        AccessModeGlyph.READ_ONLY -> DshIconVectors.InspectOutline
+        AccessModeGlyph.WORKSPACE_WRITE -> DshIconVectors.ListPenOutline
+        AccessModeGlyph.FULL_ACCESS -> DshIconVectors.ShieldOutline
+        AccessModeGlyph.OTHER -> DshIconVectors.ShieldOutline
+    }
 /** The pill's height: a thumb-sized target that still reads as a chip, not a button. */
 private val PillHeight = 32.dp
 

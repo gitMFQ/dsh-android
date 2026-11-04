@@ -22,12 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -163,7 +157,7 @@ fun WorkspaceBrowser(
                         crumbs.forEachIndexed { index, crumb ->
                             if (index > 0) {
                                 Icon(
-                                    Icons.Rounded.ChevronRight,
+                                    DshIconVectors.ChevronRightOutline,
                                     contentDescription = null,
                                     tint = colors.labelCaption,
                                     modifier = Modifier.size(12.dp),
@@ -194,7 +188,7 @@ fun WorkspaceBrowser(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.Rounded.Edit,
+                            DshIconVectors.EditOutline,
                             contentDescription = "Edit path",
                             tint = colors.labelTertiary,
                             modifier = Modifier.size(14.dp),
@@ -221,7 +215,7 @@ fun WorkspaceBrowser(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.Rounded.Close,
+                            DshIconVectors.CloseOutline,
                             contentDescription = "Cancel path edit",
                             tint = colors.labelTertiary,
                             modifier = Modifier.size(16.dp),
@@ -241,7 +235,7 @@ fun WorkspaceBrowser(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            Icons.Rounded.ChevronRight,
+                            DshIconVectors.ChevronRightOutline,
                             contentDescription = "Open path",
                             tint = if (pathDraft.isNullOrBlank()) colors.labelTertiary else colors.accent,
                             modifier = Modifier.size(18.dp),
@@ -368,7 +362,7 @@ fun WorkspaceBrowser(
                         .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.labelSecondary, modifier = Modifier.size(14.dp))
+                    Icon(DshIconVectors.PlusOutline, contentDescription = null, tint = colors.labelSecondary, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(DshSpacing.xs))
                     Text("New folder", style = DshType.bodyMedium, color = colors.labelSecondary)
                 }
@@ -389,7 +383,7 @@ fun WorkspaceBrowser(
                     // toggle flips.
                     if (showHidden) {
                         Spacer(Modifier.width(DshSpacing.xs))
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(14.dp))
+                        Icon(DshIconVectors.CheckOutline, contentDescription = null, tint = colors.accent, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -429,7 +423,7 @@ private fun DirectoryRow(entry: DirectoryEntry, enabled: Boolean, onClick: () ->
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Rounded.Folder,
+            DshIconVectors.FolderOpenOutline,
             contentDescription = null,
             tint = colors.labelTertiary,
             modifier = Modifier.size(16.dp),
@@ -444,7 +438,7 @@ private fun DirectoryRow(entry: DirectoryEntry, enabled: Boolean, onClick: () ->
             modifier = Modifier.weight(1f),
         )
         Icon(
-            Icons.Rounded.ChevronRight,
+            DshIconVectors.ChevronRightOutline,
             contentDescription = null,
             tint = colors.labelCaption,
             modifier = Modifier.size(14.dp),

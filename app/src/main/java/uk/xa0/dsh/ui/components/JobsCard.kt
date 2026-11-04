@@ -21,10 +21,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,11 +34,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import uk.xa0.dsh.R
 import uk.xa0.dsh.model.JobItem
 import uk.xa0.dsh.model.JobObservation
 import uk.xa0.dsh.model.JobsWire
@@ -113,12 +112,12 @@ fun JobsSeat(
             // session full of finished jobs looked exactly like one that had never run
             // any. That is precisely the "they don't show up at all" report this seat
             // was the visible half of.
+            // The count is the affordance, so it stays a count in every language: the
+            // figure and its noun, pluralised on the figure.
             text = when {
-                running == 1 -> "1 job"
-                running > 1 -> "$running jobs"
-                finishedUnseen -> "done"
-                jobs.size == 1 -> "1 job"
-                else -> "${jobs.size} jobs"
+                running > 0 -> pluralStringResource(R.plurals.jobs_seat_count, running, running)
+                finishedUnseen -> stringResource(R.string.jobs_seat_done)
+                else -> pluralStringResource(R.plurals.jobs_seat_count, jobs.size, jobs.size)
             },
             style = DshType.bodySmall.copy(fontWeight = FontWeight.Medium),
             color = if (running > 0) colors.accent else colors.labelSecondary,
@@ -217,7 +216,7 @@ fun JobsSheet(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Background jobs",
+                text = stringResource(R.string.jobs_title),
                 style = DshType.labelLarge,
                 color = colors.labelPrimary,
                 modifier = Modifier.weight(1f),
@@ -230,8 +229,8 @@ fun JobsSheet(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.Rounded.Close,
-                    contentDescription = "Close background jobs",
+                    DshIconVectors.CloseOutline,
+                    contentDescription = stringResource(R.string.jobs_close),
                     tint = colors.labelTertiary,
                     modifier = Modifier.size(16.dp),
                 )
@@ -241,7 +240,7 @@ fun JobsSheet(
 
         if (visible == 0) {
             Text(
-                text = "No background jobs in this session.",
+                text = stringResource(R.string.jobs_empty),
                 style = DshType.bodySmall,
                 color = colors.labelTertiary,
                 modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.md),
@@ -258,7 +257,9 @@ fun JobsSheet(
             verticalArrangement = Arrangement.spacedBy(DshSpacing.xxs),
         ) {
             if (liveRows.isNotEmpty()) {
-                item(key = "section-live") { SectionHeading("Running") }
+                item(key = "section-live") {
+                    SectionHeading(stringResource(R.string.jobs_section_running))
+                }
                 items(liveRows, key = { it.id }) { job ->
                     JobRow(
                         job = job,
@@ -283,7 +284,7 @@ fun JobsSheet(
             if (settledRows.isNotEmpty()) {
                 item(key = "section-settled") {
                     SectionHeading(
-                        text = "Finished ${settledRows.size}",
+                        text = stringResource(R.string.jobs_section_finished, settledRows.size),
                         expandable = true,
                         expanded = settledExpanded,
                         onToggle = { settledOpen = !settledExpanded },
@@ -344,8 +345,10 @@ private fun SectionHeading(
         ) {
             if (expandable) {
                 Icon(
-                    imageVector = if (expanded) Icons.Rounded.ExpandMore else Icons.Rounded.ExpandLess,
-                    contentDescription = if (expanded) "Collapse finished jobs" else "Expand finished jobs",
+                    imageVector = if (expanded) DshIconVectors.ChevronDownOutline else DshIconVectors.ChevronUpOutline,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.jobs_collapse_finished else R.string.jobs_expand_finished,
+                    ),
                     tint = colors.labelTertiary,
                     modifier = Modifier.size(14.dp),
                 )
@@ -356,7 +359,7 @@ private fun SectionHeading(
         if (onClear != null) {
             Spacer(Modifier.weight(1f))
             Text(
-                text = "Clear",
+                text = stringResource(R.string.jobs_clear),
                 style = DshType.micro,
                 color = colors.labelTertiary,
                 modifier = Modifier
@@ -494,7 +497,9 @@ private fun JobRow(
                 }
                 if (showMore) {
                     Text(
-                        text = if (textExpanded) "Show less" else "Show more",
+                        text = stringResource(
+                            if (textExpanded) R.string.jobs_show_less else R.string.jobs_show_more,
+                        ),
                         style = DshType.micro,
                         color = colors.link,
                         modifier = Modifier
@@ -517,12 +522,11 @@ private fun JobRow(
                 // does not need to be one too — and a second, smaller target inside a
                 // tappable row is how a tap lands on the wrong thing.
                 Icon(
-                    imageVector = if (expanded) Icons.Rounded.ExpandMore else Icons.Rounded.ExpandLess,
-                    contentDescription = if (expanded) {
-                        "Hide live output of ${job.label}"
-                    } else {
-                        "Show live output of ${job.label}"
-                    },
+                    imageVector = if (expanded) DshIconVectors.ChevronDownOutline else DshIconVectors.ChevronUpOutline,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.jobs_hide_live_output else R.string.jobs_show_live_output,
+                        job.label,
+                    ),
                     tint = colors.labelTertiary,
                     modifier = Modifier
                         .padding(top = 2.dp)
@@ -563,14 +567,23 @@ private fun StopButton(armed: Boolean, label: String, onPress: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Rounded.Stop,
-            contentDescription = if (armed) "Confirm stop" else "Stop task $label",
+            DshIconVectors.StopFill,
+            contentDescription = if (armed) {
+                stringResource(R.string.jobs_confirm_stop)
+            } else {
+                stringResource(R.string.jobs_stop_task, label)
+            },
             tint = if (armed) colors.error else colors.labelSecondary,
             modifier = Modifier.size(12.dp),
         )
         if (armed) {
             Spacer(Modifier.width(DshSpacing.xs))
-            Text("Confirm stop", style = DshType.micro, color = colors.error, maxLines = 1)
+            Text(
+                text = stringResource(R.string.jobs_confirm_stop),
+                style = DshType.micro,
+                color = colors.error,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -643,7 +656,7 @@ fun JobOutputPanel(
         // job that printed "… earlier output dropped …".
         if (view?.gapBefore == true) {
             Text(
-                text = "… earlier output dropped …",
+                text = stringResource(R.string.jobs_output_gap),
                 style = DshType.micro,
                 color = colors.labelTertiary,
                 modifier = Modifier.padding(horizontal = DshSpacing.md, vertical = DshSpacing.xs),
@@ -651,7 +664,7 @@ fun JobOutputPanel(
         }
         view?.error?.let { error ->
             Text(
-                text = "live output stream interrupted: $error",
+                text = stringResource(R.string.jobs_output_interrupted, error),
                 style = DshType.micro,
                 color = colors.error,
                 modifier = Modifier.padding(horizontal = DshSpacing.md, vertical = DshSpacing.xs),
@@ -664,7 +677,9 @@ fun JobOutputPanel(
             // A running job that has not printed yet says so; a settled one offers
             // the web's `(no output)` rather than an empty box.
             Text(
-                text = if (running) "Waiting for output…" else "(no output)",
+                text = stringResource(
+                    if (running) R.string.jobs_waiting_output else R.string.jobs_no_output,
+                ),
                 style = DshType.codeSmall,
                 color = colors.labelTertiary,
                 modifier = Modifier.padding(
@@ -793,7 +808,7 @@ private fun JobCopyButton(text: String) {
         }
     }
     Text(
-        text = if (copied) "Copied" else "Copy",
+        text = stringResource(if (copied) R.string.chat_copied else R.string.chat_copy),
         style = DshType.micro,
         color = colors.labelSecondary,
         modifier = Modifier

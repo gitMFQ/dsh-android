@@ -44,9 +44,14 @@ object WindowBackground {
      * the activity's own resources, which is the configuration the platform itself
      * would have used to inflate the window.
      */
-    fun apply(activity: Activity, themeMode: String, systemDark: Boolean = isSystemDark(activity)) {
+    fun apply(
+        activity: Activity,
+        themeMode: String,
+        systemDark: Boolean = isSystemDark(activity),
+        amoled: Boolean = false,
+    ) {
         val monet = monetPalette(activity, themeMode, systemDark)
-        paint(activity, dshPalette(themeMode, systemDark, monet).bgBase.toArgb())
+        paint(activity, dshPalette(themeMode, systemDark, monet, amoled).bgBase.toArgb())
     }
 
     /**

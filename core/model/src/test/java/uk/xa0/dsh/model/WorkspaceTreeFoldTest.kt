@@ -246,4 +246,73 @@ class WorkspaceTreeFoldTest {
         assertEquals(false, WorkspaceTreeFold.isOpen("out", emptySet()))
         assertEquals(false, WorkspaceTreeFold.isOpen("", emptySet()))
     }
+
+    // ------------------------------------------------- the set that must be written
+
+    /**
+     * A directory expanded through [WorkspaceTreeState.copy] must stay expanded.
+     *
+     * This is the fold-level half of the device defect "点后闪一下文件夹并没有展开"
+     * (tap a folder, it flashes, and it has not expanded): collapsing and reopening
+     * is a change to [WorkspaceTreeState.open], and a caller that rather publishes a
+     * *new* `WorkspaceTreeState` derived from some other field has to carry that set
+     * with it. If it does not, the children the fold draws for `open = setOf("out")`
+     * disappear on the very next publish, which is what a flash looks like.
+     */
+    @Test
+    fun `expanding is a change to the open set the fold actually reads`() {
+        val levels = mapOf(
+            "" to listing("", dir("out"), file("README.md")),
+            "out" to listing("out", file("REPORT.md")),
+        )
+        val closed = WorkspaceTreeState(levels = levels)
+        assertEquals(listOf("out", "README.md"), closed.rows().map { it.entry.name })
+
+        // What a toggle does: add the directory to `open`.
+        val opened = closed.copy(open = closed.open + "out")
+        assertEquals(
+            listOf("out", "REPORT.md", "README.md"),
+            opened.rows().map { it.entry.name },
+        )
+        assertEquals(TreeChildren.READY, opened.rows().first().children)
+
+        // A publish that rebuilds from an *empty* set is the bug: the level is
+        // cached, so the row still says READY, but the child is not drawn.
+        val rebuiltWithoutTheSet = WorkspaceTreeState(levels = levels, open = emptySet())
+        assertEquals(
+            listOf("out", "README.md"),
+            rebuiltWithoutTheSet.rows().map { it.entry.name },
+        )
+    }
+
+    /**
+     * An open directory with no level yet draws a loading row, not a closed one.
+     *
+     * The distinction is the whole reason `open` and `levels` are separate fields:
+     * the toggle publishes the open set *before* the request goes out, so that first
+     * publish has to say "in flight" rather than "nothing here".
+     */
+    @Test
+    fun `an expanded directory with no level yet is loading, not closed`() {
+        val state = WorkspaceTreeState(
+            levels = mapOf("" to listing("", dir("out"))),
+            open = setOf("out"),
+        )
+
+        assertEquals(TreeChildren.LOADING, state.rows().first().children)
+    }
+
+    /** Collapsing again is the inverse, and it must drop the children it drew. */
+    @Test
+    fun `collapsing removes the children it had drawn`() {
+        val levels = mapOf(
+            "" to listing("", dir("out")),
+            "out" to listing("out", file("REPORT.md")),
+        )
+        val open = WorkspaceTreeState(levels = levels, open = setOf("out"))
+        assertTrue(open.rows().any { it.entry.name == "REPORT.md" })
+
+        val closedAgain = open.copy(open = open.open - "out")
+        assertEquals(listOf("out"), closedAgain.rows().map { it.entry.name })
+    }
 }

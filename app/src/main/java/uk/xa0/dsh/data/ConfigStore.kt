@@ -47,6 +47,18 @@ class ConfigStore(context: Context) {
     var themeMode: String = ThemeMode.SYSTEM
         private set
 
+    /**
+     * The AMOLED switch as the *window* needs it, cached beside [themeMode].
+     *
+     * Same reason as the appearance cache: the window is painted before composition,
+     * and it needs the black surfaces (or the absence of them) to match the palette
+     * Compose is about to draw. Kept as a cache, never as the decision — [load] still
+     * reads the store.
+     */
+    @Volatile
+    var amoled: Boolean = false
+        private set
+
     fun load(): DshConfig = DshConfig(
         baseUrl = prefs.getString(KEY_BASE_URL, "").orEmpty(),
         lanUrl = prefs.getString(KEY_LAN_URL, "").orEmpty(),
@@ -54,6 +66,9 @@ class ConfigStore(context: Context) {
         password = prefs.getString(KEY_PASSWORD, "").orEmpty(),
         manualCookie = prefs.getString(KEY_COOKIE, "").orEmpty(),
         themeMode = prefs.getString(KEY_THEME, ThemeMode.SYSTEM) ?: ThemeMode.SYSTEM,
+        amoled = prefs.getBoolean(KEY_AMOLED, false),
+        chatViewsEnabled = prefs.getBoolean(KEY_CHAT_VIEWS, true),
+        appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),
         busyEnter = prefs.getString(KEY_BUSY_ENTER, BusyEnter.QUEUE) ?: BusyEnter.QUEUE,
@@ -93,6 +108,9 @@ class ConfigStore(context: Context) {
             .putString(KEY_PASSWORD, config.password)
             .putString(KEY_COOKIE, config.manualCookie)
             .putString(KEY_THEME, config.themeMode)
+            .putBoolean(KEY_AMOLED, config.amoled)
+            .putBoolean(KEY_CHAT_VIEWS, config.chatViewsEnabled)
+            .putString(KEY_LANGUAGE, config.appLanguage)
             .putString(KEY_HOST_THEME, config.hostThemeMode)
             .putString(KEY_PRESET, config.agentPreset)
             .putString(KEY_BUSY_ENTER, config.busyEnter)
@@ -114,6 +132,7 @@ class ConfigStore(context: Context) {
             .putString(KEY_ACCEPTED_CERTS, encodeAcceptedCerts(config.acceptedCerts))
             .apply()
         themeMode = config.themeMode
+        amoled = config.amoled
     }
 
     fun clearCredentials() {
@@ -127,6 +146,15 @@ class ConfigStore(context: Context) {
         const val KEY_PASSWORD = "password"
         const val KEY_COOKIE = "cookie"
         const val KEY_THEME = "theme"
+
+        /** Whether a dark appearance is drawn in AMOLED black; see DshConfig.amoled. */
+        const val KEY_AMOLED = "amoled"
+
+        /** Whether the Trajectory and Shell readings are offered; see DshConfig. */
+        const val KEY_CHAT_VIEWS = "chatViews"
+
+        /** The in-app language override; blank follows the device. */
+        const val KEY_LANGUAGE = "appLanguage"
         const val KEY_HOST_THEME = "host_theme"
         const val KEY_PRESET = "preset"
         const val KEY_BUSY_ENTER = "busy_enter"

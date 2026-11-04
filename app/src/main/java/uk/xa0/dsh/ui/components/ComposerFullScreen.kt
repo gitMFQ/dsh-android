@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.ime
@@ -26,16 +27,15 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.ContentPaste
-import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.FormatQuote
 import androidx.compose.material.icons.rounded.SelectAll
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,8 +51,10 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.IntOffset
@@ -65,6 +67,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import uk.xa0.dsh.PendingAttachment
+import uk.xa0.dsh.R
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -135,11 +138,37 @@ internal class ComposerTextToolbar : TextToolbar {
 @Composable
 internal fun ComposerSelectionMenu(
     toolbar: ComposerTextToolbar,
-    onFullscreen: () -> Unit,
+    /**
+     * The "Full screen" door. Null on a surface that already *is* the full screen, and
+     * on any surface that has no bigger one to offer.
+     */
+    onFullscreen: (() -> Unit)? = null,
+    /**
+     * What the field currently has selected. Read only when the menu opens, so a row
+     * always acts on the text the reader sees highlighted rather than on whatever the
+     * field held when the popup was first composed.
+     */
+    selectedText: () -> String = { "" },
+    /**
+     * "Quote text" (`quote.add` in the web client): hand the selection to the host, which
+     * is where a quote becomes a `>` block in the draft. Null leaves the row out, which
+     * is what a host with nowhere to put a quote should pass.
+     */
+    onQuote: ((String) -> Unit)? = null,
+    /**
+     * "Translate": hand the selection to the host's translation RPC
+     * (`cotTranslation/translate`). Null leaves the row out — there is no client-side
+     * translator to fall back on.
+     */
+    onTranslate: ((String) -> Unit)? = null,
 ) {
     val request = toolbar.menu ?: return
     val colors = DshTheme.colors
     val shape = RoundedCornerShape(DshRadius.card)
+    // Captured while the menu is shown: the selection is what the reader highlighted,
+    // and it stops being the current selection the moment a row is tapped.
+    val selected = remember(request) { selectedText() }
+    val hasSelection = selected.isNotBlank()
     Popup(
         onDismissRequest = { toolbar.dismiss() },
         properties = PopupProperties(focusable = false, dismissOnClickOutside = true),
@@ -168,32 +197,60 @@ internal fun ComposerSelectionMenu(
                 .padding(vertical = DshSpacing.xs),
         ) {
             request.onSelectAll?.let {
-                SelectionRow(Icons.Rounded.SelectAll, "Select all") {
+                SelectionRow(Icons.Rounded.SelectAll, stringResource(R.string.composer_select_all)) {
                     toolbar.dismiss()
                     it()
                 }
             }
             request.onCopy?.let {
-                SelectionRow(Icons.Rounded.ContentCopy, "Copy") {
+                SelectionRow(DshIconVectors.CopyOutline, stringResource(R.string.chat_copy)) {
                     toolbar.dismiss()
                     it()
                 }
             }
             request.onCut?.let {
-                SelectionRow(Icons.Rounded.ContentCut, "Cut") {
+                SelectionRow(Icons.Rounded.ContentCut, stringResource(R.string.composer_cut)) {
                     toolbar.dismiss()
                     it()
                 }
             }
             request.onPaste?.let {
-                SelectionRow(Icons.Rounded.ContentPaste, "Paste") {
+                SelectionRow(Icons.Rounded.ContentPaste, stringResource(R.string.composer_paste)) {
                     toolbar.dismiss()
                     it()
                 }
             }
-            SelectionRow(Icons.Rounded.Fullscreen, "Full screen") {
-                toolbar.dismiss()
-                onFullscreen()
+            // The two text actions sit above the full-screen door, in the web's order:
+            // what to do with the selection, then where to keep writing.
+            if (onQuote != null && hasSelection) {
+                SelectionRow(
+                    Icons.Rounded.FormatQuote,
+                    stringResource(R.string.composer_quote_text),
+                ) {
+                    toolbar.dismiss()
+                    onQuote(selected)
+                }
+            }
+            if (onTranslate != null && hasSelection) {
+                SelectionRow(Icons.Rounded.Translate, stringResource(R.string.composer_translate)) {
+                    toolbar.dismiss()
+                    onTranslate(selected)
+                }
+            }
+            if ((onQuote != null || onTranslate != null) && hasSelection) {
+                Box(
+                    Modifier
+                        .padding(horizontal = DshSpacing.md, vertical = DshSpacing.xs)
+                        .fillMaxWidth()
+                        .height(0.5.dp)
+                        .background(colors.borderL1),
+                )
+            }
+            if (onFullscreen != null) {
+                SelectionRow(DshIconVectors.FullscreenOutline, stringResource(R.string.composer_full_screen)) {
+                    toolbar.dismiss()
+                    onFullscreen()
+                }
             }
         }
     }
@@ -243,11 +300,33 @@ fun FullScreenComposer(
     busyEnter: String = BusyEnter.QUEUE,
     onSendMode: (String) -> Unit = {},
     onToggleBusyEnter: () -> Unit = {},
+    /**
+     * Whether the `+`'s roster is open.
+     *
+     * ## Why the roster comes in, rather than being toggled outside
+     *
+     * This surface is a dialog window, and the dock's own roster is drawn in the
+     * activity's window — behind it. That was the bug: the `+` here opened a menu the
+     * reader could not see, because the full-screen surface was covering it. The roster
+     * has to be composed *in this window*, so the caller hands both the state and the
+     * content over.
+     */
+    commandsOpen: Boolean = false,
+    /** The roster to draw while [commandsOpen] — [CommandMenu] or any other menu. */
+    commandMenu: (@Composable () -> Unit)? = null,
+    /** The selection menu's "Quote text" row; null leaves it out. */
+    onQuote: ((String) -> Unit)? = null,
+    /** The selection menu's "Translate" row; null leaves it out. */
+    onTranslate: ((String) -> Unit)? = null,
 ) {
     val colors = DshTheme.colors
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val text = state.text
+    // The same replaced toolbar the bar's field has, so a selection made in full screen
+    // offers the same rows — quote and translate included. There is no "Full screen"
+    // row here: this surface already is it.
+    val textToolbar = remember { ComposerTextToolbar() }
 
     // Entering this screen is a request to type in it: focus and the keyboard, once.
     LaunchedEffect(Unit) {
@@ -255,7 +334,9 @@ fun FullScreenComposer(
         keyboard?.show()
     }
 
-    Column(
+    // A Box, not a bare Column, so the command roster can be drawn in *this* window,
+    // over the writing surface, instead of in the activity window behind it.
+    Box(
         modifier
             .fillMaxSize()
             .background(colors.bgBase)
@@ -265,107 +346,155 @@ fun FullScreenComposer(
             .windowInsetsPadding(WindowInsets.navigationBars.exclude(WindowInsets.ime))
             .imePadding(),
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(horizontal = DshSpacing.xl),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Rounded.Close,
-                contentDescription = "Close full screen input",
-                tint = colors.labelSecondary,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(DshRadius.md))
-                    .clickableNoRipple(onClick = onClose)
-                    .padding(10.dp),
-            )
-            Spacer(Modifier.width(DshSpacing.sm))
-            Text(
-                text = "Message",
-                style = DshType.titleSmall,
-                color = colors.labelSecondary,
-                modifier = Modifier.weight(1f),
-            )
-            SendButton(
-                canSend = text.isNotBlank() || running || attachments.isNotEmpty(),
-                running = running,
-                draftBlank = text.isBlank(),
-                busyEnter = busyEnter,
-                onSend = onSend,
-                onStop = onStop,
-                onSendMode = onSendMode,
-                onToggleBusyEnter = onToggleBusyEnter,
-            )
-        }
-
-        if (attachments.isNotEmpty()) {
-            AttachmentRail(
-                attachments = attachments,
-                onRemove = onRemoveAttachment,
-                modifier = Modifier.padding(
-                    start = DshSpacing.xl,
-                    end = DshSpacing.xl,
-                    top = DshSpacing.sm,
-                ),
-            )
-        }
-
-        Box(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = DshSpacing.xl, vertical = DshSpacing.md),
-        ) {
-            if (text.isEmpty()) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = DshSpacing.xl),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    DshIconVectors.CloseOutline,
+                    contentDescription = stringResource(R.string.composer_close_full_screen),
+                    tint = colors.labelSecondary,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(DshRadius.md))
+                        .clickableNoRipple(onClick = onClose)
+                        .padding(10.dp),
+                )
+                Spacer(Modifier.width(DshSpacing.sm))
                 Text(
-                    text = "Message DSH…",
-                    style = DshType.bodyLarge.copy(fontSize = 16.sp, lineHeight = 26.sp),
-                    color = colors.labelCaption,
-                    maxLines = 1,
+                    text = stringResource(R.string.composer_full_screen_title),
+                    style = DshType.titleSmall,
+                    color = colors.labelSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                SendButton(
+                    canSend = text.isNotBlank() || running || attachments.isNotEmpty(),
+                    running = running,
+                    draftBlank = text.isBlank(),
+                    busyEnter = busyEnter,
+                    onSend = onSend,
+                    onStop = onStop,
+                    onSendMode = onSendMode,
+                    onToggleBusyEnter = onToggleBusyEnter,
                 )
             }
-            BasicTextField(
-                state = state,
-                textStyle = DshType.bodyLarge.copy(
-                    fontSize = 16.sp,
-                    lineHeight = 26.sp,
-                    color = colors.labelPrimary,
-                ),
-                cursorBrush = SolidColor(colors.accent),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Default,
-                ),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .focusRequester(focus),
+
+            if (attachments.isNotEmpty()) {
+                AttachmentRail(
+                    attachments = attachments,
+                    onRemove = onRemoveAttachment,
+                    modifier = Modifier.padding(
+                        start = DshSpacing.xl,
+                        end = DshSpacing.xl,
+                        top = DshSpacing.sm,
+                    ),
+                )
+            }
+
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = DshSpacing.xl, vertical = DshSpacing.md),
+            ) {
+                if (text.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.composer_placeholder),
+                        style = DshType.bodyLarge.copy(fontSize = 16.sp, lineHeight = 26.sp),
+                        color = colors.labelCaption,
+                        maxLines = 1,
+                    )
+                }
+                CompositionLocalProvider(LocalTextToolbar provides textToolbar) {
+                    BasicTextField(
+                        state = state,
+                        textStyle = DshType.bodyLarge.copy(
+                            fontSize = 16.sp,
+                            lineHeight = 26.sp,
+                            color = colors.labelPrimary,
+                        ),
+                        cursorBrush = SolidColor(colors.accent),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            imeAction = ImeAction.Default,
+                        ),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .focusRequester(focus),
+                    )
+                }
+            }
+
+            ComposerSelectionMenu(
+                toolbar = textToolbar,
+                selectedText = {
+                    val selection = state.selection
+                    val full = state.text
+                    if (selection.collapsed) {
+                        ""
+                    } else {
+                        runCatching { full.subSequence(selection.min, selection.max).toString() }
+                            .getOrDefault("")
+                    }
+                },
+                onQuote = onQuote,
+                onTranslate = onTranslate,
             )
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = DshSpacing.xl,
+                        end = DshSpacing.xl,
+                        top = DshSpacing.xs,
+                        bottom = DshSpacing.md,
+                    ),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircleIconButton(
+                    icon = DshIconVectors.PlusOutline,
+                    contentDescription = stringResource(R.string.composer_add_files_or_commands),
+                    onClick = onToggleCommands,
+                    size = 32.dp,
+                    background = colors.selector,
+                    tint = colors.labelPrimary,
+                    iconSize = 17.dp,
+                )
+            }
         }
 
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = DshSpacing.xl,
-                    end = DshSpacing.xl,
-                    top = DshSpacing.xs,
-                    bottom = DshSpacing.md,
-                ),
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CircleIconButton(
-                icon = Icons.Rounded.Add,
-                contentDescription = "Add files or run commands",
-                onClick = onToggleCommands,
-                size = 32.dp,
-                background = colors.selector,
-                tint = colors.labelPrimary,
-                iconSize = 17.dp,
-            )
+        // The roster, inside this window. It sits just above the action row rather than
+        // at the caret: there is no anchor on this screen, and the `+` is the control
+        // that opened it, so the menu belongs over the field it writes into.
+        val roster = commandMenu
+        if (commandsOpen && roster != null) {
+            // No scrim: the dock's roster is an inline panel with no outside-dismiss
+            // either, and a full-bleed tap-catcher here would cover the very field this
+            // screen exists to write in. The `+` toggles it shut, exactly as it opens it.
+            // Anchored to the top of the action row and growing upward, capped so a long
+            // roster cannot swallow the field it writes into.
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .padding(
+                        start = DshSpacing.xl,
+                        end = DshSpacing.xl,
+                        // Clear the action row below (32dp button + its padding) so the
+                        // menu never covers the `+` that opened it.
+                        bottom = 32.dp + DshSpacing.xs + DshSpacing.md,
+                        top = DshSpacing.xl,
+                    ),
+            ) {
+                roster()
+            }
         }
     }
 }

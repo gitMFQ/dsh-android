@@ -493,6 +493,12 @@ fun dshPalette(
     themeMode: String,
     systemDark: Boolean,
     monet: MonetPalette? = null,
+    // An *overlay* on whichever dark appearance won, not an appearance of its own:
+    // the switch says "when the screen is dark, make it black", so it has to be able
+    // to apply to Dark, to System-as-dark and to a Monet dark, and it has to be
+    // ignored when the answer is a light palette — otherwise the switch would silently
+    // be a fourth theme mode again.
+    amoled: Boolean = false,
 ): DshColors {
     // `parse`, not the raw string: a stored id from another build must resolve to an
     // appearance rather than fall through every branch below.
@@ -500,6 +506,9 @@ fun dshPalette(
     val dark = ThemeMode.isDark(mode, systemDark)
     val base = if (dark) DarkColors else LightColors
     return when {
+        amoled && dark -> base.toAmoled()
+        // The old stored id still resolves, so a reader who chose AMOLED before the
+        // switch existed keeps the black they chose rather than being silently reset.
         mode == ThemeMode.AMOLED -> base.toAmoled()
         monet != null && ThemeMode.isMonet(mode) -> base.toMonet(dark, monet)
         else -> base
@@ -543,6 +552,8 @@ fun monetPalette(context: Context, themeMode: String, systemDark: Boolean): Mone
 @Composable
 fun DshTheme(
     themeMode: String = ThemeMode.SYSTEM,
+    /** AMOLED black when the answer is a dark palette; see `dshPalette`. */
+    amoled: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -553,7 +564,7 @@ fun DshTheme(
     val monet = remember(themeMode, systemDark, context) {
         monetPalette(context, themeMode, systemDark)
     }
-    val palette = dshPalette(themeMode, systemDark, monet)
+    val palette = dshPalette(themeMode, systemDark, monet, amoled)
     // Built once per appearance, not per frame: 53 roles with a handful of alpha
     // composites each, and `MiuixTheme` copies whatever it is handed.
     val miuix = remember(palette) { palette.toMiuixColors() }

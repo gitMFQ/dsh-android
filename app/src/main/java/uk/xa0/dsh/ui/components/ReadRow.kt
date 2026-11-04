@@ -18,8 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -213,7 +211,7 @@ internal fun ReadCallRow(entry: ChatEntry.ToolCall, model: ReadCardModel) {
         ) {
             Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = if (expanded) Icons.Rounded.ExpandMore else Icons.Rounded.Description,
+                    imageVector = if (expanded) DshIconVectors.ChevronDownOutline else DshIconVectors.BrowseOutline,
                     contentDescription = null,
                     tint = colors.labelTertiary,
                     modifier = Modifier.size(14.dp),

@@ -92,6 +92,7 @@ object SystemBars {
         activity: Activity,
         themeMode: String,
         systemDark: Boolean = WindowBackground.isSystemDark(activity),
+        amoled: Boolean = false,
     ) {
         // No `monetPalette(...)` here, deliberately, and it is not an oversight:
         // `ThemeMode.isDark` decides the light/dark side from the appearance alone, and
@@ -99,7 +100,7 @@ object SystemBars {
         // `dynamicColorScheme` on the main thread during `onCreate` to reach the same
         // answer. `WindowBackground.apply` does need it — it paints a Monet *colour* —
         // and that is the difference between the two calls.
-        val palette = dshPalette(themeMode, systemDark)
+        val palette = dshPalette(themeMode, systemDark, amoled = amoled)
         // Transparent, not the palette's base: the conversation now scrolls under the
         // navigation bar (the screen no longer imposes its inset on the pager), so the
         // strip has to show what is behind it rather than a slab of the app's background.

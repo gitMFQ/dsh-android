@@ -18,8 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -273,7 +271,7 @@ internal fun AskQuestionCallRow(entry: ChatEntry.ToolCall, model: AskQuestionRow
             Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
                 when {
                     expanded -> Icon(
-                        Icons.Rounded.ExpandMore,
+                        DshIconVectors.ChevronDownOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),
@@ -283,7 +281,7 @@ internal fun AskQuestionCallRow(entry: ChatEntry.ToolCall, model: AskQuestionRow
                     model.state == AskRowState.ERROR -> StateDot(DotState.ERROR)
                     model.state == AskRowState.STOPPED -> StateDot(DotState.WARNING)
                     else -> Icon(
-                        Icons.Rounded.HelpOutline,
+                        DshIconVectors.QuestionOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),

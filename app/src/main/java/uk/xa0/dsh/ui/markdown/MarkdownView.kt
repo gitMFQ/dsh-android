@@ -1,5 +1,8 @@
 package uk.xa0.dsh.ui.markdown
 
+import android.graphics.BitmapFactory
+import android.util.LruCache
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -17,31 +20,23 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import uk.xa0.dsh.ui.theme.DshRadius
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.foundation.Image
-import android.graphics.BitmapFactory
-import android.util.LruCache
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -54,9 +49,13 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.theme.DshColors
+import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
@@ -446,7 +445,7 @@ fun CodeBlock(language: String?, code: String) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (copied) Icons.Rounded.Check else Icons.Rounded.ContentCopy,
+                    imageVector = if (copied) DshIconVectors.CheckOutline else DshIconVectors.CopyOutline,
                     contentDescription = "Copy code",
                     tint = if (copied) colors.success else colors.labelTertiary,
                     modifier = Modifier.size(14.dp),

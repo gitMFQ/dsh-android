@@ -27,13 +27,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material.icons.rounded.SwapVert
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +54,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -72,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import uk.xa0.dsh.PendingAttachment
+import uk.xa0.dsh.R
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -143,6 +140,16 @@ fun ComposerContent(
      * already expanded and should not steal focus (the wide layout, a baseline).
      */
     focusRequester: FocusRequester? = null,
+    /**
+     * The selection menu's "Quote text" row (`quote.add` in the web client). Null leaves
+     * a menu without it, which is what a build with no draft-quote support should show.
+     */
+    onQuote: ((String) -> Unit)? = null,
+    /**
+     * The selection menu's "Translate" row — the host's `cotTranslation/translate` RPC.
+     * Null leaves the row out; this client has no translator of its own.
+     */
+    onTranslate: ((String) -> Unit)? = null,
 ) {
     val colors = DshTheme.colors
     val focusManager = LocalFocusManager.current
@@ -189,10 +196,10 @@ fun ComposerContent(
             // row it used to share.
             if (showAttach) {
                 CircleIconButton(
-                    icon = Icons.Rounded.Add,
+                    icon = DshIconVectors.PlusOutline,
                     // The web's `+` is the command menu, not an attachment button:
                     // `input.commands` = "Add files or run commands".
-                    contentDescription = "Add files or run commands",
+                    contentDescription = stringResource(R.string.composer_add_files_or_commands),
                     onClick = onToggleCommands,
                     size = 28.dp,
                     background = colors.selector,
@@ -210,7 +217,7 @@ fun ComposerContent(
             ) {
                 if (text.isEmpty()) {
                     Text(
-                        text = "Message DSH…",
+                        text = stringResource(R.string.composer_placeholder),
                         style = DshType.messageBody,
                         color = colors.labelCaption,
                         maxLines = 1,
@@ -279,7 +286,23 @@ fun ComposerContent(
         }
 
         // Window-level, so it escapes the bar's clip and sits above the selection.
-        ComposerSelectionMenu(textToolbar, onFullscreen)
+        // The selection is read from the field at the moment the menu opens, not held
+        // in a state of its own: the field is the one owner of what is highlighted.
+        ComposerSelectionMenu(
+            toolbar = textToolbar,
+            onFullscreen = onFullscreen,
+            selectedText = {
+                val selection = state.selection
+                if (selection.collapsed) {
+                    ""
+                } else {
+                    runCatching { text.subSequence(selection.min, selection.max).toString() }
+                        .getOrDefault("")
+                }
+            },
+            onQuote = onQuote,
+            onTranslate = onTranslate,
+        )
     }
 }
 
@@ -331,12 +354,14 @@ internal fun SendButton(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (isStop) Icons.Rounded.Stop else Icons.Rounded.Send,
-                contentDescription = when {
-                    isStop -> "Stop"
-                    busyEnter == BusyEnter.STEER -> "Send and steer"
-                    else -> "Send and queue"
-                },
+                imageVector = if (isStop) DshIconVectors.StopFill else DshIconVectors.SendOutline,
+                contentDescription = stringResource(
+                    when {
+                        isStop -> R.string.composer_stop
+                        busyEnter == BusyEnter.STEER -> R.string.composer_send_and_steer
+                        else -> R.string.composer_send_and_queue
+                    },
+                ),
                 tint = colors.sendGlyph,
                 modifier = Modifier.size(16.dp),
             )
@@ -393,16 +418,16 @@ private fun SendModeMenu(
             .padding(vertical = DshSpacing.xs),
     ) {
         SendModeRow(
-            icon = Icons.Rounded.Send,
-            title = "Steer now",
-            subtitle = "Cut into the current turn",
+            icon = DshIconVectors.SendOutline,
+            title = stringResource(R.string.composer_steer_now),
+            subtitle = stringResource(R.string.composer_steer_now_subtitle),
             selected = busyEnter == BusyEnter.STEER,
             onClick = { onPick(BusyEnter.STEER) },
         )
         SendModeRow(
             icon = DshIconQueue14,
-            title = "Queue for later",
-            subtitle = "Deliver when this turn ends",
+            title = stringResource(R.string.composer_queue_for_later),
+            subtitle = stringResource(R.string.composer_queue_for_later_subtitle),
             selected = busyEnter == BusyEnter.QUEUE,
             onClick = { onPick(BusyEnter.QUEUE) },
         )
@@ -416,12 +441,14 @@ private fun SendModeMenu(
         )
 
         SendModeRow(
-            icon = Icons.Rounded.Tune,
-            title = "Default while busy",
-            subtitle = "What Send does while the agent runs",
+            icon = DshIconVectors.SlidersTwoOutline,
+            title = stringResource(R.string.composer_default_while_busy),
+            subtitle = stringResource(R.string.composer_default_while_busy_subtitle),
             // The current value rides on the row itself, so the toggle's effect is
             // visible while the menu stays open.
-            trailing = if (busyEnter == BusyEnter.STEER) "Steer" else "Queue",
+            trailing = stringResource(
+                if (busyEnter == BusyEnter.STEER) R.string.composer_mode_steer else R.string.composer_mode_queue,
+            ),
             selected = false,
             onClick = onToggleDefault,
         )
@@ -466,16 +493,16 @@ private fun SendModeRow(
             )
             Spacer(Modifier.width(DshSpacing.xs))
             Icon(
-                Icons.Rounded.SwapVert,
-                contentDescription = "Switch default",
+                DshIconVectors.ChevronsUpDownOutline,
+                contentDescription = stringResource(R.string.composer_switch_default),
                 tint = colors.accent,
                 modifier = Modifier.size(14.dp),
             )
         }
         if (selected) {
             Icon(
-                Icons.Rounded.Check,
-                contentDescription = "Current default",
+                DshIconVectors.CheckOutline,
+                contentDescription = stringResource(R.string.composer_current_default),
                 tint = colors.accent,
                 modifier = Modifier.size(14.dp),
             )
@@ -511,15 +538,20 @@ internal fun AttachmentRail(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    Icons.Rounded.Description,
+                    DshIconVectors.BrowseOutline,
                     contentDescription = null,
                     tint = tint,
                     modifier = Modifier.size(13.dp),
                 )
                 Spacer(Modifier.width(DshSpacing.sm))
                 Text(
-                    text = attachment.error
-                        ?: if (attachment.receiptId == null) "${attachment.name} · uploading…" else attachment.name,
+                    // The host's own error text wins when there is one; a chip with no
+                    // receipt yet says so in the reader's language.
+                    text = attachment.error ?: if (attachment.receiptId == null) {
+                        stringResource(R.string.composer_attachment_uploading, attachment.name)
+                    } else {
+                        attachment.name
+                    },
                     style = DshType.micro,
                     color = tint,
                     maxLines = 1,
@@ -527,8 +559,8 @@ internal fun AttachmentRail(
                 )
                 Spacer(Modifier.width(DshSpacing.sm))
                 Icon(
-                    Icons.Rounded.Close,
-                    contentDescription = "Remove attachment",
+                    DshIconVectors.CloseOutline,
+                    contentDescription = stringResource(R.string.composer_remove_attachment),
                     tint = colors.labelTertiary,
                     modifier = Modifier
                         .size(18.dp)

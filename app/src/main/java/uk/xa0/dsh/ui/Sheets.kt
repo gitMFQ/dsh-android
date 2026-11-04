@@ -17,14 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.CreateNewFolder
-import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -41,39 +38,40 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import uk.xa0.dsh.diag.DiagLazyList
-import uk.xa0.dsh.diag.diagDrag
-import uk.xa0.dsh.diag.diagOffset
+import java.security.cert.X509Certificate
+import java.util.Locale
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextButton
 import uk.xa0.dsh.AgentPresetOption
 import uk.xa0.dsh.ContextBreakdown
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.ModelOption
 import uk.xa0.dsh.PermissionOption
-import uk.xa0.dsh.model.WorkspaceItem
+import uk.xa0.dsh.diag.DiagLazyList
+import uk.xa0.dsh.diag.diagDrag
+import uk.xa0.dsh.diag.diagOffset
 import uk.xa0.dsh.model.ConnectionRestart
 import uk.xa0.dsh.model.HostVersion
 import uk.xa0.dsh.model.ModelChoice
 import uk.xa0.dsh.model.RouterProbeResult
 import uk.xa0.dsh.model.RouterTarget
+import uk.xa0.dsh.model.WorkspaceItem
 import uk.xa0.dsh.net.AcceptedCert
 import uk.xa0.dsh.net.CertReadout
 import uk.xa0.dsh.net.DoorFault
+import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.components.DshTextField
-import uk.xa0.dsh.ui.settings.MeSettingsActions
-import uk.xa0.dsh.ui.settings.MeSettingsState
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.TextButton
 import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
 import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
 import uk.xa0.dsh.ui.overlay.ConfirmTone
 import uk.xa0.dsh.ui.overlay.DshDialog
 import uk.xa0.dsh.ui.overlay.DshSheet
+import uk.xa0.dsh.ui.settings.MeSettingsActions
+import uk.xa0.dsh.ui.settings.MeSettingsState
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
-import java.security.cert.X509Certificate
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -359,7 +357,7 @@ fun ModelSheet(
                                 }
                                 if (isSelected) {
                                     Icon(
-                                        Icons.Rounded.Check,
+                                        DshIconVectors.CheckOutline,
                                         contentDescription = null,
                                         tint = colors.accent,
                                         modifier = Modifier.size(16.dp),
@@ -487,7 +485,7 @@ fun WorkspaceSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        Icons.Rounded.Folder,
+                        DshIconVectors.FolderOpenOutline,
                         contentDescription = null,
                         tint = colors.labelSecondary,
                         modifier = Modifier.size(15.dp),
@@ -513,7 +511,7 @@ fun WorkspaceSheet(
                     }
                     if (selected) {
                         Icon(
-                            Icons.Rounded.Check,
+                            DshIconVectors.CheckOutline,
                             contentDescription = null,
                             tint = colors.accent,
                             modifier = Modifier.size(16.dp),
@@ -563,7 +561,7 @@ fun WorkspaceSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        Icons.Rounded.CreateNewFolder,
+                        DshIconVectors.ProjectAddOutline,
                         contentDescription = null,
                         tint = colors.labelSecondary,
                         modifier = Modifier.size(15.dp),
@@ -681,7 +679,7 @@ fun PermissionSheet(
                     }
                     if (selected) {
                         Icon(
-                            Icons.Rounded.Check,
+                            DshIconVectors.CheckOutline,
                             contentDescription = null,
                             tint = colors.accent,
                             modifier = Modifier.size(16.dp),
@@ -809,7 +807,7 @@ fun AgentPresetSheet(
                         }
                         if (selected) {
                             Icon(
-                                Icons.Rounded.Check,
+                                DshIconVectors.CheckOutline,
                                 contentDescription = null,
                                 tint = colors.accent,
                                 modifier = Modifier.size(16.dp),

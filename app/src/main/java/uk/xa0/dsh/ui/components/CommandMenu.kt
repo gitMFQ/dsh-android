@@ -16,20 +16,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AttachFile
-import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.Compress
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.RateReview
-import androidx.compose.material.icons.rounded.Security
-import androidx.compose.material.icons.rounded.SmartToy
-import androidx.compose.material.icons.rounded.Storage
-import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.rounded.Description
 import uk.xa0.dsh.HostCommand
 import uk.xa0.dsh.ReferenceCandidate
 import androidx.compose.runtime.Composable
@@ -92,14 +81,14 @@ fun composerCommandEntries(host: List<HostCommand>): List<CommandEntry> {
         name = "file",
         label = "File",
         description = "Add a file or image to this message",
-        icon = Icons.Rounded.AttachFile,
+        icon = DshIconVectors.PaperclipOutline,
         section = sectionFor("file"),
     )
     rows += CommandEntry(
         name = "model",
         label = "Model",
         description = "Select the model for this conversation",
-        icon = Icons.Rounded.Storage,
+        icon = DshIconVectors.DatabaseOutline,
         section = sectionFor("model"),
     )
     return sectionRows(rows)
@@ -135,15 +124,15 @@ private fun commandLabel(name: String): String =
  * seen still gets a glyph, so every row lines up with the rest.
  */
 private fun commandIcon(name: String): ImageVector = when (name) {
-    "file" -> Icons.Rounded.AttachFile
-    "goal" -> Icons.Rounded.Flag
-    "plan" -> Icons.Rounded.Checklist
+    "file" -> DshIconVectors.PaperclipOutline
+    "goal" -> DshIconVectors.GoalOutline
+    "plan" -> DshIconVectors.ChecklistOutline
     "feedback" -> Icons.Rounded.RateReview
-    "compact" -> Icons.Rounded.Compress
-    "permission" -> Icons.Rounded.Security
-    "model" -> Icons.Rounded.Storage
-    "export" -> Icons.Rounded.Download
-    else -> Icons.Rounded.Terminal
+    "compact" -> DshIconVectors.CompactOutline
+    "permission" -> DshIconVectors.ShieldOutline
+    "model" -> DshIconVectors.DatabaseOutline
+    "export" -> DshIconVectors.DownloadOutline
+    else -> DshIconVectors.CodeOutline
 }
 
 /**
@@ -306,9 +295,9 @@ private fun ReferenceSection(
         ) {
             Icon(
                 imageVector = when (entry.kind) {
-                    "directory" -> Icons.Rounded.Folder
-                    "session" -> Icons.Rounded.SmartToy
-                    else -> Icons.Rounded.Description
+                    "directory" -> DshIconVectors.FolderOpenOutline
+                    "session" -> DshIconVectors.AgentPresetOutline
+                    else -> DshIconVectors.BrowseOutline
                 },
                 contentDescription = null,
                 tint = colors.labelTertiary,

@@ -10,10 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.diag.CrashLog
 import uk.xa0.dsh.diag.CrashReport
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.list.SegmentedColumn
 import uk.xa0.dsh.ui.list.SegmentedListItem
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -175,7 +172,7 @@ private fun CrashRow(
             },
             trailing = {
                 Icon(
-                    imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                    imageVector = if (expanded) DshIconVectors.ChevronUpOutline else DshIconVectors.ChevronDownOutline,
                     contentDescription = if (expanded) "Collapse report" else "Expand report",
                     tint = colors.labelTertiary,
                     modifier = Modifier.size(18.dp),
@@ -200,9 +197,9 @@ private fun CrashRow(
             ) {
                 ActionChip("Copy", Icons.Rounded.BugReport, onCopy)
                 Spacer(Modifier.width(DshSpacing.sm))
-                ActionChip("Share", Icons.Rounded.Share, onShare)
+                ActionChip("Share", DshIconVectors.ShareOutline, onShare)
                 Spacer(Modifier.width(DshSpacing.sm))
-                ActionChip("Delete", Icons.Rounded.Delete, onDelete)
+                ActionChip("Delete", DshIconVectors.TrashOutline, onDelete)
             }
         }
     }
@@ -218,7 +215,7 @@ private fun ClearRow(onClear: () -> Unit) {
                 onClick = onClear,
                 leading = {
                     Icon(
-                        Icons.Rounded.Delete,
+                        DshIconVectors.TrashOutline,
                         contentDescription = null,
                         tint = colors.error,
                         modifier = Modifier.size(20.dp),

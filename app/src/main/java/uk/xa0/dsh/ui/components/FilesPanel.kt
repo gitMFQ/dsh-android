@@ -4,6 +4,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -20,20 +22,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.InsertDriveFile
-import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.Sort
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -51,6 +49,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -84,6 +86,7 @@ import uk.xa0.dsh.model.PreviewLine
 import uk.xa0.dsh.model.SessionFile
 import uk.xa0.dsh.model.WorkspaceEntry
 import uk.xa0.dsh.model.WorkspaceEntryKind
+import uk.xa0.dsh.model.WorkspaceCrumb
 import uk.xa0.dsh.model.WorkspaceExplorer
 import uk.xa0.dsh.model.formatSize
 import uk.xa0.dsh.model.isMarkdownPath
@@ -91,8 +94,14 @@ import uk.xa0.dsh.model.previewFormatOf
 import uk.xa0.dsh.model.previewLanguageOf
 import uk.xa0.dsh.model.WorkspaceFileLoader
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.markdown.MarkdownText
 import uk.xa0.dsh.ui.markdown.highlightCodeLine
+import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
+import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
+import uk.xa0.dsh.ui.overlay.ConfirmTone
 import uk.xa0.dsh.ui.shortenPath
 import uk.xa0.dsh.ui.theme.DshColors
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -173,6 +182,14 @@ data class ExplorerWiring(
  *    in the preview header. It is wired only by the parent that has a session to
  *    read from; a panel without one simply does not offer it, rather than drawing
  *    a control that cannot work.
+ *  - [onSaveFile] is the write half, and it is the one new capability this panel
+ *    gained: a text page the host delivered in full opens in a monospace editor, and
+ *    Save asks once and then hands `(path, text)` back. A windowed or truncated page
+ *    is deliberately *not* editable — saving it would write a part of the file back
+ *    over the whole of it — and neither is a picture or a failed read. Null draws no
+ *    Edit control at all.
+ *  - [backdrop] is the panel’s own glass, sampled by the header pills. Null paints
+ *    the flat material, which is what every caller that has not wired one gets.
  *
  * The preview draws a file three ways, and says which: a document's *rendering*
  * (Markdown), a document's source with its code coloured, and a picture. Rendering
@@ -214,6 +231,30 @@ fun FilesPanel(
     onSelect: ((SessionFile) -> Unit)? = null,
     /** The workspace listing, when the parent has a host to list with. */
     explorer: ExplorerWiring? = null,
+    /**
+     * Writes a file back: `(path, text)`, with the path exactly as the preview
+     * names it. Null draws no Edit control at all.
+     *
+     * Optional for the same reason [loader] and [downloader] are: this panel is
+     * host-free data-in / callback-out, and a caller with no write channel must not
+     * be offered a button that cannot work. It also keeps every existing caller and
+     * test source-compatible — the parameter defaults to null.
+     *
+     * The panel does not wait for the result and does not pretend the write
+     * happened: it leaves edit mode and lets the parent’s own reload decide what the
+     * file now says. A write that fails therefore keeps the previous preview rather
+     * than showing text the host never stored.
+     */
+    onSaveFile: ((path: String, text: String) -> Unit)? = null,
+    /**
+     * The backdrop the panel’s glass header samples, or null on the flat tiers.
+     *
+     * A *panel* backdrop rather than the screen’s: the header floats over this pane,
+     * so what it should blur is the file list under it, not the conversation behind
+     * the pane. Null is the honest answer for a caller that never wired one, and the
+     * header then paints the flat material exactly as the rest of the chrome does.
+     */
+    backdrop: GlassBarBackdrop? = null,
 ) {
     val colors = DshTheme.colors
     val canExplore = explorer != null && root != null
@@ -327,7 +368,6 @@ fun FilesPanel(
                         }
                     },
                 )
-                Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.borderL1))
             }
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 val list: @Composable (Modifier) -> Unit = { listModifier ->
@@ -346,6 +386,7 @@ fun FilesPanel(
                             modifier = listModifier,
                             tree = explorer.tree,
                             onToggle = explorer.onToggle,
+                            backdrop = backdrop,
                         )
                     } else {
                         FileListPane(
@@ -357,6 +398,7 @@ fun FilesPanel(
                                 onSelect?.invoke(file)
                             },
                             modifier = listModifier,
+                            backdrop = backdrop,
                         )
                     }
                 }
@@ -372,6 +414,8 @@ fun FilesPanel(
                             showBack = false,
                             onBack = {},
                             onRetry = retry,
+                            onSaveFile = onSaveFile,
+                            backdrop = backdrop,
                             modifier = Modifier.weight(0.58f).fillMaxHeight(),
                         )
                     }
@@ -386,6 +430,8 @@ fun FilesPanel(
                         showBack = true,
                         onBack = { selected = null },
                         onRetry = retry,
+                        onSaveFile = onSaveFile,
+                        backdrop = backdrop,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -395,41 +441,64 @@ fun FilesPanel(
 }
 
 /**
- * This session / Browse, as two pills.
+ * This session / Browse, as one segmented capsule.
  *
- * The selected one is drawn as a filled pill rather than by tint alone, because
- * a phone in sunlight and a reader who cannot separate two greys both need a
- * shape to read, not a hue.
+ * The selected half is a filled shape rather than a tint alone, because a phone in
+ * sunlight and a reader who cannot separate two greys both need a shape to read, not
+ * a hue. The two halves are equal-width inside one track so the control reads as a
+ * single switch instead of two loose words.
+ *
+ * The track is deliberately *not* glass: it sits directly under the panel's own glass
+ * header, and two sheets of the same material stacked on each other read as one thick
+ * slab with a seam. The track is the recessed fill the app already uses for grouped
+ * controls, with the selected half lifted to `bgLayer1`.
  */
 @Composable
-private fun FilesModeTabs(browse: Boolean, onBrowse: (Boolean) -> Unit) {
+private fun FilesModeTabs(
+    browse: Boolean,
+    onBrowse: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = DshTheme.colors
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .height(38.dp)
-            .padding(horizontal = DshSpacing.lg),
+            .padding(horizontal = DshSpacing.lg, vertical = DshSpacing.sm)
+            .clip(RoundedCornerShape(DshRadius.pill))
+            .background(colors.codeBlock)
+            .border(0.5.dp, colors.borderL1, RoundedCornerShape(DshRadius.pill))
+            .padding(DshSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(DshSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(DshSpacing.xxs),
     ) {
-        ModeTab("This session", selected = !browse) { onBrowse(false) }
-        ModeTab("Browse", selected = browse) { onBrowse(true) }
+        ModeTab("This session", selected = !browse, modifier = Modifier.weight(1f)) { onBrowse(false) }
+        ModeTab("Browse", selected = browse, modifier = Modifier.weight(1f)) { onBrowse(true) }
     }
 }
 
 @Composable
-private fun ModeTab(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun ModeTab(
+    text: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     val colors = DshTheme.colors
-    Text(
-        text = text,
-        style = DshType.labelLarge,
-        color = if (selected) colors.labelPrimary else colors.labelTertiary,
-        maxLines = 1,
-        modifier = Modifier
+    Box(
+        modifier
             .clip(RoundedCornerShape(DshRadius.pill))
-            .background(if (selected) colors.sidebarItemActive else colors.bgBase)
+            .background(if (selected) colors.bgLayer1 else Color.Transparent)
             .clickableNoRipple(onClick = onClick)
-            .padding(horizontal = DshSpacing.md, vertical = DshSpacing.xxs),
-    )
+            .padding(vertical = DshSpacing.sm),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = DshType.labelMedium,
+            color = if (selected) colors.labelPrimary else colors.labelTertiary,
+            maxLines = 1,
+        )
+    }
 }
 
 /**
@@ -453,6 +522,8 @@ private fun ExplorerPane(
     modifier: Modifier = Modifier,
     tree: WorkspaceTreeState? = null,
     onToggle: ((String) -> Unit)? = null,
+    /** The panel's own backdrop, sampled by the header pills. Null paints flat. */
+    backdrop: GlassBarBackdrop? = null,
 ) {
     val colors = DshTheme.colors
     var showHidden by remember { mutableStateOf(false) }
@@ -493,157 +564,71 @@ private fun ExplorerPane(
             .isNotEmpty()
     }
     val clipboard = LocalClipboardManager.current
+    var filtering by rememberSaveable(current) { mutableStateOf(query.isNotEmpty()) }
+    val atRoot = current.isEmpty()
+    val parent = current.substringBeforeLast('/', missingDelimiterValue = "")
+    // The path as the host spells it, which is what a tool call or a shell command in
+    // this workspace needs. The breadcrumb is shortened for reading; this is the one
+    // place the exact string is available.
+    val exactPath = if (current.isEmpty()) root else "$root/$current"
 
     Column(modifier) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .padding(horizontal = DshSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                Modifier.weight(1f).horizontalScroll(crumbScroll),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                WorkspaceExplorer.crumbs(current, WorkspaceExplorer.basename(root))
-                    .forEachIndexed { index, crumb ->
-                        if (index > 0) {
-                            Icon(
-                                Icons.Rounded.ChevronRight,
-                                contentDescription = null,
-                                tint = colors.labelCaption,
-                                modifier = Modifier.size(12.dp),
-                            )
-                        }
-                        Text(
-                            text = crumb.name,
-                            style = DshType.bodySmall,
-                            color = if (crumb.path == current) colors.labelPrimary else colors.labelSecondary,
-                            maxLines = 1,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(DshRadius.sm))
-                                .clickableNoRipple { onList(crumb.path) }
-                                .padding(horizontal = DshSpacing.xs, vertical = DshSpacing.xxs),
-                        )
-                    }
-            }
-            // The one invalidation. The endpoint has no watch the tree subscribes
-            // to, so a file the session has just written appears only after this.
-            Text(
-                text = "Reload",
-                style = DshType.bodySmall,
-                color = colors.link,
-                maxLines = 1,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(DshRadius.sm))
-                    .clickableNoRipple(onClick = onReload)
-                    .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xs),
+        // The header is the glass: one pill carrying where you are and one carrying
+        // what you can do. The old row put Reload, the breadcrumb, Up, Copy path, the
+        // sort chip, the filter box and the hidden toggle on four stacked lines, which
+        // read as a form rather than as a file browser.
+        Column(Modifier.padding(horizontal = DshSpacing.lg, vertical = DshSpacing.sm)) {
+            FilesGlassHeader(
+                backdrop = backdrop,
+                crumbs = WorkspaceExplorer.crumbs(current, WorkspaceExplorer.basename(root)),
+                current = current,
+                onCrumb = onList,
+                crumbScroll = crumbScroll,
             )
-        }
-
-        // The level's toolbar: where you can go, what you can do with the path, and
-        // how the rows are arranged.
-        //
-        // "Up" is drawn as a control rather than left to the breadcrumb because the
-        // breadcrumb's segments are only as wide as their names, and on a deep path
-        // the ancestor a reader wants is the one scrolled off the left edge. It is
-        // disabled — not hidden — at the workspace root: the host confines
-        // `workspaceFiles/list` to the session's root, so there is genuinely nowhere
-        // above it, and a control that vanishes at one level teaches the reader that
-        // it cannot be relied on.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DshSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
-        ) {
-            val parent = current.substringBeforeLast('/', missingDelimiterValue = "")
-            val atRoot = current.isEmpty()
-            ExplorerAction(
-                label = "Up",
-                enabled = !atRoot,
-                onClick = { onList(parent) },
-            )
-            // The path as the host spells it, which is what a tool call or a shell
-            // command in this workspace needs. The breadcrumb above is shortened for
-            // reading; this is the one place the exact string is available.
-            ExplorerAction(
-                label = "Copy path",
-                enabled = listing != null,
-                onClick = {
-                    val exact = if (current.isEmpty()) root else "$root/$current"
-                    clipboard.setText(AnnotatedString(exact))
-                },
-            )
-            Spacer(Modifier.weight(1f))
-            // Three orders, as a cycling chip rather than a menu: with three values and
-            // no other option on the row, a popup costs two taps to change one word.
-            ExplorerAction(
-                label = when (order) {
-                    ExplorerOrder.NAME -> "Name"
-                    ExplorerOrder.SIZE -> "Size"
-                    ExplorerOrder.RECENT -> "Recent"
-                },
-                enabled = true,
-                active = order != ExplorerOrder.NAME,
-                onClick = {
+            Spacer(Modifier.height(DshSpacing.sm))
+            FilesToolbar(
+                backdrop = backdrop,
+                atRoot = atRoot,
+                listing = listing != null,
+                order = order,
+                showHidden = showHidden,
+                filtering = filtering,
+                onUp = { onList(parent) },
+                onReload = onReload,
+                onCopyPath = { clipboard.setText(AnnotatedString(exactPath)) },
+                onCycleOrder = {
+                    // Three orders, as a cycling chip rather than a menu: with three
+                    // values and no other option on the row, a popup costs two taps to
+                    // change one word.
                     order = when (order) {
                         ExplorerOrder.NAME -> ExplorerOrder.SIZE
                         ExplorerOrder.SIZE -> ExplorerOrder.RECENT
                         ExplorerOrder.RECENT -> ExplorerOrder.NAME
                     }
                 },
+                onToggleHidden = { showHidden = !showHidden },
+                onToggleFilter = { filtering = !filtering },
             )
-        }
-
-        // The filter. Only drawn once the level has something to filter: an empty
-        // directory with a search box over it reads as a search that failed.
-        if (levelHasRows) {
-            DshTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = "Filter this directory",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = DshSpacing.lg, vertical = DshSpacing.xs),
-                minHeight = 36.dp,
-                verticalPadding = DshSpacing.sm,
-                keyboardCapitalization = KeyboardCapitalization.None,
-                autoCorrect = false,
-                imeAction = ImeAction.Search,
-                onClear = { query = "" },
-                clearContentDescription = "Clear the filter",
-            )
-        }
-
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = DshSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(DshRadius.md))
-                    .clickableNoRipple { showHidden = !showHidden }
-                    .padding(horizontal = DshSpacing.xs, vertical = DshSpacing.xxs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Show hidden files",
-                    style = DshType.bodySmall,
-                    color = if (showHidden) colors.accent else colors.labelTertiary,
+            // The filter. Only drawn once the level has something to filter: an empty
+            // directory with a search box over it reads as a search that failed — and
+            // now it is also behind a toggle, so a reader who is only browsing never
+            // pays for the row.
+            if (filtering && (levelHasRows || query.isNotEmpty())) {
+                Spacer(Modifier.height(DshSpacing.sm))
+                DshTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = "Filter this directory",
+                    modifier = Modifier.fillMaxWidth(),
+                    minHeight = 36.dp,
+                    verticalPadding = DshSpacing.sm,
+                    keyboardCapitalization = KeyboardCapitalization.None,
+                    autoCorrect = false,
+                    imeAction = ImeAction.Search,
+                    onClear = { query = "" },
+                    clearContentDescription = "Clear the filter",
+                    shape = RoundedCornerShape(DshRadius.pill),
                 )
-                // The check trails the label so the row never shifts when it flips.
-                if (showHidden) {
-                    Spacer(Modifier.width(DshSpacing.xs))
-                    Icon(
-                        Icons.Rounded.Check,
-                        contentDescription = null,
-                        tint = colors.accent,
-                        modifier = Modifier.size(12.dp),
-                    )
-                }
             }
         }
 
@@ -743,30 +728,228 @@ private fun ExplorerPane(
     }
 }
 
-/** One word on the explorer's toolbar, with a disabled state that stays visible. */
+/**
+ * The explorer's header: the workspace, then the path inside it, as one glass pill.
+ *
+ * The path is a *breadcrumb* rather than a string: every segment is a tap that lists
+ * that level, which is how a reader climbs out of a deep directory without aiming at a
+ * small "Up". It scrolls sideways and follows its own end, because the segment a
+ * reader wants is the one furthest right, and on a narrow phone that is exactly the
+ * one that runs off the edge.
+ *
+ * The first segment is the workspace root itself — named by the host, not by this
+ * panel — because every level below it is workspace-*relative*: without it the pane
+ * could be listing any workspace at all, and the path would begin at a name that
+ * means nothing on its own.
+ */
 @Composable
-private fun ExplorerAction(
+private fun FilesGlassHeader(
+    backdrop: GlassBarBackdrop?,
+    crumbs: List<WorkspaceCrumb>,
+    current: String,
+    onCrumb: (String) -> Unit,
+    crumbScroll: ScrollState,
+    modifier: Modifier = Modifier,
+) {
+    val colors = DshTheme.colors
+    val shape = RoundedCornerShape(DshRadius.pill)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            // The lift first, as the bar does: a shadow is drawn outside the pane, and
+            // on a light appearance glassLift declines to draw one at all.
+            .glassLift(shape)
+            .liquidPane(backdrop, shape),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = DshIconVectors.FolderOpenOutline,
+            contentDescription = null,
+            tint = colors.labelTertiary,
+            modifier = Modifier.padding(start = DshSpacing.md, end = DshSpacing.xs).size(16.dp),
+        )
+        Row(
+            Modifier.weight(1f).horizontalScroll(crumbScroll),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            crumbs.forEachIndexed { index, crumb ->
+                if (index > 0) {
+                    Icon(
+                        DshIconVectors.ChevronRightOutline,
+                        contentDescription = null,
+                        tint = colors.labelCaption,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+                // The leaf is the level on screen and is drawn as the name of the
+                // place; every ancestor is a way back up, so it is the one that reads
+                // as a link. The root is always the first segment and is named by the
+                // host, not by this panel.
+                val leaf = crumb.path == current
+                Text(
+                    text = crumb.name,
+                    style = if (leaf) DshType.labelMedium else DshType.bodySmall,
+                    color = if (leaf) colors.labelPrimary else colors.labelSecondary,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(DshRadius.sm))
+                        .clickableNoRipple { onCrumb(crumb.path) }
+                        .padding(horizontal = DshSpacing.xs, vertical = DshSpacing.xxs),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * What you can do to the level, as a row of small glass pills.
+ *
+ * The controls are the same five the old three rows carried — up, reload, copy path,
+ * sort, hidden — plus the filter toggle, which used to be a full-width text field
+ * permanently on screen. They are pills rather than bare words because a word on a
+ * scrolling page has no edge: a reader cannot tell what the tap target is, and the row
+ * reads as prose rather than as controls.
+ *
+ * Sort cycles instead of opening a menu, and that is deliberate rather than lazy: there
+ * are three orders and no other option on this row, so a popup would cost two taps to
+ * change one word. The pill says which order is in force, so the state is never hidden.
+ */
+@Composable
+private fun FilesToolbar(
+    backdrop: GlassBarBackdrop?,
+    atRoot: Boolean,
+    listing: Boolean,
+    order: ExplorerOrder,
+    showHidden: Boolean,
+    filtering: Boolean,
+    onUp: () -> Unit,
+    onReload: () -> Unit,
+    onCopyPath: () -> Unit,
+    onCycleOrder: () -> Unit,
+    onToggleHidden: () -> Unit,
+    onToggleFilter: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
+    ) {
+        // "Up" is a control rather than left to the breadcrumb because the breadcrumb's
+        // segments are only as wide as their names, and on a deep path the ancestor a
+        // reader wants is the one scrolled off the left edge. It is disabled — not
+        // hidden — at the workspace root: the host confines workspaceFiles/list to the
+        // session's root, so there is genuinely nowhere above it, and a control that
+        // vanishes at one level teaches the reader that it cannot be relied on.
+        GlassToolPill(
+            backdrop = backdrop,
+            icon = DshIconVectors.ChevronUpOutline,
+            label = "Up",
+            enabled = !atRoot,
+            onClick = onUp,
+        )
+        // The one invalidation. The endpoint has no watch the tree subscribes to, so a
+        // file the session has just written appears only after this.
+        GlassToolPill(
+            backdrop = backdrop,
+            icon = DshIconVectors.RefreshOutline,
+            label = "Reload",
+            enabled = true,
+            onClick = onReload,
+        )
+        GlassToolPill(
+            backdrop = backdrop,
+            icon = DshIconVectors.CopyOutline,
+            label = "Copy path",
+            enabled = listing,
+            onClick = onCopyPath,
+        )
+        GlassToolPill(
+            backdrop = backdrop,
+            icon = Icons.Rounded.Sort,
+            label = when (order) {
+                ExplorerOrder.NAME -> "Name"
+                ExplorerOrder.SIZE -> "Size"
+                ExplorerOrder.RECENT -> "Recent"
+            },
+            enabled = true,
+            active = order != ExplorerOrder.NAME,
+            onClick = onCycleOrder,
+        )
+        GlassToolPill(
+            backdrop = backdrop,
+            icon = DshIconVectors.SlidersTwoOutline,
+            label = "Filter",
+            enabled = true,
+            active = filtering,
+            onClick = onToggleFilter,
+        )
+        GlassToolPill(
+            backdrop = backdrop,
+            icon = if (showHidden) Icons.Rounded.VisibilityOff else DshIconVectors.InspectOutline,
+            label = "Show hidden files",
+            enabled = true,
+            active = showHidden,
+            onClick = onToggleHidden,
+        )
+    }
+}
+
+/**
+ * One control on the explorer's toolbar: a small glass pill with a glyph and a word.
+ *
+ * The disabled state stays *visible* rather than disappearing, for the reason the old
+ * text action did: a control that vanishes at one level cannot be relied on. It is
+ * drawn in labelCaption and its click is not attached at all, so it cannot be fired by
+ * accident and is not reachable as an accessibility action.
+ */
+@Composable
+private fun GlassToolPill(
+    backdrop: GlassBarBackdrop?,
+    icon: ImageVector,
     label: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     active: Boolean = false,
+    /**
+     * The glyph's accessibility label, when the visible word is not enough.
+     *
+     * Most pills leave it null: the word beside the glyph already names the control,
+     * and a second label would make the row read as "Up, up". The back pill is the
+     * exception — it says "Files", which names the destination but not the action, and
+     * "Back to files" is the sentence a screen reader should say.
+     */
+    iconDescription: String? = null,
 ) {
     val colors = DshTheme.colors
+    val shape = RoundedCornerShape(DshRadius.pill)
     val tint = when {
         !enabled -> colors.labelCaption
         active -> colors.accent
         else -> colors.labelSecondary
     }
-    Text(
-        text = label,
-        style = DshType.bodySmall,
-        color = tint,
-        maxLines = 1,
-        modifier = Modifier
-            .clip(RoundedCornerShape(DshRadius.sm))
+    Row(
+        modifier
+            .height(30.dp)
+            .glassLift(shape)
+            .liquidPane(backdrop, shape)
             .then(if (enabled) Modifier.clickableNoRipple(onClick = onClick) else Modifier)
-            .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xs),
-    )
+            .padding(horizontal = DshSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = iconDescription,
+            tint = tint,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(text = label, style = DshType.bodySmall, color = tint, maxLines = 1)
+    }
 }
 
 /** One explorer row: kind icon, name, size, and the session's marks. */
@@ -821,7 +1004,7 @@ private fun ExplorerRow(
         // instead is the difference between a tree and a list of folders.
         if (expands) {
             Icon(
-                imageVector = if (open) Icons.Rounded.ExpandMore else Icons.Rounded.ChevronRight,
+                imageVector = if (open) DshIconVectors.ChevronDownOutline else DshIconVectors.ChevronRightOutline,
                 contentDescription = if (open) "Collapse" else "Expand",
                 tint = colors.labelTertiary,
                 modifier = Modifier.size(14.dp),
@@ -832,7 +1015,7 @@ private fun ExplorerRow(
             Spacer(Modifier.size(14.dp))
         }
         Icon(
-            imageVector = if (directory) Icons.Rounded.Folder else fileIcon(entry.name),
+            imageVector = if (directory) DshIconVectors.FolderOpenOutline else fileIcon(entry.name),
             contentDescription = null,
             tint = if (openable) colors.labelTertiary else colors.labelCaption,
             modifier = Modifier.size(16.dp),
@@ -869,14 +1052,14 @@ private fun ExplorerRow(
             )
 
             row.children == TreeChildren.FAILED -> Icon(
-                Icons.Rounded.Warning,
+                DshIconVectors.WarningTriangleOutline,
                 contentDescription = row.failure ?: "Could not list this directory",
                 tint = colors.warn,
                 modifier = Modifier.size(14.dp),
             )
 
             directory && !expands -> Icon(
-                Icons.Rounded.ChevronRight,
+                DshIconVectors.ChevronRightOutline,
                 contentDescription = null,
                 tint = colors.labelCaption,
                 modifier = Modifier.size(14.dp),
@@ -955,7 +1138,7 @@ private fun FilesEmptyState() {
         verticalArrangement = Arrangement.spacedBy(DshSpacing.sm),
     ) {
         Icon(
-            imageVector = Icons.Rounded.InsertDriveFile,
+            imageVector = DshIconVectors.DeliverDoc,
             contentDescription = null,
             tint = colors.labelCaption,
             modifier = Modifier.size(28.dp),
@@ -970,7 +1153,7 @@ private fun FilesEmptyState() {
     }
 }
 
-/** The touch list: header crumb over a flat, first-seen file order. */
+/** The touch list: a glass header pill over a flat, first-seen file order. */
 @Composable
 private fun FileListPane(
     files: List<SessionFile>,
@@ -978,34 +1161,47 @@ private fun FileListPane(
     selectedPath: String?,
     onSelect: (SessionFile) -> Unit,
     modifier: Modifier = Modifier,
+    /** The panel's backdrop, sampled by the header pill. Null paints flat. */
+    backdrop: GlassBarBackdrop? = null,
 ) {
     val colors = DshTheme.colors
     Column(modifier) {
+        val shape = RoundedCornerShape(DshRadius.pill)
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(38.dp)
-                .padding(horizontal = DshSpacing.lg),
+                .padding(horizontal = DshSpacing.lg, vertical = DshSpacing.sm)
+                .height(44.dp)
+                .glassLift(shape)
+                .liquidPane(backdrop, shape),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Icon(
+                imageVector = DshIconVectors.DeliverDoc,
+                contentDescription = null,
+                tint = colors.labelTertiary,
+                modifier = Modifier.padding(start = DshSpacing.md, end = DshSpacing.xs).size(16.dp),
+            )
             if (root != null) {
-                PathCrumb(root, Modifier.weight(1f))
+                PathCrumb(root, Modifier.weight(1f).padding(end = DshSpacing.sm))
             } else {
                 Text(
                     text = "Files",
-                    style = DshType.titleSmall,
+                    style = DshType.labelMedium,
                     color = colors.labelPrimary,
                     modifier = Modifier.weight(1f),
                 )
             }
+            // The count is a fact about *this list*, and it is the one thing the header
+            // can say that the rows cannot: how many there are before you scroll.
             Text(
                 text = if (files.size == 1) "1 file" else "${files.size} files",
                 style = DshType.bodySmall,
                 color = colors.labelTertiary,
                 maxLines = 1,
+                modifier = Modifier.padding(end = DshSpacing.md),
             )
         }
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.borderL1))
         val listState = rememberLazyListState()
         DiagLazyList("files:tree", listState)
         LazyColumn(
@@ -1020,7 +1216,6 @@ private fun FileListPane(
         }
     }
 }
-
 /** One touched file: name, touch badges, and the path's directory tail. */
 @Composable
 private fun FileRow(file: SessionFile, selected: Boolean, onSelect: () -> Unit) {
@@ -1106,11 +1301,18 @@ private fun PreviewPane(
      * is not always the path on screen — the caller already holds that key.
      */
     onRetry: () -> Unit,
+    /** Writes the edited text back; null draws no Edit control at all. */
+    onSaveFile: ((path: String, text: String) -> Unit)? = null,
+    /** The panel's backdrop, sampled by the preview's own header pills. */
+    backdrop: GlassBarBackdrop? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
     val ready = preview as? FilePreview.Ready
     val picture = preview as? FilePreview.Image
+    // Bound to a local before any lambda captures it: a nullable parameter of function
+    // type does not smart-cast once a composable lambda holds it.
+    val save = onSaveFile
     // SVG opens as the drawing; the toggle is the way to the markup. Defaulted per
     // *path* so switching files does not carry the last file's choice over.
     var svgAsImage by rememberSaveable(path) { mutableStateOf(true) }
@@ -1125,67 +1327,122 @@ private fun PreviewPane(
     // control's own label is one word, so the reason gets a line here.
     var downloadMessage by remember(path) { mutableStateOf<String?>(null) }
 
+    // ---- editing -------------------------------------------------------------
+    // The draft is keyed on the path *and* on the text the preview arrived with: a
+    // write that lands, or a re-read that brings a newer page, must not leave an
+    // editor holding the version it opened with. Discarding drops it back to the
+    // host's text, so re-entering an untouched file always starts from what it said.
+    var editing by remember(path) { mutableStateOf(false) }
+    var draft by remember(path, ready?.text) { mutableStateOf(ready?.text.orEmpty()) }
+    var confirmingSave by remember(path) { mutableStateOf(false) }
+    val dirty = editing && ready != null && draft != ready.text
+    // Only a text page the host delivered *in full* is editable. A windowed or
+    // truncated page is a part of the file: saving it would write the first two
+    // thousand lines back and silently delete the rest, which is the one failure a
+    // confirm dialog cannot rescue. A picture and a failed read are not text at all.
+    val editable = save != null && ready != null && !ready.windowed && !ready.truncated
+
+    // A save writes the user's real workspace, so it is confirmed once, in the app's
+    // own dialog vocabulary rather than a second Material one. The panel then leaves
+    // edit mode and stops speaking: it does not wait for the write and does not claim
+    // it landed, because the parent's reload is what decides what the file now says.
+    if (confirmingSave && path != null && save != null) {
+        ConfirmDialogHost(
+            show = true,
+            visuals = ConfirmDialogVisuals(
+                title = "Save changes?",
+                content = "This writes the edited text back to " +
+                    "${shortenPath(path)} on the machine running DSH. " +
+                    "Anything written to it since this preview was read is replaced.",
+                confirm = "Save",
+                confirmTone = ConfirmTone.Warning,
+                dismiss = "Cancel",
+            ),
+            onConfirm = {
+                confirmingSave = false
+                editing = false
+                save(path, draft)
+            },
+            onDismiss = { confirmingSave = false },
+        )
+    }
+
     Column(modifier) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .padding(horizontal = DshSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
-        ) {
-            if (showBack) {
-                Icon(
-                    imageVector = Icons.Rounded.ArrowBack,
-                    contentDescription = "Back to files",
-                    tint = colors.labelSecondary,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickableNoRipple(onClick = onBack)
-                        .padding(DshSpacing.xs)
-                        .size(16.dp),
-                )
-            }
-            if (path != null) PathCrumb(path, Modifier.weight(1f))
-            // SVG is both a drawing and a document, and which one the reader wants
-            // depends on what they are doing — look at the icon, or read its path.
-            // The choice sits here rather than behind a second file row, and Markdown
-            // is the same shape of choice between a document and its source.
-            if (isSvg) {
-                ViewToggle(
-                    label = if (svgAsImage) "Source" else "Image",
-                    onToggle = { svgAsImage = !svgAsImage },
-                )
-            }
-            if (isMarkdown) {
-                ViewToggle(
-                    label = if (markdownRendered) "Source" else "Rendered",
-                    onToggle = { markdownRendered = !markdownRendered },
-                )
-            }
-            // A claim, drawn as a chip: what this app thinks the file is. It is shown
-            // whether or not anything is coloured, so a misnamed file's reader can see
-            // the claim the panel is making and check it against the source.
-            language?.let { lang ->
-                Text(lang, style = DshType.bodySmall, color = colors.labelTertiary, maxLines = 1)
-            }
-            if (ready != null && ready.lines > 0) {
-                CopyPreviewButton(ready.text)
-            }
-            // Offered for whatever is selected, including a file whose *preview* failed:
-            // a PDF or a binary is exactly what the text read refuses, and a download is
-            // the only way to get it onto the phone. It reads and writes nothing until
-            // it is tapped, and every download it starts dies with this composition —
-            // the panel's own close is therefore also the download's cancel.
-            if (path != null && downloader != null) {
-                FileDownloadControl(
-                    path = path,
-                    downloader = downloader,
-                    onMessage = { downloadMessage = it },
-                )
+        // The preview's own header: the file as a glass pill, then its controls.
+        Column(Modifier.padding(horizontal = DshSpacing.lg, vertical = DshSpacing.sm)) {
+            PreviewGlassHeader(path = path, backdrop = backdrop)
+            Spacer(Modifier.height(DshSpacing.sm))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
+            ) {
+                if (showBack && !editing) {
+                    GlassToolPill(
+                        backdrop = backdrop,
+                        icon = DshIconVectors.ChevronLeftOutline,
+                        label = "Files",
+                        enabled = true,
+                        onClick = onBack,
+                        iconDescription = "Back to files",
+                    )
+                }
+                // SVG is both a drawing and a document, and which one the reader wants
+                // depends on what they are doing — look at the icon, or read its path.
+                // The choice sits here rather than behind a second file row, and Markdown
+                // is the same shape of choice between a document and its source.
+                if (isSvg && !editing) {
+                    GlassToolPill(
+                        backdrop = backdrop,
+                        icon = Icons.Rounded.Image,
+                        label = if (svgAsImage) "Source" else "Image",
+                        enabled = true,
+                        onClick = { svgAsImage = !svgAsImage },
+                    )
+                }
+                if (isMarkdown && !editing) {
+                    GlassToolPill(
+                        backdrop = backdrop,
+                        icon = DshIconVectors.BrowseOutline,
+                        label = if (markdownRendered) "Source" else "Rendered",
+                        enabled = true,
+                        onClick = { markdownRendered = !markdownRendered },
+                    )
+                }
+                // A claim, drawn as a chip: what this app thinks the file is. It is shown
+                // whether or not anything is coloured, so a misnamed file's reader can see
+                // the claim the panel is making and check it against the source.
+                language?.let { lang ->
+                    Text(lang, style = DshType.bodySmall, color = colors.labelTertiary, maxLines = 1)
+                }
+                if (ready != null && ready.lines > 0 && !editing) {
+                    CopyPreviewButton(ready.text)
+                }
+                // The edit toggle exists only where a save channel does, and only for a
+                // page the host delivered whole — see `editable`.
+                if (editable && !editing) {
+                    GlassToolPill(
+                        backdrop = backdrop,
+                        icon = DshIconVectors.EditOutline,
+                        label = "Edit",
+                        enabled = true,
+                        onClick = { draft = ready?.text.orEmpty(); editing = true },
+                    )
+                }
+                // Offered for whatever is selected, including a file whose *preview*
+                // failed: a PDF or a binary is exactly what the text read refuses, and a
+                // download is the only way to get it onto the phone. It reads and writes
+                // nothing until it is tapped, and every download it starts dies with this
+                // composition — the panel's own close is therefore also its cancel.
+                if (path != null && downloader != null && !editing) {
+                    FileDownloadControl(
+                        path = path,
+                        downloader = downloader,
+                        onMessage = { downloadMessage = it },
+                    )
+                }
             }
         }
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.borderL1))
 
         downloadMessage?.let { message ->
             Text(
@@ -1225,6 +1482,37 @@ private fun PreviewPane(
                 Modifier.weight(1f).fillMaxWidth(),
             )
 
+            // The editor replaces every reading of the file, including the rendered one:
+            // a reader who is changing the source wants the source, not the page.
+            // The null test is written out rather than inherited from the branches above:
+            // a smart cast does not cross into a non-inline composable lambda, and this
+            // body reads the page from inside one.
+            editing && ready != null -> {
+                // Bound to a non-null local *here*, outside the content lambda: the
+                // page is read from inside two lambdas below, and a local val is the
+                // one thing a smart cast survives that far.
+                val page = ready
+                Column(Modifier.fillMaxSize()) {
+                    WindowBanner(page, rendered = false)
+                    FileEditor(
+                        text = draft,
+                        onTextChange = { draft = it },
+                        language = language,
+                        dirty = dirty,
+                        onCancel = {
+                            draft = page.text
+                            editing = false
+                        },
+                        onSave = { confirmingSave = true },
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        backdrop = backdrop,
+                    )
+                }
+            }
+
+            // Nothing to show and nothing being written: the file is genuinely empty.
+            // It is checked *after* the editor so an empty file can still be filled in,
+            // which is the one case where an editor over nothing is the point.
             ready.lines == 0 -> PreviewNote("This file is empty.", Modifier.weight(1f).fillMaxWidth())
 
             isSvg && svgAsImage -> SvgPreview(
@@ -1252,6 +1540,149 @@ private fun PreviewPane(
                         PreviewLineRow(line, highlight, colors)
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The file the preview is showing, as one glass pill.
+ *
+ * Directory in tertiary ink and the final segment in full ink, which is the web's own
+ * path row: the eye lands on the name and the directory is there to be checked. It is
+ * a *reading* rather than a breadcrumb — the preview names one file, and there is no
+ * level to climb to from here, because the list behind it is what moves.
+ */
+@Composable
+private fun PreviewGlassHeader(
+    path: String?,
+    backdrop: GlassBarBackdrop?,
+    modifier: Modifier = Modifier,
+) {
+    val colors = DshTheme.colors
+    val shape = RoundedCornerShape(DshRadius.pill)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .glassLift(shape)
+            .liquidPane(backdrop, shape),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = if (path == null) DshIconVectors.DeliverDoc else fileIcon(path),
+            contentDescription = null,
+            tint = colors.labelTertiary,
+            modifier = Modifier.padding(start = DshSpacing.md, end = DshSpacing.xs).size(16.dp),
+        )
+        if (path != null) {
+            PathCrumb(path, Modifier.weight(1f).padding(end = DshSpacing.md))
+        } else {
+            Text(
+                text = "No file selected",
+                style = DshType.bodySmall,
+                color = colors.labelTertiary,
+                modifier = Modifier.weight(1f).padding(end = DshSpacing.md),
+            )
+        }
+    }
+}
+
+/**
+ * The editable half of a text preview: a monospace field over the whole pane.
+ *
+ * Monospace rather than the prose body, because what is being edited is a file: the
+ * column alignment a reader has been looking at in the preview is the thing that makes
+ * a diff readable, and proportional text would lose it the moment the caret lands.
+ * Wrapping stays on for the same reason the preview wraps — the panel never scrolls
+ * sideways, and a minified line is not made editable by clipping it.
+ *
+ * The two controls say what they will do rather than "OK"/"Cancel". Save is disabled
+ * while nothing has changed, so a tap that would write the same bytes back is not
+ * offered; Discard throws away the *draft* and never touches the file.
+ */
+@Composable
+private fun FileEditor(
+    text: String,
+    onTextChange: (String) -> Unit,
+    language: String?,
+    dirty: Boolean,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+    modifier: Modifier = Modifier,
+    backdrop: GlassBarBackdrop? = null,
+) {
+    val colors = DshTheme.colors
+    val field = remember { FocusRequester() }
+    // The caret goes into the file on the first frame: the reader tapped Edit, and an
+    // editor that opens without focus makes them tap again before they can type.
+    LaunchedEffect(Unit) { runCatching { field.requestFocus() } }
+    Column(modifier) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = DshSpacing.lg, vertical = DshSpacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(DshSpacing.sm),
+        ) {
+            Text(
+                text = if (dirty) "Editing · unsaved changes" else "Editing",
+                style = DshType.micro,
+                color = if (dirty) colors.warn else colors.labelTertiary,
+                modifier = Modifier.weight(1f),
+            )
+            language?.let { lang ->
+                Text(lang, style = DshType.micro, color = colors.labelTertiary, maxLines = 1)
+            }
+            GlassToolPill(
+                backdrop = backdrop,
+                icon = DshIconVectors.CloseOutline,
+                label = "Discard",
+                enabled = true,
+                onClick = onCancel,
+            )
+            GlassToolPill(
+                backdrop = backdrop,
+                icon = Icons.Rounded.Save,
+                label = "Save",
+                enabled = dirty,
+                active = dirty,
+                onClick = onSave,
+            )
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = DshSpacing.lg)
+                .clip(RoundedCornerShape(DshRadius.card))
+                .background(colors.codeBlock)
+                .border(0.5.dp, colors.borderL1, RoundedCornerShape(DshRadius.card)),
+        ) {
+            // The scroll belongs to a container around the field, not to the field:
+            // a BasicTextField given verticalScroll grows to its content and then has
+            // nothing left to scroll, which leaves a long file unable to reach its
+            // own tail. The inner box is the viewport; the field is its content.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(DshSpacing.md),
+            ) {
+                BasicTextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    textStyle = DshType.codeSmall.copy(color = colors.labelPrimary),
+                    cursorBrush = SolidColor(colors.accent),
+                    // No autocorrect and no sentence capitalisation: this is source,
+                    // not prose, and an IME that capitalises the first letter of a line
+                    // or rewrites an identifier is editing the file behind the reader.
+                    // The keyboard *type* stays Text rather than Ascii, because a file
+                    // may hold CJK prose and an ASCII keyboard would hide half of it.
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrect = false,
+                    ),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field),
+                )
             }
         }
     }
@@ -1463,7 +1894,7 @@ private fun directoryOf(path: String): String {
  * icon and unknown to the reader. One table, one answer.
  */
 private fun fileIcon(path: String): ImageVector = when (previewFormatOf(path)) {
-    PreviewFormat.TEXT -> Icons.Rounded.Description
+    PreviewFormat.TEXT -> DshIconVectors.BrowseOutline
     else -> Icons.Rounded.Image
 }
 
@@ -1590,24 +2021,3 @@ private fun SvgPreview(markup: String, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * One tap between two readings of the same file: SVG as drawing or as markup, Markdown
- * as document or as source.
- *
- * [label] names the view the tap *goes to*, which is the convention the SVG control
- * already set, so the label is never ambiguous about where it leads.
- */
-@Composable
-private fun ViewToggle(label: String, onToggle: () -> Unit) {
-    val colors = DshTheme.colors
-    Text(
-        text = label,
-        style = DshType.bodySmall,
-        color = colors.link,
-        maxLines = 1,
-        modifier = Modifier
-            .clip(RoundedCornerShape(DshRadius.sm))
-            .clickableNoRipple(onClick = onToggle)
-            .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xs),
-    )
-}

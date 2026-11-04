@@ -20,8 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
@@ -29,44 +29,41 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 import uk.xa0.dsh.AppPhase
 import uk.xa0.dsh.FULL_ACCESS_PRESET
 import uk.xa0.dsh.PendingAttachment
 import uk.xa0.dsh.PendingKind
-import uk.xa0.dsh.ui.PluginsPage
-import uk.xa0.dsh.model.PluginInventory
-import uk.xa0.dsh.model.PluginEntry
-import uk.xa0.dsh.PluginInventoryState
 import uk.xa0.dsh.PermissionOption
+import uk.xa0.dsh.PluginInventoryState
 import uk.xa0.dsh.TerminalPhase
 import uk.xa0.dsh.TerminalUiState
 import uk.xa0.dsh.UiState
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.data.ThemeMode
-import uk.xa0.dsh.model.GeneralSettings
-import uk.xa0.dsh.model.HostSettings
-import uk.xa0.dsh.model.SettingsChoice
-import uk.xa0.dsh.model.SettingsField
-import uk.xa0.dsh.ui.settings.MeSettingsActions
-import uk.xa0.dsh.ui.settings.MeSettingsPage
-import uk.xa0.dsh.ui.settings.MeSettingsState
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.DrawerGrouping
+import uk.xa0.dsh.model.ExplorerState
 import uk.xa0.dsh.model.FileTouch
+import uk.xa0.dsh.model.GeneralSettings
+import uk.xa0.dsh.model.HostSettings
+import uk.xa0.dsh.model.PendingSessionTarget
+import uk.xa0.dsh.model.PluginEntry
+import uk.xa0.dsh.model.PluginInventory
 import uk.xa0.dsh.model.SessionFile
 import uk.xa0.dsh.model.SessionFiles
-import uk.xa0.dsh.model.PendingSessionTarget
 import uk.xa0.dsh.model.SessionHeader
-import uk.xa0.dsh.model.SessionStats
 import uk.xa0.dsh.model.SessionItem
+import uk.xa0.dsh.model.SessionStats
 import uk.xa0.dsh.model.SessionTarget
+import uk.xa0.dsh.model.SettingsChoice
+import uk.xa0.dsh.model.SettingsField
 import uk.xa0.dsh.model.StartupStep
-import uk.xa0.dsh.model.ExplorerState
 import uk.xa0.dsh.model.WorkspaceEntry
 import uk.xa0.dsh.model.WorkspaceEntryKind
+import uk.xa0.dsh.model.WorkspaceListPhase
 import uk.xa0.dsh.model.WorkspaceListing
 import uk.xa0.dsh.model.WorkspaceTreeState
-import uk.xa0.dsh.model.WorkspaceListPhase
 import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.term.SeatOption
 import uk.xa0.dsh.term.TerminalCellSize
@@ -76,30 +73,32 @@ import uk.xa0.dsh.term.TerminalSeat
 import uk.xa0.dsh.term.TerminalState
 import uk.xa0.dsh.ui.AboutContent
 import uk.xa0.dsh.ui.ChatActions
+import uk.xa0.dsh.ui.ChatPanel
+import uk.xa0.dsh.ui.ChatUiState
 import uk.xa0.dsh.ui.DESTINATION_ITEMS
 import uk.xa0.dsh.ui.Destination
 import uk.xa0.dsh.ui.ForceQuitDialog
-import uk.xa0.dsh.ui.ChatPanel
-import uk.xa0.dsh.ui.ChatUiState
-import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
-import uk.xa0.dsh.ui.glass.LocalGlassEnabled
-import uk.xa0.dsh.ui.ME_ENTRIES
 import uk.xa0.dsh.ui.MeSubPage
-import uk.xa0.dsh.ui.MeTab
 import uk.xa0.dsh.ui.MiuixProbe
-import uk.xa0.dsh.ui.PlaceholderTab
 import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.PermissionSheet
+import uk.xa0.dsh.ui.PlaceholderTab
+import uk.xa0.dsh.ui.PluginsPage
 import uk.xa0.dsh.ui.SessionsDrawer
+import uk.xa0.dsh.ui.SettingsDestination
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.TerminalPanel
-import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.ComposerAccessoryRail
 import uk.xa0.dsh.ui.components.ComposerDock
 import uk.xa0.dsh.ui.components.ExplorerWiring
 import uk.xa0.dsh.ui.components.FilesPanel
 import uk.xa0.dsh.ui.components.FullScreenComposer
+import uk.xa0.dsh.ui.glass.LocalGlassEnabled
+import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.nav.FloatingBottomBar
+import uk.xa0.dsh.ui.settings.MeSettingsActions
+import uk.xa0.dsh.ui.settings.MeSettingsPage
+import uk.xa0.dsh.ui.settings.MeSettingsState
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -1104,73 +1103,58 @@ class ScreenBaselineTest {
     }
 
     /**
-     * The Me page: identity on top, the settings tabs under it (3.3).
+     * The Settings page: a bar and one row per section.
      *
-     * A page of its own rather than a row inside a screen capture, because the two
-     * things worth pinning are its *shape* — a header that says whose account this is,
-     * then a list of tabs — and the fact that the tabs are reached by opening a page
-     * rather than by toggling a value.
-     *
-     * The balance is given as a string, not as a `BalanceState`: the page takes the
-     * figure it should draw, so a capture cannot accidentally depend on which state the
-     * read happened to be in when the baseline was recorded.
+     * This capture used to be the Me page. Me is gone — it existed to host the same eight
+     * settings cards behind a profile header — and Settings is now a destination with a
+     * *hierarchy*: the list enters a page, and Back goes up one level, which is the defect
+     * (rows that changed a tab strip instead of entering a page) this replaced.
      */
     @Test
-    fun meTab() {
-        capture("me-tab") {
-            MeTab(
-                username = "tony",
-                balanceText = "Balance · 12.34 CNY",
-                entries = ME_ENTRIES,
-                onOpen = {},
+    fun settingsPage() {
+        capture("settings-page") {
+            SettingsDestination(
+                state = MeSettingsState(themeMode = ThemeMode.LIGHT),
+                actions = MeSettingsActions(),
+                onOpenAbout = {},
             )
         }
     }
 
     /**
-     * The Me page in the dark appearance.
+     * The Settings list in the dark appearance.
      *
-     * This is the capture the AMOLED defect would have shown: `bgBase` is pure black
-     * there and `bgLayer1` is `#0A0A0A`, so a card filled with a layer token instead
-     * of `codeBlock` — the exact mistake 3.5b's segmented card made on white — becomes
-     * invisible on black instead. The page's four grouped cards and the nine rows in
-     * them are the most surface-dense screen in the app, which is why it is the one
-     * that catches a layering regression first.
+     * The row cards are `codeBlock`, not `bgLayer1`: on this app's light palette the
+     * three layer tokens are all pure white, and on AMOLED they are all near-black, so a
+     * card filled with a layer token disappears in both. This capture is what caught that
+     * once already.
      */
     @Test
-    fun meTabDark() {
-        capture("me-tab-dark", themeMode = ThemeMode.DARK) {
-            MeTab(
-                username = "tony",
-                balanceText = "Balance · 12.34 CNY",
-                entries = ME_ENTRIES,
-                onOpen = {},
+    fun settingsPageDark() {
+        capture("settings-page-dark", themeMode = ThemeMode.DARK) {
+            SettingsDestination(
+                state = MeSettingsState(themeMode = ThemeMode.DARK),
+                actions = MeSettingsActions(),
+                onOpenAbout = {},
             )
         }
     }
 
     /**
-     * The Me page in AMOLED — the appearance where a surface token that is *nearly*
-     * the background stops being visible at all.
+     * AMOLED as a *switch*: the same Dark appearance, with black surfaces.
      *
-     * `DARK` has `bgBase #151517` against `bgLayer1 #232324`: two greys close enough
-     * that a wrong token still reads as "a card, slightly off". AMOLED collapses that
-     * margin to `#000000` against `#0A0A0A`, which is where the distinction actually
-     * fails — and where 3.5b's `bgLayer1` card bug would have been caught immediately
-     * instead of after a baseline was recorded by hand and looked at.
-     *
-     * One capture, not a whole AMOLED set: this is the screen whose layering is the
-     * claim under test, and the other two dark captures already pin the palette's
-     * text and accent roles.
+     * The capture exists because the switch is the whole point of this change — AMOLED
+     * used to be an entry in the appearance list, which replaced the appearance instead of
+     * modifying it. Here the appearance is still Dark and the switch is on, which is a
+     * state the old model could not express.
      */
     @Test
-    fun meTabAmoled() {
-        capture("me-tab-amoled", themeMode = ThemeMode.AMOLED) {
-            MeTab(
-                username = "tony",
-                balanceText = "Balance · 12.34 CNY",
-                entries = ME_ENTRIES,
-                onOpen = {},
+    fun settingsPageAmoled() {
+        capture("settings-page-amoled", themeMode = ThemeMode.DARK) {
+            SettingsDestination(
+                state = MeSettingsState(themeMode = ThemeMode.DARK),
+                actions = MeSettingsActions(),
+                onOpenAbout = {},
             )
         }
     }

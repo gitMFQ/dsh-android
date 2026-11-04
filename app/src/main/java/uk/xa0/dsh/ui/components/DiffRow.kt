@@ -16,8 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -254,7 +252,7 @@ internal fun DiffCallRow(entry: ChatEntry.ToolCall, model: DiffCardModel) {
         ) {
             Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = if (expanded) Icons.Rounded.ExpandMore else Icons.Rounded.Edit,
+                    imageVector = if (expanded) DshIconVectors.ChevronDownOutline else DshIconVectors.EditOutline,
                     contentDescription = null,
                     tint = colors.labelTertiary,
                     modifier = Modifier.size(14.dp),
