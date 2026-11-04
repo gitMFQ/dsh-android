@@ -26,6 +26,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import uk.xa0.dsh.diag.BootBeacon
 import uk.xa0.dsh.diag.CrashLog
 import uk.xa0.dsh.diag.CrashReport
 import uk.xa0.dsh.diag.LaunchGuard
@@ -78,6 +79,36 @@ internal fun CrashLogSettingCards() {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val colors = DshTheme.colors
+
+    // The boot record first: it is the one thing that survives a crash with no report.
+    //
+    // A native SIGSEGV on the render thread writes no exception, leaves no tombstone on
+    // this ROM, and lands before the UI exists — so this list can be empty while the app
+    // is dying every launch. The beacon's last line is what turns "it closes" into "it
+    // closes at step N", and it is also on disk at
+    // Android/data/<pkg>/files/diag/boot.log for a reader whose app will not stay open.
+    val boot = remember { BootBeacon.read() }
+    if (boot.isNotEmpty()) {
+        SettingNote(
+            "Last launch, step by step. The last line is the last thing that succeeded — " +
+                "if the app closed, the step after it is the one that killed it.",
+        )
+        SegmentedColumn(
+            content = listOf(
+                {
+                    SegmentedListItem(
+                        headline = {
+                            Text(
+                                text = boot.trimEnd(),
+                                style = DshType.micro.copy(fontFamily = FontFamily.Monospace),
+                                color = colors.labelSecondary,
+                            )
+                        },
+                    )
+                },
+            ),
+        )
+    }
 
     if (reports.isEmpty()) {
         SettingNote("No crashes recorded on this device.")

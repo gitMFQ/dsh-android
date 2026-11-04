@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import uk.xa0.dsh.data.LiquidGlassLevel
+import uk.xa0.dsh.diag.BootBeacon
 import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.ui.BackGate
@@ -73,17 +74,23 @@ class MainActivity : ComponentActivity() {
         //
         // Here rather than in composition: the marker must be written once per process,
         // and it must be written before the first frame can crash, not after it.
+        BootBeacon.mark("activity.onCreate: begin")
         LaunchGuard.markStarted(this)
         enableEdgeToEdge()
+        BootBeacon.mark("activity: edge to edge")
         consume(intent)
         maybeAskForNotifications()
         reserveLeftEdgeForDrawer()
         paintWindowForStoredAppearance()
         paintSystemBarsForStoredAppearance()
 
+        BootBeacon.mark("activity: setContent")
         setContent {
+            BootBeacon.mark("composition: begin")
             val vm: DshViewModel = viewModel()
+            BootBeacon.mark("composition: view model")
             val ui by vm.ui.collectAsStateWithLifecycle()
+            BootBeacon.mark("composition: state collected")
 
             // The window behind Compose is painted once above and again here, so an
             // appearance change — or the system flipping light/dark under "follow the
@@ -218,6 +225,10 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(DshTheme.colors.bgBase),
                 ) {
+                    // The phase is the single most useful fact: a process that dies
+                    // before this line is a start-up fault, and one that dies after it
+                    // is a screen. Recorded once per phase change, not per frame.
+                    BootBeacon.mark("composition: phase=" + ui.phase)
                     when (ui.phase) {
                         AppPhase.LOADING -> StartupScreen(
                             step = ui.startupStep ?: StartupStep.FINDING_HOST,
@@ -242,7 +253,11 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        AppPhase.READY -> ChatScreen(vm)
+                        AppPhase.READY -> {
+                            BootBeacon.mark("composition: chat screen")
+                            ChatScreen(vm)
+                            BootBeacon.mark("composition: chat screen returned")
+                        }
                     }
                 }
             }

@@ -3,6 +3,7 @@ package uk.xa0.dsh
 import android.app.Application
 import android.os.Process
 import uk.xa0.dsh.data.ConfigStore
+import uk.xa0.dsh.diag.BootBeacon
 import uk.xa0.dsh.diag.CrashLog
 import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.diag.NativeCrashLog
@@ -50,6 +51,14 @@ class DshApplication : Application() {
     @Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
     override fun onCreate() {
         super.onCreate()
+        // The boot beacon first, before anything that can fail.
+        //
+        // The crash this project has been chasing for a day is a SIGSEGV on the render
+        // thread: no Java exception, no tombstone on this ROM, and it lands before the UI
+        // exists — so every report-based diagnostic came back empty. The beacon records
+        // what *succeeded* instead, so the last line on disk names the step that killed
+        // the process. See uk.xa0.dsh.diag.BootBeacon.
+        BootBeacon.begin(this)
         // The crash record, installed **first**.
         //
         // It used to be the last statement in this method, and that made it blind to
@@ -82,9 +91,13 @@ class DshApplication : Application() {
         // field is composed. The flag is a public static in foundation's internal flags
         // object, hence the suppression.
         androidx.compose.foundation.ComposeFoundationFlags.isNewContextMenuEnabled = false
+        BootBeacon.mark("config store: begin")
         configStore = ConfigStore(this)
+        BootBeacon.mark("config store: ready")
         client = DshClient(this)
+        BootBeacon.mark("client: ready")
         val config = configStore.load()
+        BootBeacon.mark("config: loaded")
         // The accepted certificates are the app's trust anchors, and the client is
         // what accepts one — so it is also what has to say when the set changed. The
         // store is the only thing that knows where that state lives, hence the hook.
@@ -93,7 +106,9 @@ class DshApplication : Application() {
         }
         client.setAcceptedCerts(config.acceptedCerts)
         client.applyConfig(config)
+        BootBeacon.mark("config: applied")
         Attention.ensureChannel(this)
+        BootBeacon.mark("notification channel: ready")
         registerActivityLifecycleCallbacks(foreground)
         // Latent scroll diagnostics: invisible, additive, and off the main
         // thread. See uk.xa0.dsh.diag.ScrollDiag for how to read them back.
@@ -105,6 +120,7 @@ class DshApplication : Application() {
                 runCatching { NativeCrashLog.capture(this) }
             }, "dsh-native-crash-read").start()
         }
+        BootBeacon.mark("application.onCreate: done")
     }
 
     /**
