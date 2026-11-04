@@ -120,13 +120,12 @@ fun rememberGlassEnabled(): Boolean = remember { supportsLiquidGlass }
  * offset that pushes a blurred copy of a shape out from under that shape while leaving it
  * visible at the edge.
  *
- * So on a light appearance the pane has **no shadow at all**. Its separation comes from the
- * hairline stroke [glassSurface] already draws: a defined edge is what makes a translucent pane
- * read as a surface, and it is the one device that cannot bleed through the fill.
- *
- * The dark appearance keeps the shadow, where it does real work — separating a pane from a
- * near-black page — and where the bleed that ruined the light appearance is invisible, because
- * the fill is dark too.
+ * **The light appearance does not go without.** It stacks two shadows instead of one: a tight
+ * 2dp rim with a 1dp offset, and a soft 10dp one at half the dark appearance's alpha. Two small
+ * shadows added in the narrow band outside the shape give the separation a light page needs —
+ * white on white has no other boundary — while neither is strong enough, alone or summed, to
+ * register through the fill the way the single 10dp one did. "底栏的阴影好像浅色模式看不到" is
+ * what one shadow with no light-mode branch produced.
  *
  * One function rather than a copy per surface because the bar and the composer are the same
  * material at two places on one screen; a divergence between them is the kind of thing nobody
@@ -134,17 +133,44 @@ fun rememberGlassEnabled(): Boolean = remember { supportsLiquidGlass }
  */
 @Composable
 fun Modifier.glassLift(shape: Shape): Modifier {
-    if (!DshTheme.colors.isDark) return this
+    // Both appearances lift now; only the strength differs.
+    //
+    // A light appearance used to decline, for the measured reason the long note above
+    // gives: a *centred* shadow bleeds through a translucent fill, and no offset small
+    // enough to still show at the edge was enough to stop it. The fix is not an offset,
+    // it is the second shadow: a tight, opaque one that only exists in the 4dp band
+    // outside the shape, plus a soft one the fill has already faded over by the time the
+    // shadow reaches it. A light page needs the lift more than a dark one does — white on
+    // white has no other separation at all — which is why the reported defect was
+    // "底栏的阴影好像浅色模式看不到".
+    val dark = DshTheme.colors.isDark
     return dropShadow(
         shape = shape,
         shadow = Shadow(
-            radius = 6.dp,
-            offset = DpOffset(0.dp, 4.dp),
+            radius = if (dark) 6.dp else 10.dp,
+            offset = DpOffset(0.dp, if (dark) 4.dp else 3.dp),
             color = Color.Black,
-            // Denser than the old 0.2: on a dark appearance the shadow is the only thing
-            // separating the pane from the page, and it no longer has to fight the fill.
-            alpha = 0.22f,
+            // Light is gentler per-shadow but there are two of them, and they overlap in
+            // the band just outside the edge — which is exactly where the separation is
+            // wanted, and well inside where the soft one would have shown through the fill.
+            alpha = if (dark) 0.22f else 0.10f,
         ),
+    ).then(
+        if (dark) {
+            Modifier
+        } else {
+            // The tight under-shadow. 2dp of blur and no offset keeps it a rim rather
+            // than a smudge, and it is what a light appearance was missing entirely.
+            dropShadow(
+                shape = shape,
+                shadow = Shadow(
+                    radius = 2.dp,
+                    offset = DpOffset(0.dp, 1.dp),
+                    color = Color.Black,
+                    alpha = 0.08f,
+                ),
+            )
+        },
     )
 }
 

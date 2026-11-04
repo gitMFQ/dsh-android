@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
@@ -237,7 +236,7 @@ fun DshTextField(
                 // separate visibility state to fall out of step.
                 when {
                     isPassword -> TrailingIcon(
-                        imageVector = if (revealed) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                        imageVector = if (revealed) Icons.Rounded.VisibilityOff else DshIconVectors.InspectOutline,
                         contentDescription = if (revealed) "Hide password" else "Show password",
                         // Deliberately no focus request: revealing is not editing,
                         // so the caret and the keyboard stay exactly where they
@@ -246,7 +245,7 @@ fun DshTextField(
                     )
 
                     onClear != null && value.isNotEmpty() -> TrailingIcon(
-                        imageVector = Icons.Rounded.Close,
+                        imageVector = DshIconVectors.CloseOutline,
                         contentDescription = clearContentDescription,
                         onClick = {
                             fieldFocus.requestFocus()

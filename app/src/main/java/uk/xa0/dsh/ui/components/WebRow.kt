@@ -17,9 +17,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -141,19 +138,19 @@ internal fun WebCallRow(entry: ChatEntry.ToolCall, model: WebCardModel) {
             Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
                 when {
                     expanded -> Icon(
-                        Icons.Rounded.ExpandMore,
+                        DshIconVectors.ChevronDownOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),
                     )
                     entry.name == "web_fetch" -> Icon(
-                        Icons.Rounded.Download,
+                        DshIconVectors.DownloadOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),
                     )
                     else -> Icon(
-                        Icons.Rounded.Language,
+                        DshIconVectors.GlobeOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),

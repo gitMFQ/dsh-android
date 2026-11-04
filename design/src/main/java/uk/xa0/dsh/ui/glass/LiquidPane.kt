@@ -102,6 +102,7 @@ fun Modifier.liquidPane(
     // whatever is behind, so this only has to push the result towards the app's surface.
     // Denser and the transcript stops reading as motion behind the chrome; thinner and
     // labels lose contrast on a light appearance. Same value as the bar's own container.
+    val highlight = rememberDiagonalHighlight()
     return this
         .drawBackdrop(
             backdrop = backdrop.layer,
@@ -116,6 +117,10 @@ fun Modifier.liquidPane(
                     refractionAmount = 24.dp.toPx(),
                 )
             },
+            // The diagonal specular, i.e. the same one the bottom bar wears. Without it
+            // every pane but the bar read as a frosted rectangle; see
+            // [rememberDiagonalHighlight] for what makes the edge diagonal.
+            highlight = { highlight },
             onDrawSurface = {
                 drawRect(colors.bgLayer1.copy(alpha = LiquidContainerAlpha))
                 if (tint != null) drawRect(tint)

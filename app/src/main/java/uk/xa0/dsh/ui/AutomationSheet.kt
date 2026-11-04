@@ -15,8 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -39,18 +37,21 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.util.Locale
+import java.util.TimeZone
+import uk.xa0.dsh.ScheduleHistoryState
+import uk.xa0.dsh.SchedulePageState
 import uk.xa0.dsh.model.ScheduleDelivery
 import uk.xa0.dsh.model.ScheduleEntry
 import uk.xa0.dsh.model.ScheduleStatus
+import uk.xa0.dsh.model.parseScheduleInstant
 import uk.xa0.dsh.model.scheduleDisplayTitle
 import uk.xa0.dsh.model.scheduleFrequencyLabel
 import uk.xa0.dsh.model.scheduleFrequencyLabelWithZone
 import uk.xa0.dsh.model.scheduleRelativeLabel
 import uk.xa0.dsh.model.scheduleStamp
 import uk.xa0.dsh.model.scheduleStatusLabel
-import uk.xa0.dsh.model.parseScheduleInstant
-import uk.xa0.dsh.ScheduleHistoryState
-import uk.xa0.dsh.SchedulePageState
+import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
 import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
 import uk.xa0.dsh.ui.overlay.ConfirmTone
@@ -58,8 +59,6 @@ import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
-import java.util.Locale
-import java.util.TimeZone
 
 /**
  * The host's Automation tasks, as a sheet: every schedule the host holds, what it will
@@ -452,7 +451,7 @@ private fun TaskRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                imageVector = Icons.Rounded.Schedule,
+                imageVector = DshIconVectors.AlarmClockOutline,
                 contentDescription = null,
                 tint = colors.labelTertiary,
                 modifier = Modifier.width(16.dp).height(16.dp),
@@ -611,7 +610,7 @@ private fun TaskDetail(
             onClick = onBack,
             contentPadding = PaddingValues(horizontal = 0.dp, vertical = DshSpacing.xs),
         ) {
-            Icon(Icons.Rounded.ArrowBack, contentDescription = null, tint = colors.labelSecondary)
+            Icon(DshIconVectors.ChevronLeftOutline, contentDescription = null, tint = colors.labelSecondary)
             Spacer(Modifier.width(DshSpacing.xs))
             Text("All tasks", color = colors.labelSecondary, style = DshType.bodyMedium)
         }

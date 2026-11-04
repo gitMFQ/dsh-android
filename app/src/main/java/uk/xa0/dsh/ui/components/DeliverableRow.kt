@@ -15,12 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.InsertDriveFile
-import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -158,7 +153,7 @@ private fun ProducedChip(file: ProducedFile, onOpen: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
     ) {
         Icon(
-            imageVector = Icons.Rounded.Link,
+            imageVector = DshIconVectors.LinkOutline,
             contentDescription = "Open ${file.path}",
             tint = colors.link,
             modifier = Modifier.size(14.dp),
@@ -216,7 +211,7 @@ private fun PresentedFiles(
                         maxLines = 1,
                     )
                     Icon(
-                        imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                        imageVector = if (expanded) DshIconVectors.ChevronUpOutline else DshIconVectors.ChevronDownOutline,
                         contentDescription = if (expanded) "Collapse delivered files" else "Show all ${files.size} delivered files",
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),
@@ -344,8 +339,8 @@ private fun cardIcon(path: String): ImageVector {
     val extension = fileExtension(path.substringAfterLast('/').substringAfterLast('\\')).lowercase()
     return when {
         extension in IMAGE_EXTENSIONS -> Icons.Rounded.Image
-        extension in TEXT_EXTENSIONS -> Icons.Rounded.Description
-        else -> Icons.Rounded.InsertDriveFile
+        extension in TEXT_EXTENSIONS -> DshIconVectors.BrowseOutline
+        else -> DshIconVectors.DeliverDoc
     }
 }
 

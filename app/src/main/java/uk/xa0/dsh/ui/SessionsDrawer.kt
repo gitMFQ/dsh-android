@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,37 +20,28 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Inbox
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.SubdirectoryArrowRight
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -62,89 +54,93 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import uk.xa0.dsh.PendingKind
-import uk.xa0.dsh.model.SessionItem
-import uk.xa0.dsh.model.WorkspaceItem
-import uk.xa0.dsh.model.DrawerGrouping
-import uk.xa0.dsh.model.WorkspaceTreeNode
-import uk.xa0.dsh.model.applySiblingOrder
-import uk.xa0.dsh.model.holdOrder
-import uk.xa0.dsh.model.scheduledTaskMarkLabel
-import uk.xa0.dsh.model.workspaceDragMove
-import uk.xa0.dsh.model.workspaceForest
-import uk.xa0.dsh.model.workspaceSiblingOrder
-import uk.xa0.dsh.model.SessionSearchHit
-import uk.xa0.dsh.model.WorkspaceCopy
-import uk.xa0.dsh.model.WorkspaceGroupState
-import uk.xa0.dsh.model.WorkspaceListPhase
-import uk.xa0.dsh.model.WorkspaceMove
-import uk.xa0.dsh.model.WorkspaceMoves
-import uk.xa0.dsh.model.WorkspaceRunState
-import uk.xa0.dsh.model.liveWorkIds
-import uk.xa0.dsh.model.placeholder
-import uk.xa0.dsh.model.ungroupedTitle
-import uk.xa0.dsh.model.workspaceMoves
-import uk.xa0.dsh.model.workspaceCountLabel
-import uk.xa0.dsh.model.workspaceGroupState
-import uk.xa0.dsh.model.workspaceRunState
-import uk.xa0.dsh.diag.DiagLazyList
-import uk.xa0.dsh.diag.ScrollDiag
-import uk.xa0.dsh.diag.diagDrag
-import uk.xa0.dsh.diag.diagOffset
-import uk.xa0.dsh.ui.components.DotState
-import uk.xa0.dsh.ui.components.DshMark
-import uk.xa0.dsh.ui.components.DshTextField
-import uk.xa0.dsh.ui.glass.GlassBarBackdrop
-import uk.xa0.dsh.ui.glass.liquidPane
-import uk.xa0.dsh.ui.components.StateDot
-import uk.xa0.dsh.ui.components.LocalAnimatedDots
-import uk.xa0.dsh.ui.search.SessionSearchCopy
-import uk.xa0.dsh.ui.search.SessionSearchRow
-import uk.xa0.dsh.ui.search.SessionSearchRowItem
-import uk.xa0.dsh.ui.search.SessionSearchStatus
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.TextButton
-import uk.xa0.dsh.ui.overlay.DshDialog
-import uk.xa0.dsh.ui.theme.DshRadius
-import uk.xa0.dsh.ui.theme.DshSpacing
-import uk.xa0.dsh.ui.theme.DshTheme
-import uk.xa0.dsh.ui.theme.DshType
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.TextButton
+import uk.xa0.dsh.PendingKind
+import uk.xa0.dsh.R
+import uk.xa0.dsh.diag.DiagLazyList
+import uk.xa0.dsh.diag.ScrollDiag
+import uk.xa0.dsh.diag.diagDrag
+import uk.xa0.dsh.diag.diagOffset
+import uk.xa0.dsh.model.DrawerGrouping
+import uk.xa0.dsh.model.SessionItem
+import uk.xa0.dsh.model.SessionSearchHit
+import uk.xa0.dsh.model.WorkspaceCopy
+import uk.xa0.dsh.model.WorkspaceGroupState
+import uk.xa0.dsh.model.WorkspaceItem
+import uk.xa0.dsh.model.WorkspaceListPhase
+import uk.xa0.dsh.model.WorkspaceMove
+import uk.xa0.dsh.model.WorkspaceMoves
+import uk.xa0.dsh.model.WorkspaceRunState
+import uk.xa0.dsh.model.WorkspaceTreeNode
+import uk.xa0.dsh.model.applySiblingOrder
+import uk.xa0.dsh.model.holdOrder
+import uk.xa0.dsh.model.liveWorkIds
+import uk.xa0.dsh.model.placeholder
+import uk.xa0.dsh.model.scheduledTaskMarkLabel
+import uk.xa0.dsh.model.ungroupedTitle
+import uk.xa0.dsh.model.workspaceCountLabel
+import uk.xa0.dsh.model.workspaceDragMove
+import uk.xa0.dsh.model.workspaceForest
+import uk.xa0.dsh.model.workspaceGroupState
+import uk.xa0.dsh.model.workspaceMoves
+import uk.xa0.dsh.model.workspaceRunState
+import uk.xa0.dsh.model.workspaceSiblingOrder
+import uk.xa0.dsh.ui.components.DotState
+import uk.xa0.dsh.ui.components.DshIconVectors
+import uk.xa0.dsh.ui.components.DshMark
+import uk.xa0.dsh.ui.components.DshTextField
+import uk.xa0.dsh.ui.components.LocalAnimatedDots
+import uk.xa0.dsh.ui.components.StateDot
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
+import uk.xa0.dsh.ui.overlay.DshDialog
+import uk.xa0.dsh.ui.search.SessionSearchCopy
+import uk.xa0.dsh.ui.search.SessionSearchRow
+import uk.xa0.dsh.ui.search.SessionSearchRowItem
+import uk.xa0.dsh.ui.search.SessionSearchStatus
+import uk.xa0.dsh.ui.theme.DshRadius
+import uk.xa0.dsh.ui.theme.DshSpacing
+import uk.xa0.dsh.ui.theme.DshTheme
+import uk.xa0.dsh.ui.theme.DshType
 
 /**
  * One collapsible group in the sidebar: a Workspace, the flat list, or "Ungrouped".
@@ -323,12 +319,18 @@ fun SessionsDrawer(
      */
     onNewInWorkspace: (String) -> Unit = {},
     onRefresh: () -> Unit,
-    onSettings: () -> Unit,
     /**
-     * The footer's other half. Required like [onSettings]: an About control that
-     * silently did nothing would be worse than no control at all.
+     * Retired: the drawer no longer draws a Settings entry.
+     *
+     * Kept — and defaulted — so every existing call site still compiles while the
+     * caller removes its own argument; passing it does nothing. The Settings/About
+     * pair left the sidebar's footer when the drawer was redesigned: both are
+     * reachable elsewhere, and the drawer's bottom band is better spent on the list
+     * than on two secondary destinations that already have a home.
      */
-    onAbout: () -> Unit,
+    onSettings: () -> Unit = {},
+    /** Retired with [onSettings]. Passing it does nothing; see that parameter's note. */
+    onAbout: () -> Unit = {},
     /**
      * Opens the host-wide Automation tasks sheet, or null to draw no entry.
      *
@@ -622,6 +624,11 @@ fun SessionsDrawer(
         if (!drawerOpen) heldOrder = sessions.map { it.id }
     }
 
+    // The one word this derivation needs. `remember`'s block is not composable, so the
+    // resource is read here — and passed in as a key, so a language change rebuilds the
+    // sections instead of leaving a stale title in a cached list.
+    val flatSectionTitle = stringResource(R.string.drawer_flat_title)
+
     val sections = remember(
         matched,
         sessions,
@@ -633,6 +640,7 @@ fun SessionsDrawer(
         showArchived,
         expandedSessions,
         heldOrder,
+        flatSectionTitle,
         // Derived from `sessions` like the rest, and named so a group's run state cannot be
         // read from a rollup computed against a different roster.
         rollups,
@@ -694,7 +702,7 @@ fun SessionsDrawer(
             val sections = arrayListOf(
                 Section(
                     key = FLAT,
-                    title = "Sessions",
+                    title = flatSectionTitle,
                     rows = ordered.flatMap { disclose(it) },
                     run = workspaceRunState(ordered.map { it.id }, live),
                 ),
@@ -955,8 +963,8 @@ fun SessionsDrawer(
                 modifier = Modifier.weight(1f),
             )
             Icon(
-                Icons.Rounded.Refresh,
-                contentDescription = "Refresh sessions",
+                DshIconVectors.RefreshOutline,
+                contentDescription = stringResource(R.string.drawer_refresh_sessions),
                 tint = if (loading) colors.labelDimmed else colors.labelSecondary,
                 modifier = Modifier
                     .size(28.dp)
@@ -969,50 +977,6 @@ fun SessionsDrawer(
                     .padding(DshSpacing.sm),
             )
         }
-
-        // New Session — 38dp, hairline border, r12.
-        //
-        // Only where the per-Workspace `+` cannot do the job: in the flat list
-        // there are no Workspace rows to hang it on, and a host with no Workspaces
-        // registered has no group at all. Left visible in the grouped case it was
-        // the button that created a blank first and asked "where?" second.
-        //
-        // It deliberately stays on an unanswered registry too, where its own reason is
-        // not yet known: it is the sidebar's only way to start a session, and a stream
-        // that never delivers a baseline would otherwise take it away. The target is
-        // only recorded until the seat is first used (`startSession`), by which time the
-        // registry has usually answered and the session lands in its Workspace.
-        // A capsule filled with the send token, which is this app's existing word for
-        // "the one action on this surface": the composer's send button wears the same
-        // pair, so the drawer's primary action and the conversation's are the same
-        // object in two places rather than two different buttons that happen to be bold.
-        val newShape = RoundedCornerShape(DshRadius.pill)
-        // The button's own visibility gates the separator below it: in the common
-        // case there is no button, so there is nothing to separate from the field.
-        val showNewButton = !grouping.groupsByWorkspace || workspaces.isEmpty()
-        if (showNewButton) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clip(newShape)
-                .background(colors.sendFill)
-                .clickableNoRipple(onClick = onNew),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.sendGlyph, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(DshSpacing.sm))
-            Text("New Session", style = DshType.labelLarge, color = colors.sendGlyph)
-        }
-        }
-
-        // Only a separator, and only when there is something to separate. With the
-        // New Session button drawn this sits between it and the field; in the common
-        // case (grouped, a host with Workspaces) that button is not drawn at all, and
-        // the band above "Search sessions..." used to be the lockup's own centred
-        // whitespace plus this spacer plus the field's inset — ~34dp of nothing.
-        if (showNewButton) Spacer(Modifier.height(DshSpacing.md))
 
         DshTextField(
             value = query,
@@ -1038,55 +1002,59 @@ fun SessionsDrawer(
 
         Spacer(Modifier.height(DshSpacing.md))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = if (matched.isEmpty()) "No matches" else "${matched.size} sessions",
-                style = DshType.micro,
-                color = colors.labelTertiary,
-                modifier = Modifier.weight(1f),
+        // New Session, directly under the search box and exactly as wide as it —
+        // the web's sidebar does the same (`newSession` is a 38dp bar inside the
+        // same inline padding as its search field). Width is what makes the two
+        // read as one stack: a primary action a few dp narrower than the field
+        // above it looks accidental.
+        //
+        // It is drawn unconditionally, unlike the version it replaced. That one
+        // appeared only where the per-Workspace `+` could not reach (the flat list,
+        // or a host with no Workspaces), because a drawer with folder rows already
+        // offered a place to start a session. But a reader who is searching has
+        // *left* the grouped list behind — the results replace it — so the one
+        // control that starts a session has to be somewhere that does not move
+        // when the grouping does. Below the field it never moves, and it is
+        // adjacent to the place a session gets named.
+        //
+        // The glass is the shell's own material so the button belongs to the same
+        // family as the drawer it sits in; on the flat tier (`backdrop == null`, or a
+        // baseline that pins the flat material) it degrades to `sidebarItemActive`,
+        // which is this drawer's "chosen surface" token — the same fill the selected
+        // session row wears. Deliberately *not* the composer's `sendFill` blue: the
+        // sidebar's primary action is a piece of the sidebar, not a second send
+        // button, and a saturated capsule there competed with the transcript the
+        // drawer is laid over.
+        val newSessionShape = RoundedCornerShape(DshRadius.card)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .liquidPane(
+                    backdrop = backdrop,
+                    shape = newSessionShape,
+                    flatFill = colors.sidebarItemActive,
+                )
+                .clickableNoRipple(onClick = onNew)
+                .testTag(NEW_SESSION_TAG),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                DshIconVectors.PlusOutline,
+                contentDescription = null,
+                tint = colors.labelPrimary,
+                modifier = Modifier.size(16.dp),
             )
-            // Archived is a filter, not a third Group/Order choice, so it is a
-            // switch. The whole label+switch is one toggleable checkbox: the row
-            // carries the semantics (and the label), and the Switch itself is
-            // presentational so a screen reader announces one control.
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(DshRadius.sm))
-                    .toggleable(
-                        value = showArchived,
-                        role = Role.Checkbox,
-                        onValueChange = onShowArchived,
-                    ),
-            ) {
-                Text(
-                    text = "Archived",
-                    style = DshType.micro,
-                    color = if (showArchived) colors.accent else colors.labelTertiary,
-                )
-                Spacer(Modifier.width(DshSpacing.sm))
-                Switch(
-                    checked = showArchived,
-                    onCheckedChange = null,
-                    modifier = Modifier
-                        // Material's switch is 52x32dp with a 48dp touch target -
-                        // sized for a settings screen, not for a filter row sitting
-                        // among 11sp chips, where it read as the loudest thing in the
-                        // drawer. Scaled down it still reads as a switch, and since
-                        // the whole label+switch row is the toggle, nothing is lost
-                        // by shrinking the drawing rather than the target.
-                        .scale(0.62f)
-                        .clearAndSetSemantics { },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = colors.bgBase,
-                        checkedTrackColor = colors.accent,
-                        uncheckedThumbColor = colors.labelTertiary,
-                        uncheckedTrackColor = colors.bgLayer1,
-                        uncheckedBorderColor = colors.borderL3,
-                    ),
-                )
-            }
+            Spacer(Modifier.width(DshSpacing.sm))
+            Text(
+                text = stringResource(R.string.drawer_new_session),
+                style = DshType.labelLarge,
+                color = colors.labelPrimary,
+            )
         }
+
+        Spacer(Modifier.height(DshSpacing.sm))
 
         // A failed pull, said where the sessions are rather than in the log. The
         // rows above stay because a refresh failing is not evidence that anything
@@ -1126,64 +1094,73 @@ fun SessionsDrawer(
 
         Spacer(Modifier.height(DshSpacing.sm))
 
-        // The web's Group by menu, as three chips rather than three menu rows: the
-        // drawer is 300dp wide and this row has ~232dp for its choices after the
-        // label. "Workspace Tree" does not fit between its neighbours at the app's
-        // 11sp chip size (the two full labels already take most of the row), so the
-        // middle chip is "Tree" — the same abbreviation the app already makes for
-        // the web's "In one list" ("List"). Its full name is the chip's accessibility
-        // label, and the visible order matches the web's menu: WorkSpace, Tree, List.
-        OptionRow("Group") {
-            MiniChoice(
-                label = "WorkSpace",
-                selected = grouping == DrawerGrouping.WORKSPACE,
-                testTag = GROUP_WORKSPACE_TAG,
-                onClick = { onGrouping(DrawerGrouping.WORKSPACE) },
-            )
-            MiniChoice(
-                label = "Tree",
-                selected = grouping == DrawerGrouping.TREE,
-                testTag = GROUP_TREE_TAG,
-                contentDescription = "Workspace Tree",
-                onClick = { onGrouping(DrawerGrouping.TREE) },
-            )
-            MiniChoice(
-                label = "List",
-                selected = grouping == DrawerGrouping.FLAT,
-                testTag = GROUP_LIST_TAG,
-                onClick = { onGrouping(DrawerGrouping.FLAT) },
-            )
-        }
-        OptionRow("Order") {
-            MiniChoice("Manual", !orderByUpdated) { onOrderByUpdated(false) }
-            MiniChoice("Updated", orderByUpdated) { onOrderByUpdated(true) }
-        }
-
-        // Adding a directory to the registry belongs with the view controls, not
-        // the session list: it changes what the groups *are*, not where a session
-        // sits. The web pins the same row below its workspace menu.
+        // The web's "View options" menu, as one button rather than five chips.
+        //
+        // The three settings that used to live here — Group by, Order by, and the
+        // Archived switch — are one question a reader asks ("how is this list
+        // arranged?") and they were drawn as three separate rows of little pills plus
+        // a 52dp switch scaled to 62%, which is the row that was called cluttered.
+        // The web answers the same question with a single sliders glyph that opens a
+        // menu of labelled sections (`ViewOptionsMenu` in
+        // `dsh-client-ui-workspace/lib/client.js`): "Group by" / "Order by" /
+        // "Filter sessions", each followed by its choices, with a check on the ones
+        // that hold. This drawer now does the same and nothing else — the state, the
+        // callbacks and the semantics are unchanged, so this is a change of seating,
+        // not of behaviour.
+        //
+        // The count stays on the left of the row: it is the one fact that has to be
+        // readable without opening anything ("12 sessions" tells you whether to keep
+        // reading), and it is also the only place the local name/path filter's
+        // effect is reported.
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(28.dp)
-                .clip(RoundedCornerShape(DshRadius.md))
-                .clickableNoRipple(onClick = onAddWorkspace)
-                .padding(horizontal = DshSpacing.sm),
+                .height(28.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                Icons.Rounded.Add,
-                contentDescription = null,
-                tint = colors.labelSecondary,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(Modifier.width(DshSpacing.sm))
             Text(
-                text = "Add workspace…",
-                style = DshType.bodyMedium,
-                color = colors.labelSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                text = if (matched.isEmpty()) {
+                    stringResource(R.string.drawer_no_matches)
+                } else {
+                    pluralStringResource(R.plurals.drawer_session_count, matched.size, matched.size)
+                },
+                style = DshType.micro,
+                color = colors.labelTertiary,
+                modifier = Modifier.weight(1f),
+            )
+            // Adding a directory to the registry is a data operation, not a view
+            // option, so it stays beside the menu rather than inside it: it changes
+            // what the groups *are*, not how they are drawn. The web pins the same
+            // row below its workspace menu.
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(DshRadius.sm))
+                    .clickableNoRipple(onClick = onAddWorkspace)
+                    .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    DshIconVectors.PlusOutline,
+                    contentDescription = null,
+                    tint = colors.labelSecondary,
+                    modifier = Modifier.size(13.dp),
+                )
+                Spacer(Modifier.width(DshSpacing.xs))
+                Text(
+                    text = stringResource(R.string.drawer_add_workspace_row),
+                    style = DshType.micro,
+                    color = colors.labelSecondary,
+                    maxLines = 1,
+                )
+            }
+            Spacer(Modifier.width(DshSpacing.xs))
+            ViewOptionsMenu(
+                grouping = grouping,
+                orderByUpdated = orderByUpdated,
+                showArchived = showArchived,
+                onGrouping = onGrouping,
+                onOrderByUpdated = onOrderByUpdated,
+                onShowArchived = onShowArchived,
             )
         }
 
@@ -1191,7 +1168,7 @@ fun SessionsDrawer(
 
         if (loading && sessions.isEmpty()) {
             Text(
-                text = "Loading…",
+                text = stringResource(R.string.drawer_loading),
                 style = DshType.bodySmall,
                 color = colors.labelTertiary,
                 modifier = Modifier.padding(DshSpacing.md),
@@ -1417,6 +1394,7 @@ fun SessionsDrawer(
                         },
                         moves = section.moves,
                         onMove = { move -> onMoveWorkspace(move.workspaceId, move.beforeWorkspaceId) },
+                        onAddWorkspace = onAddWorkspace,
                     )
                 }
 
@@ -1470,9 +1448,9 @@ fun SessionsDrawer(
                     item(key = "more-${section.key}") {
                         ShowMoreRow(
                             label = if (isExpanded) {
-                                "Show less"
+                                stringResource(R.string.drawer_show_less)
                             } else {
-                                "Show $hidden more session${if (hidden == 1) "" else "s"}"
+                                pluralStringResource(R.plurals.drawer_show_more, hidden, hidden)
                             },
                             onClick = {
                                 expandedSections = if (isExpanded) {
@@ -1489,44 +1467,29 @@ fun SessionsDrawer(
             sections.forEach { section -> this.drawGroup(section) }
         }
 
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(0.5.dp)
-                .background(colors.borderL1),
-        )
-        // A destination, not a preference: the web puts Automation tasks in its own
-        // sidebar panel, and the drawer is the only host-wide shelf this app has.
-        // It is a full row above the Settings/About pair so it reads as a place to
-        // go, and it never intrudes on the composer.
+        // The footer is one destination and nothing else.
+        //
+        // It used to be a hairline, the Automation tasks row, and then a 48dp band
+        // split between Settings and About. Two of those three were *places*, not
+        // preferences, and all three competed with the list for the last strip of
+        // the drawer. Settings and About are reachable from the app's own chrome;
+        // the drawer's bottom band is now the one host-wide shelf that has nowhere
+        // else to go — and when the host offers no Automations entry the band is
+        // empty rather than reserved.
+        //
+        // `onSettings` and `onAbout` are still accepted as parameters and are
+        // deliberately not read: retiring a named argument from a public composable
+        // is a call-site change in another owner's file, not a deletion here.
         onAutomations?.let { open ->
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(colors.borderL1),
+            )
             AutomationFooterRow(
                 activeCount = activeScheduleTotal,
                 onClick = open,
-            )
-        }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Settings and About are a pair of small, secondary actions, so they
-            // split the footer instead of each taking a 48dp row of its own —
-            // stacking them would read as two more list items rather than chrome.
-            FooterAction(
-                icon = Icons.Rounded.Settings,
-                label = "Settings",
-                onClick = onSettings,
-            )
-            // Flush to the drawer's right edge rather than centred in its own half:
-            // a centred pair left both labels floating a third of the way in, which
-            // read as two stray items instead of a footer with two ends.
-            Spacer(Modifier.weight(1f))
-            FooterAction(
-                icon = Icons.Rounded.Info,
-                label = "About",
-                onClick = onAbout,
             )
         }
     }
@@ -1558,7 +1521,7 @@ private fun AutomationFooterRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            imageVector = Icons.Rounded.Schedule,
+            imageVector = DshIconVectors.AlarmClockOutline,
             contentDescription = null,
             tint = colors.labelSecondary,
             modifier = Modifier
@@ -1567,7 +1530,7 @@ private fun AutomationFooterRow(
         )
         Spacer(Modifier.width(DshSpacing.md))
         Text(
-            text = "Automation tasks",
+            text = stringResource(R.string.drawer_automation_tasks),
             style = DshType.bodyMedium,
             color = colors.labelSecondary,
             maxLines = 1,
@@ -1576,58 +1539,16 @@ private fun AutomationFooterRow(
         Spacer(Modifier.weight(1f))
         if (activeCount > 0) {
             Text(
-                text = if (activeCount == 1) "1 active" else "$activeCount active",
+                text = pluralStringResource(
+                    R.plurals.drawer_automation_active,
+                    activeCount,
+                    activeCount,
+                ),
                 style = DshType.micro,
                 color = colors.labelTertiary,
                 maxLines = 1,
             )
         }
-        Spacer(Modifier.width(DshSpacing.md))
-    }
-}
-
-/**
- * One half of the drawer's footer pair: icon + label on one tap target.
- *
- * The whole half is clickable — the row the icon used to sit in made only the
- * glyph tappable, so the label beside it looked live and was not.
- */
-@Composable
-private fun FooterAction(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = DshTheme.colors
-    Row(
-        modifier
-            .height(48.dp)
-            .clip(RoundedCornerShape(DshRadius.md))
-            .clickableNoRipple(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = colors.labelSecondary,
-            modifier = Modifier
-                .size(28.dp)
-                .padding(DshSpacing.sm),
-        )
-        Spacer(Modifier.width(DshSpacing.md))
-        Text(
-            text = label,
-            style = DshType.bodyMedium,
-            color = colors.labelSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        // The glyph carries its own inset (28dp box, 6dp padding), so an action
-        // that ends in a glyph looks right against the drawer's edge. The trailing
-        // action ends in *text*, which does not, and flush-right read as clamped to
-        // the edge. This is a trailing spacer rather than end padding on the row so
-        // the label moves in but the tap target still reaches the edge.
         Spacer(Modifier.width(DshSpacing.md))
     }
 }
@@ -1744,6 +1665,15 @@ private fun ProjectRow(
     moves: WorkspaceMoves? = null,
     /** Applies one of [moves]; required whenever [moves] offers a side. */
     onMove: ((WorkspaceMove) -> Unit)? = null,
+    /**
+     * Adding a directory to the registry, offered from this header's menu.
+     *
+     * It is the web's `menu.addWorkspace` item on a Workspace's context menu. The
+     * drawer keeps its own row for it beside the view-options button as well: the
+     * menu is where the web puts it, and the row is where a reader who has not
+     * opened a folder menu will still find it.
+     */
+    onAddWorkspace: () -> Unit = {},
     /** Whether a drag currently has this header lifted. */
     lifted: Boolean = false,
     /** Reports this row's window bounds, so the drag can find its midpoint. */
@@ -1761,6 +1691,10 @@ private fun ProjectRow(
     run: WorkspaceRunState,
 ) {
     val colors = DshTheme.colors
+    // A header with a `+` or with reorder moves is a Workspace; every other group
+    // (the flat list, Ungrouped) is a place with no registry row behind it and gets
+    // no menu at all rather than a menu whose every item would do nothing.
+    val showsActions = onCreate != null || moves != null
     // "Move up" / "Move down" without a menu. A custom action is what TalkBack's
     // actions menu offers on the focused header, so the capability the removed
     // overflow menu carried survives without a visual control — and it calls the
@@ -1814,11 +1748,11 @@ private fun ProjectRow(
     ) {
         Icon(
             imageVector = icon
-                ?: if (collapsed) Icons.Rounded.Folder else Icons.Rounded.FolderOpen,
+                ?: if (collapsed) DshIconVectors.FolderOpenOutline else DshIconVectors.FolderOpenOutline,
             contentDescription = when {
                 icon != null -> null
-                collapsed -> "Expand workspace"
-                else -> "Collapse workspace"
+                collapsed -> stringResource(R.string.drawer_workspace_expand)
+                else -> stringResource(R.string.drawer_workspace_collapse)
             },
             tint = if (containsCurrent) colors.accent else colors.labelTertiary,
             modifier = Modifier.size(16.dp),
@@ -1837,24 +1771,147 @@ private fun ProjectRow(
             style = DshType.micro,
             color = colors.labelCaption,
         )
-        if (onCreate != null) {
+        // The Workspace's own actions. It used to end at a `+`, which is one of the
+        // five things the web's row menu offers (`openWorkspaceMenu` +
+        // `ProjectRow`'s `IconEllipsisOutlineRegular` button in
+        // `dsh-client-ui-workspace/lib/client.js`) — the rest had no way onto a
+        // phone at all, because the reorder pair lives only in accessibility
+        // actions and a drag.
+        //
+        // The menu is drawn on the same terms as the web's: only for a group that has
+        // a registry row behind it, which is exactly "it can start a session here or
+        // it can be reordered" ([showsActions]). The flat list and the catch-all have
+        // neither, and grow no menu at all. The `+` it replaced survives at the top of
+        // the menu, so the common verb still costs two taps; the row itself stays
+        // always visible rather than hover-revealed, because a phone has no hover.
+        if (showsActions) {
             Spacer(Modifier.width(DshSpacing.sm))
-            // Always drawn, not hover-revealed: the web shows this on hover, and a
-            // phone has no hover — the same reason the group's own disclosure is
-            // the folder rather than a chevron that only appears under a pointer.
-            Icon(
-                Icons.Rounded.Add,
-                contentDescription = "New session in $title",
-                tint = colors.labelSecondary,
-                modifier = Modifier
-                    .size(28.dp)
-                    .onGloballyPositioned { onCreatePlaced?.invoke(it.boundsInWindow()) }
-                    .clip(CircleShape)
-                    .clickableNoRipple(onClick = onCreate)
-                    .padding(DshSpacing.xs),
+            WorkspaceRowMenu(
+                title = title,
+                onCreate = onCreate,
+                onCreatePlaced = { onCreatePlaced?.invoke(it) },
+                moves = moves,
+                onMove = applyMove,
+                onAddWorkspace = onAddWorkspace,
             )
         }
     }
+}
+
+/**
+ * A Workspace header's `⋮` menu — the web's per-row context menu, on a phone.
+ *
+ * ## What is in it, and what is not
+ *
+ * The web registers three menu actions for this target
+ * (`dsh-client-ui-workspace/lib/client.js`: `workspace.rename`, `workspace.delete`,
+ * and the `addWorkspace` item) and draws two buttons on the row itself, a `⋮` and
+ * a `+`. Of those, this drawer can perform exactly three: **new session** here,
+ * **move up / move down** (the registry moves it already sends through
+ * `onMoveWorkspace`), and **add workspace**. Rename and delete are absent rather
+ * than drawn dead: this client has no `workspace/rename` or `workspace/delete`
+ * wire call at all, and a menu item that silently did nothing is worse than one
+ * that was never offered — the same rule the About and Automations entries follow.
+ *
+ * ## Why "move" is here at all, given the header already has the semantics
+ *
+ * A drag is the touch gesture and the custom accessibility actions are the screen
+ * reader's, but neither is discoverable: a reader who has never long-pressed a
+ * header has no way to learn that the list can be reordered. The menu states the
+ * capability in words. Its items call the same closures as both of those paths,
+ * and each is present only while the move is possible — a first sibling has no
+ * "Move up" and a last has no "Move down", exactly as [moves] reports.
+ */
+@Composable
+private fun WorkspaceRowMenu(
+    title: String,
+    onCreate: (() -> Unit)?,
+    onCreatePlaced: (Rect) -> Unit,
+    moves: WorkspaceMoves?,
+    onMove: ((WorkspaceMove) -> Unit)?,
+    onAddWorkspace: () -> Unit,
+) {
+    val colors = DshTheme.colors
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Icon(
+            DshIconVectors.EllipsisOutline,
+            contentDescription = stringResource(R.string.drawer_workspace_actions, title),
+            tint = colors.labelSecondary,
+            modifier = Modifier
+                // Measured for the drag: the list hit-tests these bounds, and a long
+                // press on the menu must not lift the header. The `+` it replaced was
+                // excluded the same way.
+                .onGloballyPositioned { onCreatePlaced(it.boundsInWindow()) }
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickableNoRipple { open = true }
+                .padding(DshSpacing.xs),
+        )
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+        ) {
+            if (onCreate != null) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(R.string.drawer_workspace_new_session),
+                            style = DshType.bodyMedium,
+                            color = colors.labelPrimary,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(DshIconVectors.PlusOutline, contentDescription = null, tint = colors.labelSecondary, modifier = Modifier.size(16.dp))
+                    },
+                    onClick = { open = false; onCreate() },
+                )
+            }
+            // Both sides are per-seat facts: the first sibling has no anchor above it
+            // and the last is already where a further move would put it.
+            val applyMove = onMove
+            if (applyMove != null) {
+                moves?.up?.let { move ->
+                    MoveMenuItem(stringResource(R.string.drawer_workspace_move_up), DshIconVectors.ChevronUpOutline) {
+                        open = false
+                        applyMove(move)
+                    }
+                }
+                moves?.down?.let { move ->
+                    MoveMenuItem(stringResource(R.string.drawer_workspace_move_down), DshIconVectors.ChevronDownOutline) {
+                        open = false
+                        applyMove(move)
+                    }
+                }
+            }
+            if (onCreate != null || moves != null) HorizontalDivider(color = colors.borderL1)
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.drawer_add_workspace_menu),
+                        style = DshType.bodyMedium,
+                        color = colors.labelPrimary,
+                    )
+                },
+                leadingIcon = {
+                    Icon(DshIconVectors.PlusOutline, contentDescription = null, tint = colors.labelSecondary, modifier = Modifier.size(16.dp))
+                },
+                onClick = { open = false; onAddWorkspace() },
+            )
+        }
+    }
+}
+
+/** One reorder item in [WorkspaceRowMenu]; the caller decides whether a side exists. */
+@Composable
+private fun MoveMenuItem(label: String, icon: ImageVector, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label, style = DshType.bodyMedium, color = DshTheme.colors.labelPrimary) },
+        leadingIcon = {
+            Icon(icon, contentDescription = null, tint = DshTheme.colors.labelSecondary, modifier = Modifier.size(16.dp))
+        },
+        onClick = onClick,
+    )
 }
 
 /** Per-section paging row — 28dp, matching `sessions.expand` in the web list. */
@@ -1926,7 +1983,7 @@ private fun PendingWorkspaceRow() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Rounded.Folder,
+            DshIconVectors.FolderOpenOutline,
             contentDescription = null,
             tint = colors.labelTertiary,
             modifier = Modifier.size(16.dp),
@@ -1980,6 +2037,17 @@ private fun SessionRow(
             .fillMaxWidth()
             .height(32.dp)
             .clip(shape)
+            // Opaque, not transparent. The drawer's pane is glass on the liquid tier,
+            // so a row that painted nothing let the transcript behind the sidebar
+            // show through the row itself — the title sat on a moving picture and
+            // read as if it were part of it. A row is a piece of the list, and the
+            // list is opaque: the idle fill is the drawer's own colour, and the
+            // selected fill is the one already used for a chosen row.
+            //
+            // `sidebarFill` is the same value the pane's `flatFill` uses, so on the
+            // flat tier these rows are exactly what they were and no baseline moves;
+            // on the liquid tier they are the surface the glass sits *on* rather than
+            // holes punched through it.
             .background(if (selected) colors.sidebarItemActive else colors.sidebarFill)
             .clickableNoRipple(onClick = onClick)
             // Subagents nest one step per level under their parent, and a Workspace's
@@ -2039,7 +2107,7 @@ private fun SessionRow(
                 // `SessionItem.scheduledTaskCount` — so this mark and the landing
                 // rule cannot disagree about which sessions host a schedule.
                 session.scheduledTaskCount > 0 -> Icon(
-                    Icons.Rounded.Schedule,
+                    DshIconVectors.AlarmClockOutline,
                     contentDescription = scheduledTaskMarkLabel(session.scheduledTaskCount),
                     tint = colors.labelTertiary,
                     modifier = Modifier.size(13.dp),
@@ -2048,8 +2116,8 @@ private fun SessionRow(
                 // of their own. The user explicitly likes it; the earlier problem
                 // was that activity was not being shown, not the glyph.
                 depth > 0 -> Icon(
-                    Icons.Rounded.SubdirectoryArrowRight,
-                    contentDescription = "Subagent session",
+                    DshIconVectors.TreeCorner,
+                    contentDescription = stringResource(R.string.drawer_subagent_session),
                     tint = colors.labelCaption,
                     modifier = Modifier.size(12.dp),
                 )
@@ -2089,8 +2157,12 @@ private fun SessionRow(
         // descendants gets a caret, so the rest of the list stays quiet.
         if (rollup != null && !rollup.isEmpty) {
             Icon(
-                imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                contentDescription = if (expanded) "Hide subagents" else "Show subagents",
+                imageVector = if (expanded) DshIconVectors.ChevronDownOutline else DshIconVectors.ChevronRightOutline,
+                contentDescription = if (expanded) {
+                    stringResource(R.string.drawer_subagents_hide)
+                } else {
+                    stringResource(R.string.drawer_subagents_show)
+                },
                 tint = colors.labelTertiary,
                 modifier = Modifier
                     .size(18.dp)
@@ -2135,8 +2207,8 @@ private fun SessionRowMenu(
     var open by remember { mutableStateOf(false) }
     Box {
         Icon(
-            Icons.Rounded.MoreVert,
-            contentDescription = "Session actions",
+            DshIconVectors.EllipsisOutline,
+            contentDescription = stringResource(R.string.drawer_session_actions),
             tint = colors.labelTertiary,
             modifier = Modifier
                 .size(24.dp)
@@ -2149,13 +2221,25 @@ private fun SessionRowMenu(
             onDismissRequest = { open = false },
         ) {
             DropdownMenuItem(
-                text = { Text("Rename", style = DshType.bodyMedium, color = colors.labelPrimary) },
+                text = {
+                    Text(
+                        text = stringResource(R.string.drawer_session_rename),
+                        style = DshType.bodyMedium,
+                        color = colors.labelPrimary,
+                    )
+                },
                 onClick = { open = false; onRename() },
             )
             DropdownMenuItem(
                 // The host forks at the session's last completed turn, so there is
                 // nothing to ask the user — the web's item is one tap too.
-                text = { Text("Fork session", style = DshType.bodyMedium, color = colors.labelPrimary) },
+                text = {
+                    Text(
+                        text = stringResource(R.string.drawer_session_fork),
+                        style = DshType.bodyMedium,
+                        color = colors.labelPrimary,
+                    )
+                },
                 onClick = { open = false; onFork() },
             )
             DropdownMenuItem(
@@ -2163,17 +2247,31 @@ private fun SessionRowMenu(
                 // own CLI, a bug report) needs, and it is not visible anywhere in the
                 // UI — so the menu hands it over whole rather than making the user
                 // reconstruct it from a truncated title.
-                text = { Text("Copy session id", style = DshType.bodyMedium, color = colors.labelPrimary) },
+                text = {
+                    Text(
+                        text = stringResource(R.string.drawer_session_copy_id),
+                        style = DshType.bodyMedium,
+                        color = colors.labelPrimary,
+                    )
+                },
                 onClick = {
                     open = false
                     clipboard.setText(AnnotatedString(id))
-                    Toast.makeText(context, "Session id copied", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.drawer_session_id_copied),
+                        Toast.LENGTH_SHORT,
+                    ).show()
                 },
             )
             DropdownMenuItem(
                 text = {
                     Text(
-                        text = if (archived) "Restore" else "Archive",
+                        text = if (archived) {
+                            stringResource(R.string.drawer_session_restore)
+                        } else {
+                            stringResource(R.string.drawer_session_archive)
+                        },
                         style = DshType.bodyMedium,
                         color = colors.labelPrimary,
                     )
@@ -2202,23 +2300,23 @@ private fun RenameDialog(
     DshDialog(
         show = true,
         onDismissRequest = onDismiss,
-        title = "Rename session",
+        title = stringResource(R.string.drawer_rename_title),
     ) {
         Column {
             DshTextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = "Session title",
+                placeholder = stringResource(R.string.drawer_rename_placeholder),
                 minHeight = 44.dp,
             )
             Row(
                 Modifier.fillMaxWidth().padding(top = DshSpacing.lg),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(text = "Cancel", onClick = onDismiss)
+                TextButton(text = stringResource(R.string.drawer_cancel), onClick = onDismiss)
                 Spacer(Modifier.width(DshSpacing.sm))
                 TextButton(
-                    text = "Save",
+                    text = stringResource(R.string.drawer_save),
                     onClick = { onConfirm(text.trim()) },
                     enabled = text.isNotBlank(),
                     colors = ButtonDefaults.textButtonColorsPrimary(),
@@ -2228,65 +2326,163 @@ private fun RenameDialog(
     }
 }
 
+/**
+ * The drawer's "View options" control: one sliders button that opens the web's
+ * Group by / Order by / Filter sessions menu.
+ *
+ * ## Why one button instead of the chips
+ *
+ * This drawer used to spend three rows and eleven little pills on the same
+ * question, with a Switch scaled to 62% sitting beside them — and at 11sp the
+ * chips were one character apart from each other ("Tree"/"List") while the menu
+ * they replaced in the web was a single labelled list. The web's own
+ * `ViewOptionsMenu` (`dsh-client-ui-workspace/lib/client.js`) opens from a
+ * sliders glyph and puts the three sections in one popup, with the current
+ * choices carrying a check. That is what this is.
+ *
+ * The state is untouched: [onGrouping], [onOrderByUpdated] and [onShowArchived]
+ * are the same three callbacks the rows called, so this is seating, not
+ * behaviour. What the drawer gained is a 28dp row where it used to have three.
+ *
+ * ## Test identity
+ *
+ * The three Group choices keep the tags they had as chips ([GROUP_WORKSPACE_TAG],
+ * [GROUP_TREE_TAG], [GROUP_LIST_TAG]) because a menu item's label is still what a
+ * test can be misled by; the trigger has [VIEW_OPTIONS_TAG] so a test can open the
+ * menu without depending on the icon's content description.
+ */
 @Composable
-private fun OptionRow(label: String, content: @Composable () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(26.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = DshType.micro,
-            color = DshTheme.colors.labelCaption,
-            modifier = Modifier.width(44.dp),
+private fun ViewOptionsMenu(
+    grouping: DrawerGrouping,
+    orderByUpdated: Boolean,
+    showArchived: Boolean,
+    onGrouping: (DrawerGrouping) -> Unit,
+    onOrderByUpdated: (Boolean) -> Unit,
+    onShowArchived: (Boolean) -> Unit,
+) {
+    val colors = DshTheme.colors
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Icon(
+            DshIconVectors.SlidersTwoOutline,
+            contentDescription = stringResource(R.string.drawer_view_options),
+            tint = colors.labelSecondary,
+            modifier = Modifier
+                .testTag(VIEW_OPTIONS_TAG)
+                .size(26.dp)
+                .clip(CircleShape)
+                .clickableNoRipple { open = true }
+                .padding(DshSpacing.xxs),
         )
-        content()
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+        ) {
+            MenuSectionLabel(stringResource(R.string.drawer_view_group_by))
+            ViewOptionItem(
+                label = stringResource(R.string.drawer_view_group_workspace),
+                selected = grouping == DrawerGrouping.WORKSPACE,
+                testTag = GROUP_WORKSPACE_TAG,
+                onClick = { open = false; onGrouping(DrawerGrouping.WORKSPACE) },
+            )
+            ViewOptionItem(
+                label = stringResource(R.string.drawer_view_group_tree),
+                selected = grouping == DrawerGrouping.TREE,
+                testTag = GROUP_TREE_TAG,
+                onClick = { open = false; onGrouping(DrawerGrouping.TREE) },
+            )
+            ViewOptionItem(
+                label = stringResource(R.string.drawer_view_group_flat),
+                selected = grouping == DrawerGrouping.FLAT,
+                testTag = GROUP_LIST_TAG,
+                onClick = { open = false; onGrouping(DrawerGrouping.FLAT) },
+            )
+            HorizontalDivider(color = colors.borderL1)
+            MenuSectionLabel(stringResource(R.string.drawer_view_order_by))
+            ViewOptionItem(
+                label = stringResource(R.string.drawer_view_order_manual),
+                selected = !orderByUpdated,
+                onClick = { open = false; onOrderByUpdated(false) },
+            )
+            ViewOptionItem(
+                label = stringResource(R.string.drawer_view_order_updated),
+                selected = orderByUpdated,
+                onClick = { open = false; onOrderByUpdated(true) },
+            )
+            HorizontalDivider(color = colors.borderL1)
+            MenuSectionLabel(stringResource(R.string.drawer_view_filter))
+            ViewOptionItem(
+                label = stringResource(R.string.drawer_view_hide_archived),
+                selected = !showArchived,
+                onClick = { open = false; onShowArchived(false) },
+            )
+            ViewOptionItem(
+                label = stringResource(R.string.drawer_view_show_archived),
+                selected = showArchived,
+                onClick = { open = false; onShowArchived(true) },
+            )
+        }
     }
 }
 
+/** A section heading inside [ViewOptionsMenu] — the web's `type: "label"` item. */
 @Composable
-private fun MiniChoice(
+private fun MenuSectionLabel(label: String) {
+    Text(
+        text = label,
+        style = DshType.micro,
+        color = DshTheme.colors.labelCaption,
+        modifier = Modifier.padding(
+            start = DshSpacing.lg,
+            end = DshSpacing.lg,
+            top = DshSpacing.sm,
+            bottom = DshSpacing.xxs,
+        ),
+    )
+}
+
+/**
+ * One selectable row in [ViewOptionsMenu]: a leading check on the choice that
+ * holds, then the label.
+ *
+ * The check is a real glyph rather than a filled row because a menu of nine items
+ * marked by tint alone is unreadable at a glance; the web draws the same tick.
+ * Unselected rows keep the check's space empty, so every label starts at the same
+ * x and the list does not shift by 18dp when the selection moves.
+ */
+@Composable
+private fun ViewOptionItem(
     label: String,
     selected: Boolean,
-    /**
-     * A stable identity for tests. The three Group chips are one-character
-     * differences apart in a screenshot, and their labels are shortened for width,
-     * so the tag is what a test can address without depending on either.
-     */
-    testTag: String? = null,
-    /**
-     * The web's full name for a chip whose visible label had to be shortened;
-     * null when the visible text already says it.
-     */
-    contentDescription: String? = null,
     onClick: () -> Unit,
+    testTag: String? = null,
 ) {
     val colors = DshTheme.colors
-    val description = contentDescription
-    Box(
-        Modifier
-            .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
-            .then(
-                if (description == null) {
-                    Modifier
-                } else {
-                    Modifier.semantics { this.contentDescription = description }
-                },
+    DropdownMenuItem(
+        text = {
+            Text(
+                text = label,
+                style = DshType.bodyMedium,
+                color = if (selected) colors.labelPrimary else colors.labelSecondary,
             )
-            .padding(end = DshSpacing.lg)
-            .clip(RoundedCornerShape(DshRadius.sm))
-            .background(if (selected) colors.accentTertiary else colors.sidebarFill)
-            .clickableNoRipple(onClick = onClick)
-            .padding(horizontal = DshSpacing.md, vertical = DshSpacing.xxs),
-    ) {
-        Text(
-            text = label,
-            style = DshType.micro,
-            color = if (selected) colors.accent else colors.labelTertiary,
-        )
-    }
+        },
+        leadingIcon = {
+            Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                if (selected) {
+                    Icon(
+                        DshIconVectors.CheckOutline,
+                        contentDescription = null,
+                        tint = colors.accent,
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+            }
+        },
+        modifier = Modifier
+            .then(if (testTag == null) Modifier else Modifier.testTag(testTag))
+            .semantics { this.selected = selected },
+        onClick = onClick,
+    )
 }
 
 /**
@@ -2311,6 +2507,29 @@ const val GROUP_WORKSPACE_TAG = "drawer-group-workspace"
 const val GROUP_TREE_TAG = "drawer-group-tree"
 const val GROUP_LIST_TAG = "drawer-group-list"
 
+/**
+ * The "View options" trigger's seat, for tests that need to open the menu.
+ *
+ * A tag as well as a content description: the glyph is a sliders icon whose spoken
+ * name ("View options") is stable, but a test that opens a menu by description is
+ * asserting the copy as a side effect.
+ */
+const val VIEW_OPTIONS_TAG = "drawer-view-options"
+
+/**
+ * The spoken name of the "View options" trigger, and the web's `viewOptions.label`.
+ *
+ * Retained as the English original now that the drawn copy is
+ * `R.string.drawer_view_options`: the resource is what the trigger *says*, and this
+ * constant is the term the app and the web agree on. A test that opens the menu
+ * should still prefer [VIEW_OPTIONS_TAG] — matching on copy asserts the
+ * translation, not the behaviour.
+ */
+const val VIEW_OPTIONS_LABEL = "View options"
+
+/** The New Session button under the search field, for tests and screenshots. */
+const val NEW_SESSION_TAG = "drawer-new-session"
+
 private const val UNGROUPED = "__ungrouped__"
 private const val FLAT = "__flat__"
 
@@ -2323,16 +2542,25 @@ private const val MAX_TREE_DEPTH = 4
 private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 private val dayFormat = SimpleDateFormat("d MMM", Locale.getDefault())
 
-/** Compact relative timestamp, in the style of the web session list. */
+/**
+ * Compact relative timestamp, in the style of the web session list.
+ *
+ * The two abbreviations are resources rather than a bare `"m"`/`"d"` concatenated
+ * in Kotlin — a language that abbreviates "minutes" differently has to be able to
+ * say so — so this is composable and reads them through `stringResource`. The two
+ * absolute forms stay SimpleDateFormat patterns: they are locale-aware by
+ * construction (`Locale.getDefault()`) and are formats, not prose.
+ */
+@Composable
 internal fun relativeTime(millis: Long): String {
     if (millis <= 0L) return ""
     val now = System.currentTimeMillis()
     val delta = now - millis
     return when {
-        delta < 60_000L -> "now"
-        delta < 3_600_000L -> "${delta / 60_000L}m"
+        delta < 60_000L -> stringResource(R.string.drawer_time_now)
+        delta < 3_600_000L -> stringResource(R.string.drawer_time_minutes, delta / 60_000L)
         isSameDay(millis, now) -> timeFormat.format(Date(millis))
-        delta < 7 * 86_400_000L -> "${delta / 86_400_000L}d"
+        delta < 7 * 86_400_000L -> stringResource(R.string.drawer_time_days, delta / 86_400_000L)
         else -> dayFormat.format(Date(millis))
     }
 }

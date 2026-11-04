@@ -48,6 +48,14 @@ import uk.xa0.dsh.ui.theme.DshSpacing
 @Immutable
 data class MeSettingsState(
     val themeMode: String = ThemeMode.SYSTEM,
+    /** Whether a dark appearance is drawn in AMOLED black; see DshConfig.amoled. */
+    val amoled: Boolean = false,
+    /** The system night setting, so the AMOLED summary can say whether it applies now. */
+    val systemDark: Boolean = false,
+    /** Whether the Trajectory and Shell readings are offered. */
+    val chatViewsEnabled: Boolean = true,
+    /** The in-app language override (BCP-47), or blank to follow the device. */
+    val appLanguage: String = "",
     val busyEnter: String = BusyEnter.QUEUE,
     /** ui-chat.transcriptView as the host last reported it; compact before a read. */
     val transcriptView: String = "compact",
@@ -88,6 +96,12 @@ data class MeSettingsState(
 @Immutable
 data class MeSettingsActions(
     val onTheme: (String) -> Unit = {},
+    /** The AMOLED switch, independent of which appearance is selected. */
+    val onAmoled: (Boolean) -> Unit = {},
+    /** The Trajectory/Shell tabs switch. */
+    val onChatViews: (Boolean) -> Unit = {},
+    /** The language row; blank clears the override. */
+    val onLanguage: (String) -> Unit = {},
     val onBusyEnter: (String) -> Unit = {},
     val onPreset: (String) -> Unit = {},
     val onSelectModel: (ModelOption, String?) -> Unit = { _, _ -> },
@@ -130,6 +144,13 @@ internal fun MeSettingsPage(
                 .padding(bottom = DshSpacing.xxxl),
         ) {
             when (id) {
+                // "local" is the section the objective asked for: the settings that are
+                // facts about this phone rather than about the host. The host has no
+                // schema for either of them, which is exactly why they need a page here.
+                "local" -> {
+                    LanguageSettingCard(state, actions)
+                    LocalSettingCard(state, actions)
+                }
                 "appearance" -> AppearanceSettingCard(state, actions)
                 "general" -> {
                     HostSettingsNotes(state)

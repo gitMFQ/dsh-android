@@ -1,0 +1,28 @@
+// LOCAL-ONLY verification aid. Never committed as a build input: it is passed with -I
+// by tools/local-jvm-tests.sh and by hand when a round needs to compile test sources.
+//
+// This box is aarch64 with no usable aapt2 (docs/BUILD-AND-CI.md §0.0), so resource
+// linking cannot run. That blocks `processDebugUnitTestResources`, which in turn blocks
+// `compileDebugUnitTestKotlin` — the one check that would have caught a syntax error in
+// a test file before a CI round. Disabling the resource task and letting the compile use
+// the R.jar `generateDebugRFile` already produced is enough to compile the SOURCES,
+// which is all this is for.
+gradle.projectsEvaluated {
+    rootProject.allprojects { p ->
+        p.tasks.matching { it.name in ["processDebugUnitTestResources", "processDebugResources"] }.configureEach { t ->
+            t.enabled = false
+            t.outputs.upToDateWhen { false }
+        }
+        p.tasks.matching { it.name == "packageDebugUnitTestForUnitTest" }.configureEach { t ->
+            t.doFirst {
+                def dest = new File(p.buildDir, "intermediates/compile_and_runtime_r_class_jar/debugUnitTest/processDebugUnitTestResources/R.jar")
+                dest.parentFile.mkdirs()
+                if (!dest.exists()) {
+                    def gen = new File(p.buildDir, "intermediates/compile_r_class_jar/debug/generateDebugRFile/R.jar")
+                    if (gen.exists()) { dest.bytes = gen.bytes }
+                    else { new java.util.zip.ZipOutputStream(new FileOutputStream(dest)).withCloseable { } }
+                }
+            }
+        }
+    }
+}

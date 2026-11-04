@@ -37,13 +37,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -65,6 +58,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +67,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import uk.xa0.dsh.R
 import uk.xa0.dsh.model.QueueAttachment
 import uk.xa0.dsh.model.QueuedMessage
 import uk.xa0.dsh.ui.clickableNoRipple
@@ -217,7 +213,11 @@ fun QueueDock(
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = "${shown.size} queued messages",
+                        text = pluralStringResource(
+                            R.plurals.queue_count,
+                            shown.size,
+                            shown.size,
+                        ),
                         style = DshType.rowTitle.copy(fontWeight = FontWeight.Medium),
                         color = colors.labelPrimary,
                         maxLines = 1,
@@ -226,8 +226,9 @@ fun QueueDock(
                     // Collapsed, a row that is not simply waiting would otherwise
                     // be invisible: the count alone cannot say that a tap landed.
                     val collapsedStatus = when {
-                        shown.any { it.pending } -> "Sending…"
-                        shown.any { it.placement == "steering" } -> "Steering…"
+                        shown.any { it.pending } -> stringResource(R.string.chat_sending)
+                        shown.any { it.placement == "steering" } ->
+                            stringResource(R.string.chat_steering)
                         else -> null
                     }
                     if (!listVisible && collapsedStatus != null) {
@@ -242,8 +243,10 @@ fun QueueDock(
                     Icon(
                         // One glyph rotated, rather than two swapped: the swap was
                         // a hard cut in the middle of an otherwise moving panel.
-                        imageVector = Icons.Rounded.ExpandMore,
-                        contentDescription = if (expanded) "Collapse queue" else "Expand queue",
+                        imageVector = DshIconVectors.ChevronDownOutline,
+                        contentDescription = stringResource(
+                            if (expanded) R.string.queue_collapse else R.string.queue_expand,
+                        ),
                         tint = colors.labelTertiary,
                         modifier = Modifier
                             .size(14.dp)
@@ -330,6 +333,9 @@ private fun QueueRow(
     val steering = row.placement == "steering"
     val pending = row.pending
     val isEditing = editing != null
+    // Read once for the blank-preview fallback: a resource read inside `ifBlank`'s
+    // lambda would be a composable call in a slot the compiler only inlines by luck.
+    val noText = stringResource(R.string.queue_no_text)
 
     Row(
         Modifier
@@ -342,8 +348,8 @@ private fun QueueRow(
             // The queue glyph means "waiting its turn"; a steering row is already
             // going into the turn, so it wears the send arrow instead.
             Icon(
-                if (steering) Icons.Rounded.Send else DshIconQueue14,
-                contentDescription = if (steering) "Steering" else null,
+                if (steering) DshIconVectors.SendOutline else DshIconQueue14,
+                contentDescription = if (steering) stringResource(R.string.queue_steering_glyph) else null,
                 tint = colors.labelTertiary,
                 modifier = Modifier.size(14.dp),
             )
@@ -397,7 +403,7 @@ private fun QueueRow(
                             Spacer(Modifier.width(DshSpacing.sm))
                         }
                         Text(
-                            text = row.preview.ifBlank { "(no text)" },
+                            text = row.preview.ifBlank { noText },
                             style = DshType.bodyMedium,
                             color = colors.labelPrimaryDimmed,
                             maxLines = 1,
@@ -415,8 +421,9 @@ private fun QueueRow(
                 // The web's pending row: the same three verbs, dimmed, with a
                 // "Sending…" status. They cannot apply — there is no host item id
                 // yet, only the prompt request id the row is keyed by.
+                val sending = stringResource(R.string.chat_sending)
                 Text(
-                    text = "Sending…",
+                    text = sending,
                     style = DshType.micro,
                     color = colors.labelTertiary,
                     maxLines = 1,
@@ -426,23 +433,24 @@ private fun QueueRow(
                     horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    QueueAction(Icons.Rounded.Edit, "Sending…", enabled = false) {}
-                    QueueAction(Icons.Rounded.DeleteOutline, "Sending…", enabled = false) {}
-                    QueueAction(Icons.Rounded.Send, "Sending…", enabled = false) {}
+                    QueueAction(DshIconVectors.EditOutline, sending, enabled = false) {}
+                    QueueAction(DshIconVectors.TrashOutline, sending, enabled = false) {}
+                    QueueAction(DshIconVectors.SendOutline, sending, enabled = false) {}
                 }
             } else if (steering) {
                 // Already on its way into the running turn. The row has to say so
                 // on its own face: in a list of several rows the lead glyph is the
                 // header's, so without this a force-steered item read as just
                 // another message waiting its turn.
+                val steeringLabel = stringResource(R.string.chat_steering)
                 Text(
-                    text = "Steering…",
+                    text = steeringLabel,
                     style = DshType.micro,
                     color = colors.labelTertiary,
                     maxLines = 1,
                 )
                 Spacer(Modifier.width(DshSpacing.xs))
-                QueueAction(Icons.Rounded.Send, "Steering…", enabled = false) {}
+                QueueAction(DshIconVectors.SendOutline, steeringLabel, enabled = false) {}
             } else {
                 // Edit mode swaps two icons for three (or back). Rendered as a cut it
                 // flickered the whole trailing edge of the row; the crossfade keeps the
@@ -458,31 +466,45 @@ private fun QueueRow(
                     ) {
                         if (editingNow) {
                             QueueAction(
-                                icon = Icons.Rounded.Check,
-                                label = "Save queued message",
+                                icon = DshIconVectors.CheckOutline,
+                                label = stringResource(R.string.queue_save_edit),
                                 enabled = busy == null && draft.isNotBlank(),
                             ) { focusManager.clearFocus(); onSubmitEdit(draft) }
-                            QueueAction(Icons.Rounded.Close, "Cancel editing", busy == null, onCancelEdit)
+                            QueueAction(
+                                icon = DshIconVectors.CloseOutline,
+                                label = stringResource(R.string.queue_cancel_edit),
+                                enabled = busy == null,
+                                onClick = onCancelEdit,
+                            )
                         } else {
                             QueueAction(
-                                icon = Icons.Rounded.Edit,
-                                label = if (row.text == null) {
-                                    "Contains non-text content; editing is not supported yet"
-                                } else {
-                                    "Edit queued message"
-                                },
+                                icon = DshIconVectors.EditOutline,
+                                label = stringResource(
+                                    if (row.text == null) {
+                                        R.string.queue_edit_non_text
+                                    } else {
+                                        R.string.queue_edit
+                                    },
+                                ),
                                 enabled = busy == null && row.text != null,
                             ) { row.text?.let(onStartEdit) }
-                            QueueAction(Icons.Rounded.DeleteOutline, "Remove queued message", busy == null, onRemove)
+                            QueueAction(
+                                icon = DshIconVectors.TrashOutline,
+                                label = stringResource(R.string.queue_remove),
+                                enabled = busy == null,
+                                onClick = onRemove,
+                            )
                             // A row that is already steering has nothing left to promote.
                             if (!steering) {
                                 QueueAction(
-                                    icon = Icons.Rounded.Send,
-                                    label = if (running) {
-                                        "Steer queued message"
-                                    } else {
-                                        "Steering is available only while the agent is running"
-                                    },
+                                    icon = DshIconVectors.SendOutline,
+                                    label = stringResource(
+                                        if (running) {
+                                            R.string.queue_steer
+                                        } else {
+                                            R.string.queue_steer_unavailable
+                                        },
+                                    ),
                                     enabled = busy == null && running,
                                 ) { onSteer() }
                             }
@@ -538,7 +560,7 @@ private fun QueueAttachmentChip(attachment: QueueAttachment) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Icons.Rounded.Description,
+            DshIconVectors.BrowseOutline,
             contentDescription = null,
             tint = colors.labelDimmed,
             modifier = Modifier.size(16.dp),

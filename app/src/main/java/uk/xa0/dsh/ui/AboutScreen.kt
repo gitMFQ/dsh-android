@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -34,12 +35,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.BuildConfig
 import uk.xa0.dsh.ModelOption
 import uk.xa0.dsh.PermissionOption
+import uk.xa0.dsh.R
 import uk.xa0.dsh.model.CONNECTION_RESTART_ACTION
 import uk.xa0.dsh.model.CONNECTION_RESTART_NOTE
 import uk.xa0.dsh.model.CONNECTION_RESTART_RUNNING
@@ -228,13 +231,13 @@ fun AboutContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "About",
+                text = stringResource(R.string.about_title),
                 style = DshType.heading2,
                 color = colors.labelPrimary,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = "Close",
+                text = stringResource(R.string.about_close),
                 style = DshType.bodyMedium,
                 color = colors.link,
                 modifier = Modifier
@@ -247,39 +250,38 @@ fun AboutContent(
         // The one-line answer to "what is this?", under the app's own lockup.
         DshWordmark(Modifier.padding(horizontal = DshSpacing.xxl))
         Spacer(Modifier.height(DshSpacing.md))
-        SectionNote(
-            "A native Android client for the DSH host. It speaks the host's own " +
-                "HTTP + WebSocket protocol: there is no WebView, and nothing is " +
-                "installed on the host to serve it.",
-        )
+        SectionNote(stringResource(R.string.about_intro))
 
-        SectionHeading("App")
-        InfoRow("Version", local.versionName)
-        InfoRow("Android", androidVersion())
+        SectionHeading(stringResource(R.string.about_section_app))
+        InfoRow(R.string.about_row_version, local.versionName)
+        InfoRow(R.string.about_row_android, androidVersion())
         // The build's own id, not a host fact and not a setting: it is the first
         // thing a bug report needs, and the one thing Version cannot show — the
         // debug variant carries an `.debug` suffix while both share VERSION_NAME.
-        InfoRow("Package", BuildConfig.APPLICATION_ID)
-        InfoRow("Device", deviceName())
+        InfoRow(R.string.about_row_package, BuildConfig.APPLICATION_ID)
+        InfoRow(R.string.about_row_device, deviceName())
 
-        SectionHeading("Connection")
-        InfoRow("Host", baseUrl.ifBlank { "Not configured" })
+        SectionHeading(stringResource(R.string.about_section_connection))
+        InfoRow(
+            R.string.about_row_host,
+            baseUrl.ifBlank { stringResource(R.string.about_value_not_configured) },
+        )
         // Which door is actually in use. Not the same as Host: the resolver
         // prefers the LAN address whenever the phone can reach it, so Host can be
         // the public URL while traffic goes over the LAN. When the two agree,
         // "Active URL" would only repeat the row above, so it is omitted.
         InfoRow(
-            "Route",
+            R.string.about_row_route,
             when {
-                activeUrl.isBlank() -> "Not connected"
-                activeRouteLan -> "LAN"
-                else -> "Public"
+                activeUrl.isBlank() -> stringResource(R.string.about_value_not_connected)
+                activeRouteLan -> stringResource(R.string.about_value_route_lan)
+                else -> stringResource(R.string.about_value_route_public)
             },
         )
         // Compared with the trailing slash folded away: the configured string is
         // stored trimmed while the resolved one is a normalised URL.
         if (activeUrl.isNotBlank() && activeUrl.trimEnd('/') != baseUrl.trimEnd('/')) {
-            InfoRow("Active URL", activeUrl)
+            InfoRow(R.string.about_row_active_url, activeUrl)
         }
         // Why the LAN door is not the route in use, when it is not. The resolver
         // prefers the LAN whenever it answers, so "Public" with a LAN address
@@ -292,10 +294,12 @@ fun AboutContent(
         // sentence, and a different fact: nothing is probed, so no fault can ever be
         // recorded and no reconnect can change the answer. Without this the two read
         // identically from here.
+        // The two faults read differently on purpose (see [lanDoorNote]); what changed
+        // here is only where the words live.
         val fault = lanDoorFault
         when {
-            fault != null -> SectionNote(lanDoorNote(fault))
-            !lanRouteConfigured -> SectionNote(ABOUT_LAN_DOOR_UNCONFIGURED)
+            fault != null -> SectionNote(stringResource(lanDoorNote(fault)))
+            !lanRouteConfigured -> SectionNote(stringResource(R.string.about_lan_door_unconfigured))
         }
         // And the one action that can revisit a verdict the clock may not: a person
         // asking again. Offered only when there is a fault to revisit, because the
@@ -305,7 +309,7 @@ fun AboutContent(
             Column(Modifier.padding(horizontal = DshSpacing.xxl)) {
                 Spacer(Modifier.height(DshSpacing.sm))
                 Text(
-                    text = ABOUT_LAN_DOOR_RETRY,
+                    text = stringResource(R.string.about_lan_door_retry),
                     style = DshType.bodyMedium,
                     color = colors.link,
                     modifier = Modifier.clickableNoRipple { retryLan() },
@@ -323,7 +327,11 @@ fun AboutContent(
                 .fillMaxWidth()
                 .padding(horizontal = DshSpacing.xxl, vertical = DshSpacing.sm),
         ) {
-            Text("LAN address", style = DshType.bodyMedium, color = colors.labelTertiary)
+            Text(
+                text = stringResource(R.string.about_row_lan_address),
+                style = DshType.bodyMedium,
+                color = colors.labelTertiary,
+            )
             Spacer(Modifier.height(DshSpacing.sm))
             DshTextField(
                 value = lanDraft,
@@ -333,8 +341,7 @@ fun AboutContent(
             )
             Spacer(Modifier.height(DshSpacing.sm))
             Text(
-                text = "Optional, for the same host: reachable only on your own network, " +
-                    "and tried first when it answers.",
+                text = stringResource(R.string.about_lan_note),
                 style = DshType.micro,
                 color = colors.labelCaption,
             )
@@ -343,7 +350,7 @@ fun AboutContent(
             if (saveLan != null && lanDraft.trim().trimEnd('/') != lanUrl.trimEnd('/')) {
                 Spacer(Modifier.height(DshSpacing.sm))
                 Text(
-                    text = "Save LAN address",
+                    text = stringResource(R.string.about_lan_save),
                     style = DshType.bodyMedium,
                     color = colors.link,
                     modifier = Modifier.clickableNoRipple { saveLan(lanDraft) },
@@ -353,16 +360,39 @@ fun AboutContent(
 
         // A blank account is what the Setup screen asks for on the carrier-port
         // cookie path ("Leave the account blank"), so it is named, not dashed.
-        InfoRow("Account", username.ifBlank { "None" })
-        InfoRow("Sign-in", local.signIn)
-        InfoRow("Session cookie", local.sessionCookie?.let { if (it) "Present" else "None" })
+        InfoRow(
+            R.string.about_row_account,
+            username.ifBlank { stringResource(R.string.about_value_none) },
+        )
+        InfoRow(R.string.about_row_sign_in, local.signIn)
+        InfoRow(
+            R.string.about_row_session_cookie,
+            local.sessionCookie?.let {
+                stringResource(
+                    if (it) R.string.about_value_present else R.string.about_value_none,
+                )
+            },
+        )
         // Web shell connection copy: connected / disconnected.
-        InfoRow("Status", if (socketConnected) "Connected" else "Disconnected")
+        InfoRow(
+            R.string.about_row_status,
+            stringResource(
+                if (socketConnected) {
+                    R.string.about_value_connected
+                } else {
+                    R.string.about_value_disconnected
+                },
+            ),
+        )
         // The host's own DSH version, folded from its `$events` opening frame — the
         // only identity frame the wire carries. An `Unknown` here is "not connected,
         // or no opening frame yet"; a connected host whose frame named none says so
         // in words rather than being left blank or filled in with this app's version.
-        InfoRow("DSH version", hostVersionLabel(hostVersion), HOST_VERSION_VALUE_TAG)
+        InfoRow(
+            R.string.about_row_dsh_version,
+            hostVersionLabel(hostVersion),
+            HOST_VERSION_VALUE_TAG,
+        )
 
         // The transport-level action, beside the facts that explain it. One action,
         // one effect: it rebuilds the socket and re-asks both doors, and leaves the
@@ -449,7 +479,7 @@ fun AboutContent(
         if (check != null && trust != null && forget != null &&
             baseUrl.trim().startsWith("https://", ignoreCase = true)
         ) {
-            SectionHeading("Certificate")
+            SectionHeading(stringResource(R.string.about_section_certificate))
             Column(Modifier.padding(horizontal = DshSpacing.xxl)) {
                 CertificateSection(
                     url = baseUrl,
@@ -465,17 +495,25 @@ fun AboutContent(
             }
         }
 
-        SectionHeading("Session")
-        InfoRow("Title", sessionTitle.ifBlank { "Untitled" })
+        SectionHeading(stringResource(R.string.about_section_session))
+        InfoRow(
+            R.string.about_row_title,
+            sessionTitle.ifBlank { stringResource(R.string.about_value_untitled) },
+        )
         // The host reports the cwd with the session header; a session created
         // without one has no directory to name.
-        InfoRow("Directory", sessionCwd?.let { shortenPath(it) })
+        InfoRow(R.string.about_row_directory, sessionCwd?.let { shortenPath(it) })
         // Only rendered once a caller passes the route: an "Unknown" row here
         // would hide that the app knows the model and was simply not asked.
-        if (selectedModel != null) InfoRow("Model", modelDisplay(selectedModel, selectedEffort))
-        InfoRow("Access mode", permissionDisplay(sessionPermission, permissionOptions))
+        if (selectedModel != null) {
+            InfoRow(R.string.about_row_model, modelDisplay(selectedModel, selectedEffort))
+        }
         InfoRow(
-            "Agent preset",
+            R.string.about_row_access_mode,
+            permissionDisplay(sessionPermission, permissionOptions),
+        )
+        InfoRow(
+            R.string.about_row_agent_preset,
             sessionAgentPreset
                 .takeIf { it.isNotBlank() }
                 ?.let { agentPresetLabel(it, "") },
@@ -486,12 +524,8 @@ fun AboutContent(
         // it in place would mean a WebView — the one thing this client exists not
         // to be. Handing the URL to the system also means a phone with the Ko-fi
         // app installed gets to open it there instead of in a browser tab.
-        SectionHeading("Support")
-        SectionNote(
-            "This client is a personal project and stays free. The host it talks to " +
-                "is your own machine, so there is nothing to pay for here — but if " +
-                "it has been useful, coffee is welcome.",
-        )
+        SectionHeading(stringResource(R.string.about_section_support))
+        SectionNote(stringResource(R.string.about_support_note))
         SupportRow()
 
         // The web has no logout row (browser auth is the signed cookie); this is
@@ -508,7 +542,11 @@ fun AboutContent(
                 .clickableNoRipple(onClick = onSignOut),
             contentAlignment = Alignment.Center,
         ) {
-            Text("Sign out and forget credentials", style = DshType.labelLarge, color = colors.error)
+            Text(
+                stringResource(R.string.about_sign_out),
+                style = DshType.labelLarge,
+                color = colors.error,
+            )
         }
     }
 }
@@ -575,7 +613,11 @@ private fun SupportRow() {
                 runCatching {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(KOFI_URL)))
                 }.onFailure {
-                    Toast.makeText(context, "No app can open $KOFI_URL", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.about_kofi_no_app, KOFI_URL),
+                        Toast.LENGTH_SHORT,
+                    ).show()
                 }
             },
         verticalAlignment = Alignment.CenterVertically,
@@ -588,7 +630,11 @@ private fun SupportRow() {
             modifier = Modifier.size(16.dp),
         )
         Spacer(Modifier.width(DshSpacing.sm))
-        Text("Buy me a coffee on Ko-fi", style = DshType.labelLarge, color = colors.labelPrimary)
+        Text(
+            stringResource(R.string.about_support_kofi),
+            style = DshType.labelLarge,
+            color = colors.labelPrimary,
+        )
     }
 }
 
@@ -605,17 +651,20 @@ private fun SupportRow() {
  * cannot tell them apart.
  */
 @Composable
-private fun InfoRow(label: String, value: String?, valueTag: String? = null) {
+private fun InfoRow(@StringRes label: Int, value: String?, valueTag: String? = null) {
     val colors = DshTheme.colors
+    // A missing value reads as a named state rather than a dash, and that name is
+    // the app speaking — so it is a resource, not a literal.
+    val missing = stringResource(R.string.about_value_unknown)
     Row(Modifier.fillMaxWidth().padding(horizontal = DshSpacing.xxl, vertical = DshSpacing.xs)) {
         Text(
-            label,
+            stringResource(label),
             style = DshType.bodyMedium,
             color = colors.labelTertiary,
             modifier = Modifier.width(110.dp),
         )
         Text(
-            value ?: "Unknown",
+            value ?: missing,
             modifier = if (valueTag == null) Modifier else Modifier.testTag(valueTag),
             style = DshType.bodyMedium,
             color = if (value == null) colors.labelCaption else colors.labelPrimary,
@@ -648,42 +697,51 @@ const val RESTART_CONNECTION_TAG = "about-restart-connection"
 const val FORCE_QUIT_TAG = "about-force-quit"
 
 /**
- * What the About page says when the LAN door is being avoided, one sentence per
- * fault. Named because the wording is the whole of what this page adds here, and a
- * test that retyped the sentences would be free to drift from the ones drawn.
+ * The LAN-door sentences, as resources.
  *
- * The two faults read differently on purpose: the reader's question is not "what
- * went wrong" but "does it come back", and the answer is not the same for a blip as
- * for a door that answered with something which was not DSH.
+ * Named because the wording is the whole of what this page adds here: the reader's
+ * question is not "what went wrong" but "does it come back", and the answer is not
+ * the same for a blip as for a door that answered with something which was not DSH.
  */
+@StringRes
+private fun lanDoorNote(fault: DoorFault): Int = when (fault) {
+    DoorFault.Transport -> R.string.about_lan_door_transport
+    DoorFault.WrongAnswer -> R.string.about_lan_door_wrong_answer
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * The LAN-door copy, kept as constants for the *tests*, not for the page.
+ *
+ * The page draws `R.string.about_lan_door_*` now, so these four are no longer read
+ * by any production code — they exist because `AboutLanDoorTest` matches nodes by
+ * these exact strings, and a test file may not be edited in this change. They are
+ * the same English the resources carry, so the assertions still find the nodes.
+ *
+ * Deleting them is the next step, and it is a test-side edit: the four assertions
+ * become `onNodeWithText(context.getString(R.string.about_lan_door_transport))`
+ * (or the rule's activity), and this block goes away with them. Duplicating the
+ * English here is the one thing this file does not want to be true for long.
+ * ---------------------------------------------------------------------------
+ */
+
+/** The transport fault's sentence; see the block note above. */
 const val ABOUT_LAN_DOOR_TRANSPORT: String =
     "The LAN door failed a real call, so it is set aside for now. It is tried again " +
         "after a pause that grows each time it fails."
 
+/** The wrong-answer fault's sentence; see the block note above. */
 const val ABOUT_LAN_DOOR_WRONG_ANSWER: String =
     "The LAN door answered a real call with something that was not DSH, so it is set " +
         "aside until the network changes."
 
-/**
- * What the About page says when there is no LAN address to try at all.
- *
- * Not a fault and not a failure: the resolver has no candidate, so nothing is
- * probed and no reconnect can change the route. A reader who has set the LAN
- * address on another screen is owed the difference between that setting being
- * missing and the door being refused.
- */
+/** "No LAN address is set"; see the block note above. */
 const val ABOUT_LAN_DOOR_UNCONFIGURED: String =
     "No LAN address is set, so only the public door is tried. If this phone is " +
         "usually on the same network as the host, set one below."
 
-/** The action that takes a LAN-door verdict back to the doors themselves. */
+/** The retry action's label; see the block note above. */
 const val ABOUT_LAN_DOOR_RETRY: String = "Try the LAN door again"
-
-/** The sentence for one fault; see [ABOUT_LAN_DOOR_TRANSPORT]. */
-private fun lanDoorNote(fault: DoorFault): String = when (fault) {
-    DoorFault.Transport -> ABOUT_LAN_DOOR_TRANSPORT
-    DoorFault.WrongAnswer -> ABOUT_LAN_DOOR_WRONG_ANSWER
-}
 
 /**
  * What the About row prints for the host's own DSH version.
@@ -694,26 +752,36 @@ private fun lanDoorNote(fault: DoorFault): String = when (fault) {
  * is named as having reported none, in the same shape as `Not configured` / `None` /
  * `Untitled` — never blank, and never this app's own version.
  */
+@Composable
 private fun hostVersionLabel(version: HostVersion): String? = when (version) {
     HostVersion.Unknown -> null
-    HostVersion.NotReported -> "Not reported"
-    is HostVersion.Reported -> version.version
+    HostVersion.NotReported -> stringResource(R.string.about_value_not_reported)
+    // A version string is the host's own data: drawn exactly as sent, never run
+    // through a translation table. Only the state *words* beside it are resources.
+    is HostVersion.Reported -> version.version // resourceId: none, on purpose
 }
 
 /** The Android release and the API level this build is running on. */
+@Composable
 private fun androidVersion(): String {
     // The platform allows RELEASE to be an empty string when the version is not
     // known; the API level is the half that is always there.
     val release = Build.VERSION.RELEASE.takeIf { !it.isNullOrBlank() }
-    return listOfNotNull(release, "API ${Build.VERSION.SDK_INT}").joinToString(" · ")
+    // "API 34" is a resource rather than a concatenation: the abbreviation is the
+    // app's voice here, and a translation may spell it out.
+    return listOfNotNull(
+        release,
+        stringResource(R.string.about_android_api, Build.VERSION.SDK_INT),
+    ).joinToString(" · ")
 }
 
 /** `Manufacturer Model` — the two device strings a bug report needs. */
+@Composable
 private fun deviceName(): String =
     listOfNotNull(Build.MANUFACTURER, Build.MODEL)
         .filter { it.isNotBlank() }
         .joinToString(" ")
-        .ifBlank { "Unknown" }
+        .ifBlank { stringResource(R.string.about_value_unknown) }
 
 /**
  * The composer's own model + effort pair, under the full names (`Composer.kt`

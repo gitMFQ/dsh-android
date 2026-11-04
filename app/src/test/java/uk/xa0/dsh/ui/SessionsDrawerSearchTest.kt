@@ -94,7 +94,10 @@ class SessionsDrawerSearchTest {
         rule.waitForIdle()
 
         // One title carries the query; the other two are filtered out of the count.
-        rule.onNodeWithText("1 sessions").assertExists()
+        rule.onNodeWithText("1 session").assertExists()
+        // Plural, not concatenation: the count is a <plurals> now, so one session says
+        // "1 session". The old assertion pinned the concatenated "1 sessions", which
+        // was the bug this change fixed rather than a behaviour worth keeping.
         rule.onNodeWithContentDescription(SessionSearchCopy.CLEAR).assertExists()
 
         rule.onNodeWithContentDescription(SessionSearchCopy.CLEAR).performClick()

@@ -23,13 +23,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,42 +37,42 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Badge
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.ChatBubble
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Terminal
-import androidx.compose.material.icons.rounded.SmartToy
-import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -80,6 +80,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -95,33 +96,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.foundation.layout.exclude
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -129,6 +135,7 @@ import kotlinx.coroutines.launch
 import uk.xa0.dsh.BalanceState
 import uk.xa0.dsh.PENDING_DRAFT_KEY
 import uk.xa0.dsh.PendingKind
+import uk.xa0.dsh.R
 import uk.xa0.dsh.ReferenceCandidate
 import uk.xa0.dsh.UiState
 import uk.xa0.dsh.data.BusyEnter
@@ -143,11 +150,11 @@ import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.DisplayRow
 import uk.xa0.dsh.model.GeneralSettings
 import uk.xa0.dsh.model.LiveAttempt
+import uk.xa0.dsh.model.PendingKindWire
 import uk.xa0.dsh.model.SessionFiles
+import uk.xa0.dsh.model.SessionTarget
 import uk.xa0.dsh.model.StatusCapsule
 import uk.xa0.dsh.model.StatusCapsules
-import uk.xa0.dsh.model.PendingKindWire
-import uk.xa0.dsh.model.SessionTarget
 import uk.xa0.dsh.model.SubagentComposerState
 import uk.xa0.dsh.model.SubagentReadOnlyReason
 import uk.xa0.dsh.model.TurnDeliverables
@@ -163,30 +170,28 @@ import uk.xa0.dsh.model.turnOrNull
 import uk.xa0.dsh.ui.agentPresetLabel
 import uk.xa0.dsh.ui.components.ApprovalCard
 import uk.xa0.dsh.ui.components.AssistantMessageRow
-import uk.xa0.dsh.ui.glass.GlassBarBackdrop
-import uk.xa0.dsh.ui.glass.glassBarLayer
-import uk.xa0.dsh.ui.glass.glassLift
-import uk.xa0.dsh.ui.glass.liquidPane
-import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
-import uk.xa0.dsh.ui.nav.BarHeight
-import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.components.CommandEntry
 import uk.xa0.dsh.ui.components.CommandMenu
 import uk.xa0.dsh.ui.components.ComposerAccessoryRail
 import uk.xa0.dsh.ui.components.ComposerDock
-import uk.xa0.dsh.ui.components.FullScreenComposer
+import uk.xa0.dsh.ui.components.ComposerSelectionMenu
+import uk.xa0.dsh.ui.components.ComposerStackGap
+import uk.xa0.dsh.ui.components.ComposerTextToolbar
 import uk.xa0.dsh.ui.components.DeliverableRow
 import uk.xa0.dsh.ui.components.DotState
+import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.components.DshMark
+import uk.xa0.dsh.ui.components.ExpandedProcessCollapseBar
 import uk.xa0.dsh.ui.components.ExplorerWiring
 import uk.xa0.dsh.ui.components.FilesPanel
+import uk.xa0.dsh.ui.components.FullScreenComposer
 import uk.xa0.dsh.ui.components.GoalBar
 import uk.xa0.dsh.ui.components.JobsSeat
 import uk.xa0.dsh.ui.components.JobsSheet
 import uk.xa0.dsh.ui.components.LiveAttemptRow
 import uk.xa0.dsh.ui.components.NoticeRow
-import uk.xa0.dsh.ui.components.QueueDock
 import uk.xa0.dsh.ui.components.QuestionCard
+import uk.xa0.dsh.ui.components.QueueDock
 import uk.xa0.dsh.ui.components.ReferenceMenu
 import uk.xa0.dsh.ui.components.StateDot
 import uk.xa0.dsh.ui.components.SubagentReadOnlyComposer
@@ -198,18 +203,27 @@ import uk.xa0.dsh.ui.components.TurnStatusRow
 import uk.xa0.dsh.ui.components.UserMessageRow
 import uk.xa0.dsh.ui.components.WorkspaceBrowser
 import uk.xa0.dsh.ui.components.composerCommandEntries
+import uk.xa0.dsh.ui.components.hasConversationStarted
+import uk.xa0.dsh.ui.components.rememberExpandedProcessState
 import uk.xa0.dsh.ui.composer.ComposerTriggers
 import uk.xa0.dsh.ui.composer.applySendRestore
 import uk.xa0.dsh.ui.composer.composerTriggers
 import uk.xa0.dsh.ui.composer.consumeTrigger
 import uk.xa0.dsh.ui.composer.replaceTrigger
+import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.glassBarLayer
+import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.liquidPane
+import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
+import uk.xa0.dsh.ui.nav.BarHeight
+import uk.xa0.dsh.ui.nav.BottomBarItem
+import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
+import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
+import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.scroll.TailFollow
 import uk.xa0.dsh.ui.settings.MeSettingsActions
 import uk.xa0.dsh.ui.settings.MeSettingsPage
 import uk.xa0.dsh.ui.settings.MeSettingsState
-import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
-import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
-import uk.xa0.dsh.ui.overlay.DshSheet
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -263,6 +277,7 @@ internal fun ChatPanel(
     actions: ChatActions,
     terminal: @Composable (Modifier) -> Unit,
 ) {
+    val colors = DshTheme.colors
     val ui = state.ui
     val entries = state.entries
     val live = state.live
@@ -286,6 +301,12 @@ internal fun ChatPanel(
     // panel's own arguments; nothing new is stored.
     val meSettings = MeSettingsState(
         themeMode = ui.themeMode,
+        amoled = ui.amoled,
+        chatViewsEnabled = ui.chatViewsEnabled,
+        appLanguage = ui.appLanguage,
+        // The system night setting, read here rather than inside the card so the
+        // settings module stays a pure function of its arguments.
+        systemDark = androidx.compose.foundation.isSystemInDarkTheme(),
         busyEnter = ui.busyEnter,
         transcriptView = transcriptView,
         // No default-permission state exists on this client, so the row shows
@@ -312,6 +333,9 @@ internal fun ChatPanel(
     )
     val meSettingsActions = MeSettingsActions(
         onTheme = actions.updateTheme,
+        onAmoled = actions.updateAmoled,
+        onChatViews = actions.setChatViewsEnabled,
+        onLanguage = actions.setAppLanguage,
         onBusyEnter = actions.updateBusyEnter,
         onPreset = actions.updatePreset,
         onSelectModel = actions.selectModel,
@@ -343,6 +367,39 @@ internal fun ChatPanel(
 
     /** Turns whose process rows the user has opened; the rest stay folded. */
     var expandedTurns by remember { mutableStateOf(emptySet<Int>()) }
+    /**
+     * Which disclosure row is open, for the pinned collapse control.
+     *
+     * The header that closes a long thought lives in the row, and the row scrolls: once
+     * the reader is 400dp into a thought the only way out was to scroll back up to a bar
+     * that is no longer on screen. The bar drawn outside the list below stays put while
+     * the content moves under it.
+     */
+    val expandedProcess = rememberExpandedProcessState()
+    // What the pinned collapse bar says it is about to close. Read here rather than
+    // inside the bar because the *bar* is one composable and the disclosures are two
+    // kinds, and the row that opened is the only place that knows which.
+    // The transcript has its own selection toolbar, with the same two extra doors the
+    // composer has.
+    //
+    // `SelectionContainer` asks `LocalTextToolbar` for its menu, and the composer only
+    // overrides that *inside itself* — so selecting an answer used to get the platform
+    // menu, which has copy and select-all and nothing else. Quote and Translate are the
+    // two the web client has and the platform cannot express, and the objective names
+    // both against the conversation rather than against the input box.
+    //
+    // The selected text is collected per row: a `SelectionContainer` per row is what
+    // keeps a selection that spans two recycled items from losing its ends (see the
+    // note at the list below), and each row reports what it has selected into this one
+    // holder, which is what the menu reads when it opens.
+    // The system clipboard, for the translation sheet's Copy and the transcript's own
+    // long-press actions.
+    val clipboard = LocalClipboardManager.current
+
+    val transcriptToolbar = remember { ComposerTextToolbar() }
+    var transcriptSelection by remember { mutableStateOf("") }
+    val reasoningLabel = stringResource(R.string.chat_think)
+    val toolLabel = stringResource(R.string.chat_details)
 
     /**
      * The `session/fork` boundary the reader has asked to branch at, while the
@@ -559,7 +616,6 @@ internal fun ChatPanel(
         restoreArmed = sent.isNotEmpty()
         return sent
     }
-    var showSettings by rememberSaveable { mutableStateOf(false) }
     // The About sheet is pure local state, so unlike Settings it needs no read on
     // open — see `AboutSheet`.
     var showAbout by rememberSaveable { mutableStateOf(false) }
@@ -609,6 +665,12 @@ internal fun ChatPanel(
         scope.launch { destinationState.animateScrollToPage(target.ordinal) }
     }
     var chatView by rememberSaveable(ui.currentSessionId) { mutableStateOf(ChatView.CHAT) }
+    // A setting turned off under an open view leaves no way back: the strip that carried
+    // the seat is gone. Returning to the conversation is the only reentry the reader still
+    // has, so it is done for them.
+    LaunchedEffect(ui.chatViewsEnabled) {
+        if (!ui.chatViewsEnabled && chatView != ChatView.CHAT) chatView = ChatView.CHAT
+    }
     val goToView: (ChatView) -> Unit = { chatView = it }
 
     // The bar's material needs something to sample (3.2b).
@@ -780,6 +842,32 @@ internal fun ChatPanel(
     // session nor opening the bar with its circle raises it — only a tap on the text field
     // does, so a shape gesture never throws a keyboard over the transcript.
     var composerExpanded by rememberSaveable(ui.currentSessionId) { mutableStateOf(true) }
+
+    // Quoting: the selection becomes a blockquote in the composer, which is what the
+    // web does (dsh-message-quotes). Appended rather than replacing, because the reader
+    // was most likely in the middle of writing something when they quoted.
+    val quoteIntoDraft: (String) -> Unit = { selected ->
+        val quoted = selected.trim().lines().joinToString("\n") { line ->
+            if (line.isEmpty()) ">" else "> $line"
+        }
+        if (quoted.isNotEmpty()) {
+            val existing = draft.text.toString()
+            val joined = if (existing.isBlank()) quoted else existing.trimEnd() + "\n\n" + quoted
+            draft.edit { replace(0, length, joined) }
+            composerExpanded = true
+        }
+    }
+    // The translation answer, shown in a sheet rather than replacing the transcript:
+    // the reader asked "what does this say", not "replace what it says".
+    var translation by remember { mutableStateOf<String?>(null) }
+    var translationBusy by remember { mutableStateOf(false) }
+    val translateSelection: (String) -> Unit = { selected ->
+        translationBusy = true
+        actions.translateFragment(selected) { result ->
+            translationBusy = false
+            translation = result ?: ""
+        }
+    }
     // The full-screen writing surface offered by the selection toolbar. A dialog rather
     // than a route: the draft, the session and the send path stay exactly where they are.
     var fullScreenComposer by rememberSaveable(ui.currentSessionId) { mutableStateOf(false) }
@@ -908,6 +996,9 @@ internal fun ChatPanel(
     // the session for the same reason the loader is: it carries the session id the host
     // resolves the path against, so a stale one would read the wrong workspace.
     val fileDownloader = remember(current?.id) { actions.workspaceFileDownloader() }
+    // Session-scoped like the loader and the downloader: the write travels through
+    // this session's own shell, so a stale one would write into the wrong workspace.
+    val fileSaver = remember(current?.id) { actions.workspaceFileSaver() }
     // The pending seat's directory, for the hero's workspace chip. The target's own
     // path is preferred; a Workspace the registry has not delivered a path for yet
     // still resolves through the registry, and a Directory target *is* its path.
@@ -998,11 +1089,31 @@ internal fun ChatPanel(
     // height. TailFollow then corrects growth against the padded edge, pixel for pixel, so
     // the newest line stays above the input instead of climbing out from behind it.
     var composerStackPx by remember { mutableIntStateOf(0) }
+    // The pill strip’s own height, measured for the same reason the dock’s is:
+    // the transcript reserves it as top content padding, and a strip that
+    // gains a pill must push the transcript down rather than hide its first
+    // row behind it.
+    var pillStripPx by remember { mutableIntStateOf(0) }
     // The height of the floating dock area: the accessory rail, the menus and the dock
     // row. Measured, not assumed — a long draft grows the bar, and the cards above it and
     // the transcript's bottom padding both have to follow.
     var dockAreaPx by remember { mutableIntStateOf(0) }
     val dockAreaDp = with(LocalDensity.current) { dockAreaPx.toDp() }
+    // One Density for the inset queries below: `WindowInsets.getTop` takes one, and
+    // `LocalDensity.current` is not readable inside a `LaunchedEffect`.
+    val densityPx = LocalDensity.current
+
+    // The chrome the pages float under: the header plus the error banner, both
+    // measured rather than assumed. A page pays this as *top padding* because the
+    // shell is a Box now — without it the pill strip and every page header would be
+    // drawn underneath the transparent bar, which is the opposite of the ask.
+    //
+    // On the three non-conversation pages this is the status-bar inset; see the
+    // header’s else-branch for why.
+    val chromeDp = with(LocalDensity.current) { (headerPx + bannerPx).toDp() }
+    // Chrome plus the floating pill strip: what the transcript’s first row has to
+    // clear at rest, and therefore what it passes *through* when the reader scrolls.
+    val contentTopDp = chromeDp + with(LocalDensity.current) { pillStripPx.toDp() }
 
     // One send path for the bar and the full-screen surface: the text is taken from the
     // draft exactly once, the follow is re-armed, and the hero's first turn keeps its
@@ -1133,12 +1244,17 @@ internal fun ChatPanel(
                         scope.launch { drawerState.close() }
                     },
                     onSettings = {
-                        showSettings = true
-                        // The sheet reads on open rather than on a timer, but it is
-                        // no longer the *only* reader — the transcript needs
-                        // `ui-chat.transcriptView` to know whether it may fold — so
-                        // the connect-time read below is what usually supplies this.
+                        // Settings is a *page* now, not a sheet over the drawer (and not
+                        // a tab strip inside Me, which is gone). It is the same four
+                        // destinations the bar carries, so the only honest way in from
+                        // the drawer is to go there.
+                        //
+                        // The host read is still asked for on the way: the transcript
+                        // needs `ui-chat.transcriptView` whether or not the settings
+                        // page is ever opened, and opening it is the moment the reader
+                        // most likely wants the current answer.
                         actions.loadHostSettings()
+                        goToDestination(Destination.SETTINGS)
                         scope.launch { drawerState.close() }
                     },
                     onAbout = {
@@ -1221,96 +1337,100 @@ internal fun ChatPanel(
                 },
             )
         }
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-            ChatHeader(
-                title = current?.title ?: "DSH",
-                cwd = current?.cwd ?: header?.cwd,
-                onMenu = { scope.launch { drawerState.open() } },
-                jobs = ui.jobs,
-                jobsFinishedUnseen = ui.jobsFinishedUnseen,
-                onJobs = {
-                    actions.markJobsSeen()
-                    showJobs = true
-                },
-                // The panel's seat, offered only while there is a local route to
-                // describe — the header's trailing cluster is already a set of
-                // conditional seats, so this is the same shape as Files and Jobs
-                // rather than a new idea. See the gate above for why this is not a tab.
-                routerAvailable = routerTarget != null,
-                routerOpen = showRouter,
-                onRouter = { showRouter = !showRouter },
-                filesOpen = destination == Destination.FILES,
-                // The Files panel resolves every path against a session
-                // (`agentId`), so on the pending seat there is nothing to list. The
-                // seat states that fact by not being offered, rather than opening a
-                // panel that can only be empty.
-                filesAvailable = ui.currentSessionId != null,
-                onFiles = {
-                    filesFocus = null
-                    val closing = destination == Destination.FILES
-                    // Leaving the page drops the tree's cache with it, so returning
-                    // reads the directory again rather than drawing a snapshot from
-                    // whenever it was last looked at.
-                    if (closing) actions.resetWorkspaceExplorer()
-                    goToDestination(if (closing) Destination.CHAT else Destination.FILES)
-                },
-                lineage = current?.let { subagentRollups[it.id] },
-                onLineage = { showLineage = true },
-                parent = subagentParent,
-                onParent = { subagentParent?.let { actions.openSession(it.sessionId) } },
-                // One status fact, ranked. The derivation reads the whole `UiState`
-                // because the four facts it ranks are held in four different places —
-                // the attention mirrors, the mux poll, the running flag and the
-                // session id — and doing that ranking at the call site is what keeps
-                // `ChatHeader` a pure function of its arguments.
+        // **A Box, not a Column: the chrome floats over the pages.**
+        //
+        // It used to be a Column, and the difference is the whole of "顶栏整体透明内容可以
+        // 滑动显示到顶栏和通知栏": in a Column the header *reserves* its strip, so the
+        // pages begin below it and nothing can ever be visible through it. Here the pages
+        // fill the area from the window’s top edge — under the status bar and under the
+        // header — and each page pays the measured chrome height as *content* padding,
+        // which a scrollable can pass through.
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            // **The top bar belongs to the conversation, and only to it.**
+            //
+            // It used to lead every destination, folding itself to one line on the three
+            // that had nothing to fold. That is why Files and Plugins looked like the
+            // conversation with its text removed rather than like pages in their own
+            // right: they were drawing a header about a session they were not showing.
+            // Each page now owns the strip at its own top (see FilesSurface and
+            // PluginsPage), and this one is the conversation's.
+            //
+            // The controls that were seats in this row are the pill strip *below* it now
+            // (see the pager). The row itself is three fixed things — a circle, the
+            // session pill, a circle — so nothing in it can shift as state changes.
+            if (destination == Destination.CHAT) {
+                ChatHeader(
+                    title = current?.title ?: "DSH",
+                    cwd = current?.cwd ?: header?.cwd,
+                    onMenu = { scope.launch { drawerState.open() } },
+                    // The seats that are rare, one-shot, and about *this* session rather
+                    // than about moving around it. Order is deliberate: the frequent one
+                    // first, the diagnostic one last.
+                    overflow = buildList {
+                        if (subagentParent != null) {
+                            add(
+                                HeaderAction(
+                                    label = "Open parent session",
+                                    icon = DshIconVectors.ChevronUpOutline,
+                                ) { actions.openSession(subagentParent.sessionId) },
+                            )
+                        }
+                        if (current?.let { subagentRollups[it.id] } != null) {
+                            add(
+                                HeaderAction("Subagent sessions", DshIconVectors.AgentPresetOutline) {
+                                    showLineage = true
+                                },
+                            )
+                        }
+                        if (ui.currentSessionId != null) {
+                            add(
+                                HeaderAction(
+                                    label = "Files",
+                                    icon = DshIconVectors.FolderOpenOutline,
+                                ) {
+                                    filesFocus = null
+                                    goToDestination(Destination.FILES)
+                                },
+                            )
+                        }
+                        if (routerTarget != null) {
+                            add(
+                                HeaderAction("Router", Icons.Rounded.Hub) { showRouter = !showRouter },
+                            )
+                        }
+                        add(
+                            HeaderAction("Jobs", Icons.Rounded.Badge) {
+                                actions.markJobsSeen()
+                                showJobs = true
+                            },
+                        )
+                    },
+                    backdrop = glassBackdrop,
+                    // Flat tier: the page colour, because a transparent header over a
+                    // flat page would put black text on moving text. Same page colour
+                    // the pager paints behind it.
+                    flatFill = colors.bgBase,
+                    // Feeds the loading offset above: the header is the top half of
+                    // the chrome, and its own height is not a constant.
+                    // Above the pages, which are its Box siblings.
+                    modifier = Modifier
+                        .zIndex(1f)
+                        .onSizeChanged { headerPx = it.height },
+                )
+            } else {
+                // The other three pages draw their own header inside their own page. What
+                // they still need from the shell is the **status-bar inset**, because the
+                // shell is a Box now and a page starts at the window’s top edge — under
+                // the clock. The conversation’s header carries that inset as its own
+                // padding, so publishing it as `headerPx` here is what makes `chromeDp`
+                // mean the same thing on every page: the strip at the top that content
+                // must not begin underneath.
                 //
-                // `isDrawn` is the filter, not an extra `if` here: "an idle session
-                // shows nothing" is one statement in `:core:model`, and a second copy
-                // of it at the call site is how the two would drift.
-                capsule = StatusCapsules
-                    .derive(
-                        pending = pendingKindOf(ui.pendingInteractions[ui.currentSessionId]),
-                        connectionLabel = ui.connectionLabel,
-                        running = ui.running,
-                        // A seat, not a session id. The new-session hero has no id yet
-                        // and is still a real seat; a cold start with nothing to reopen
-                        // has neither and is the one genuinely seatless case. Passing
-                        // `currentSessionId != null` here told the hero "No session",
-                        // which is how this was caught: `chat-hero` moved.
-                        seatOpen = ui.currentSessionId != null || ui.pendingSession != null,
-                    )
-                    .takeIf { StatusCapsules.isDrawn(it.state) },
-                // Only one of the four states has somewhere to go, and the capsule is
-                // a button for that one and a plain chip for the rest rather than a
-                // button that does nothing:
-                //
-                //  * OFFLINE opens About, whose "Restart connection" is the action
-                //    this state actually has. It is the same destination the drawer's
-                //    footer already offers, reached from the place the symptom shows.
-                //  * WAITING has no tap: the card that answers it is *already* floating
-                //    over the conversation (the attention stack, #43), and opening a
-                //    second surface that repeats its words would be a worse button.
-                //  * WORKING and UNKNOWN have no action at all.
-                onCapsule = if (capsuleStateIsOffline(ui)) {
-                    { showAbout = true }
-                } else {
-                    null
-                },
-                // The same handle the bar samples: one backdrop for the shell, not one
-                // per surface. Null on the flat tier, which is why every capture keeps
-                // drawing the fill this header had before.
-                backdrop = glassBackdrop,
-                // Folded everywhere except the conversation. Chat is the one page whose
-                // header has two facts worth showing — what this is and where it runs —
-                // and it is also the only one the reader scrolls; the other four are one
-                // line, so switching pages is a step rather than a jump. The rule is
-                // §6's "随页变，不随滚动", and the reason it is not scroll-driven is that
-                // Trajectory and Shell have no scroll position to drive it with.
-                compact = destination != Destination.CHAT || chatView != ChatView.CHAT,
-                // Feeds the loading offset above: the header is the top half of
-                // the chrome, and its own height is not a constant.
-                modifier = Modifier.onSizeChanged { headerPx = it.height },
-            )
+                // Zero would put the Files and Plugins headers behind the clock — and
+                // the error banner, which is offset by this same number, with them.
+                val statusBarPx = WindowInsets.statusBars.getTop(densityPx)
+                LaunchedEffect(destination, statusBarPx) { headerPx = statusBarPx }
+            }
 
             if (ui.error != null) {
                 ErrorBanner(
@@ -1322,7 +1442,15 @@ internal fun ChatPanel(
                     onAction = if (ui.errorNeedsSignIn) actions.signInAgain else null,
                     // The banner sits between the header and the body, so it is
                     // part of the chrome the loading content has to be lifted by.
-                    modifier = Modifier.onSizeChanged { bannerPx = it.height },
+                    //
+                    // It floats with the header now, and the header is measured,
+                    // so the offset is the measured height rather than a guess: a
+                    // long session title wraps the pill and a fixed offset would
+                    // overlap it.
+                    modifier = Modifier
+                        .zIndex(1f)
+                        .padding(top = with(LocalDensity.current) { headerPx.toDp() })
+                        .onSizeChanged { bannerPx = it.height },
                 )
             }
 
@@ -1360,7 +1488,10 @@ internal fun ChatPanel(
             //    to its content (`width(IntrinsicSize.Min)`) and its own root aligns to the
             //    start, so in a Column it sat hard against the left edge — which is exactly what
             //    it looked like on the device.
-            Box(Modifier.weight(1f)) {
+            // The pages fill the whole area, from the window’s top edge: that is
+            // what lets the transcript slide under the header and through the
+            // status bar instead of stopping below them.
+            Box(Modifier.fillMaxSize()) {
             HorizontalPager(
                 state = destinationState,
                 // Keyed per destination so each page keeps its own vertical scroll
@@ -1397,7 +1528,7 @@ internal fun ChatPanel(
                     // place (3.3). The surface is the one 2.4's panel already drew, so
                     // this step is a *move* — same tree, one level up — and the work
                     // left for its own PR is the VSCode-shaped explorer.
-                    Destination.FILES -> Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+                    Destination.FILES -> Column(Modifier.fillMaxSize().padding(top = chromeDp, bottom = dockAreaDp)) {
                 // Derived on demand: the transcript can hold a thousand rows and
                 // neither scan is worth paying for while the panel is closed.
                 val files = remember(entries) { SessionFiles.derive(entries) }
@@ -1426,6 +1557,17 @@ internal fun ChatPanel(
                     // The downloader is session-scoped like the loader, and the panel
                     // decides whether to draw its control at all.
                     downloader = fileDownloader,
+                    // The write callback. Explicit parameter types, because the property is
+                    // `((String, String) -> Unit)?` and an untyped trailing lambda gets
+                    // inferred against `launch`'s `Job` instead — which is also why the
+                    // launch is the lambda's only statement: fire and forget, in the
+                    // screen's scope, with the panel not waiting for it (see FilesPanel).
+                    onSaveFile = fileSaver?.let { saver ->
+                        { path: String, text: String ->
+                            scope.launch { saver.save(path, text) }
+                        }
+                    },
+                    backdrop = glassBackdrop,
                     onClose = {
                         // The tree is a per-open reading; leaving the cache up
                         // would show a stale directory the next time it opens.
@@ -1441,52 +1583,166 @@ internal fun ChatPanel(
                     // write half (`pluginManager`) is on the permanent blocklist for a
                     // remote client — see `docs/BLOCK-SCHEMA.md` and the page's own
                     // note.
-                    Destination.PLUGINS -> Box(Modifier.fillMaxSize().navigationBarsPadding()) {
+                    Destination.PLUGINS -> Box(Modifier.fillMaxSize().padding(top = chromeDp, bottom = dockAreaDp)) {
                         PluginsPage(
                             state = pluginInventory,
                             onRefresh = actions.loadPluginInventory,
                         )
                     }
 
-                    // The conversation page is the one that runs behind the system
-                    // navigation bar (its transcript is the content worth showing through
-                    // it); the other destinations keep their own bottom edge clear.
-                    Destination.ME -> Box(Modifier.fillMaxSize().navigationBarsPadding()) {
-                        MeDestination(
-                            username = ui.username,
-                            balance = ui.balance,
-                            settings = meSettings,
-                            settingsActions = meSettingsActions,
+
+                    // Settings: a page with a hierarchy, its own bar, and the four
+                    // destinations around it. It replaced both the drawer's footer
+                    // settings sheet and the Me page, which existed only to host the
+                    // same eight cards behind a profile header nobody asked for.
+                    Destination.SETTINGS -> Box(Modifier.fillMaxSize().padding(top = chromeDp, bottom = dockAreaDp)) {
+                        SettingsDestination(
+                            state = meSettings,
+                            actions = meSettingsActions,
                             onOpenAbout = { showAbout = true },
-                            onOpenSettings = {
-                                showSettings = true
-                                // The sheet reads on open rather than on a timer, but it
-                                // is no longer the *only* reader — the transcript needs
-                                // `ui-chat.transcriptView` to know whether it may fold —
-                                // so the connect-time read is what usually supplies this.
-                                actions.loadHostSettings()
-                            },
+                            backdrop = glassBackdrop,
                         )
                     }
 
                     // The conversation: three readings of one session, chosen by the
                     // pill under the header rather than by the bar below (3.3).
-                    Destination.CHAT -> Column(Modifier.fillMaxSize()) {
-                        ViewPill(
-                            items = CHAT_VIEW_ITEMS,
-                            selectedKey = chatView.name,
-                            onSelect = { key ->
-                                ChatView.entries.firstOrNull { it.name == key }?.let(goToView)
-                            },
-                            modifier = Modifier.padding(
-                                start = DshSpacing.xl,
-                                end = DshSpacing.xl,
-                                top = DshSpacing.sm,
-                                bottom = DshSpacing.xs,
-                            ),
+                    // **A Box: the pill strip floats over the transcript.**
+                    //
+                    // In a Column the strip reserved its height, so the transcript began
+                    // below it and could never be seen through either it or the header
+                    // above it. Floating the strip and making the transcript pay both
+                    // heights as *content* padding is what lets a long answer slide up
+                    // under the chrome and out through the status bar, which is the
+                    // behaviour "内容可以滑动显示到顶栏和通知栏" describes.
+                    Destination.CHAT -> Box(Modifier.fillMaxSize()) {
+
+                        // The pill strip under the header.
+                        //
+                        // The seats that left the header land here, as small pills: the
+                        // view tabs (always the "three readings" pill), the session's one
+                        // ranked status fact, and the Files door.
+                        //
+                        // **Not a horizontal scroll.** It was one for one revision, and
+                        // it was the wrong instrument twice over: a scrollable row inside
+                        // a `HorizontalPager` is a gesture it has to win from its parent,
+                        // so swiping across the strip stopped turning the page; and a
+                        // strip whose pills can be scrolled off the edge hides controls
+                        // a thumb is aiming at. The row wraps instead — three pills fit on
+                        // any phone this app runs on, and a fourth would be a reason to
+                        // reconsider the contents rather than to scroll them.
+                        FlowRow(
+                            Modifier
+                                // Floats below the header, over the transcript.
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth()
+                                // Measured, because the transcript has to reserve
+                                // exactly this much above its first row: a strip that
+                                // grows a pill (the status capsule appears mid-session)
+                                // must push the transcript down with it.
+                                .onSizeChanged { pillStripPx = it.height }
+                                .padding(
+                                    start = DshSpacing.xl,
+                                    end = DshSpacing.xl,
+                                    top = chromeDp + DshSpacing.sm,
+                                    bottom = DshSpacing.xs,
+                                ),
+                            horizontalArrangement = Arrangement.spacedBy(DshSpacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(DshSpacing.xs),
+                        ) {
+                            ViewPill(
+                                // Filtered, not replaced: with the setting off the strip
+                                // holds Chat alone, which is what a reader who never opens
+                                // the trajectory asked for.
+                                items = if (ui.chatViewsEnabled) {
+                                    CHAT_VIEW_ITEMS
+                                } else {
+                                    CHAT_VIEW_ITEMS.filter { it.key == ChatView.CHAT.name }
+                                },
+                                selectedKey = chatView.name,
+                                onSelect = { key ->
+                                    ChatView.entries.firstOrNull { it.name == key }?.let(goToView)
+                                },
+                            )
+                            // One status fact, ranked. The derivation reads the whole
+                            // `UiState` because the four facts it ranks live in four
+                            // different places — the attention mirrors, the mux poll, the
+                            // running flag and the session id — and doing that ranking at
+                            // the call site is what keeps the chip a pure function of its
+                            // arguments. `isDrawn` is the filter, not an extra `if` here:
+                            // "an idle session shows nothing" is one statement in
+                            // `:core:model`, and a second copy at the call site is how the
+                            // two drift.
+                            StatusCapsules
+                                .derive(
+                                    pending = pendingKindOf(ui.pendingInteractions[ui.currentSessionId]),
+                                    connectionLabel = ui.connectionLabel,
+                                    running = ui.running,
+                                    // A seat, not a session id: the new-session hero has
+                                    // no id yet and is still a real seat; a cold start with
+                                    // nothing to reopen has neither and is the one genuinely
+                                    // seatless case.
+                                    seatOpen = ui.currentSessionId != null || ui.pendingSession != null,
+                                )
+                                .takeIf { StatusCapsules.isDrawn(it.state) }
+                                ?.let { capsule ->
+                                    // Only one of the four states has somewhere to go, and
+                                    // the chip is a button for that one and a plain chip for
+                                    // the rest rather than a button that does nothing:
+                                    // OFFLINE opens About (whose "Restart connection" is the
+                                    // action this state actually has); WAITING has no tap
+                                    // because the card that answers it is already floating
+                                    // over the conversation; WORKING and UNKNOWN have none.
+                                    StatusCapsuleChip(
+                                        capsule,
+                                        onClick = if (capsuleStateIsOffline(ui)) {
+                                            { showAbout = true }
+                                        } else {
+                                            null
+                                        },
+                                    )
+                                }
+                            // The Files door. It left the header because the header is now
+                            // three fixed seats; a page you can go to belongs with the other
+                            // things that move you around the conversation, not with the
+                            // overflow. Withheld entirely when there is no session to
+                            // resolve paths against, rather than opening an empty list.
+                            if (ui.currentSessionId != null) {
+                                SmallGlassPill(
+                                    label = "Files",
+                                    icon = DshIconVectors.FolderOpenOutline,
+                                    active = false,
+                                    backdrop = glassBackdrop,
+                                    onClick = {
+                                        filesFocus = null
+                                        goToDestination(Destination.FILES)
+                                    },
+                                )
+                            }
+                        }
+                        // The transcript’s selection menu. Drawn at the page level
+                        // rather than inside a row: the popup has to outlive the row that
+                        // opened it, and a row can be recycled mid-selection.
+                        ComposerSelectionMenu(
+                            toolbar = transcriptToolbar,
+                            // No full-screen door here: this is not an input box, and
+                            // there is nowhere bigger to send the text.
+                            onFullscreen = null,
+                            selectedText = { transcriptSelection },
+                            onQuote = quoteIntoDraft,
+                            onTranslate = translateSelection,
                         )
+                        CompositionLocalProvider(LocalTextToolbar provides transcriptToolbar) {
                         when (chatView) {
-                        ChatView.TERMINAL -> Column(Modifier.fillMaxSize()) {
+                        ChatView.TERMINAL -> Column(
+                            Modifier
+                                .fillMaxSize()
+                                // The dock is on every page now, and the Shell is a
+                                // page: without this the prompt line — the one thing a
+                                // terminal cannot afford to hide — sits behind the bar.
+                                // Same measured numbers the transcript reserves, so the
+                                // grid ends exactly where the chrome begins.
+                                .padding(top = contentTopDp, bottom = dockAreaDp),
+                        ) {
                     // A real PTY for this session, from the host's `terminal` Remote
                     // namespace. The screen creates or adopts the session's terminal, so
                     // it is only reachable for an open session — the strip that selects
@@ -1501,7 +1757,14 @@ internal fun ChatPanel(
                     terminal(Modifier.weight(1f))
                         }
 
-                        ChatView.TRAJECTORY -> Column(Modifier.fillMaxSize()) {
+                        ChatView.TRAJECTORY -> Column(
+                            Modifier
+                                .fillMaxSize()
+                                // Same reason as the Shell: the trajectory scrolls to the
+                                // bottom of the window and the dock would cover its last
+                                // rows.
+                                .padding(top = contentTopDp, bottom = dockAreaDp),
+                        ) {
                     val trajectory = remember(entries, endedTurns) {
                         buildTrajectory(entries, endedTurns, actions.toolParents())
                     }
@@ -1518,6 +1781,10 @@ internal fun ChatPanel(
                     )
                         }
 
+                        // No top padding here, deliberately: the transcript pays the
+                        // chrome as *content* padding below, so its rows pass through
+                        // the chrome instead of starting after it. Padding this Column
+                        // as well would count the chrome twice.
                         ChatView.CHAT -> Column(Modifier.fillMaxSize()) {
     if (awaitingTranscript) {
                     // A non-blank session with nothing loaded yet: the host has not
@@ -1569,9 +1836,12 @@ internal fun ChatPanel(
                         connectionLabel?.let {
                             ConnectionPill(
                                 label = it,
+                                // Clear of the floating chrome: this is pinned to the top
+                                // of the transcript area, which now starts at the window’s
+                                // top edge.
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
-                                    .padding(top = DshSpacing.md),
+                                    .padding(top = contentTopDp + DshSpacing.md),
                             )
                         }
                     }
@@ -1654,7 +1924,7 @@ internal fun ChatPanel(
                             label = it,
                             modifier = Modifier
                                 .align(Alignment.CenterHorizontally)
-                                .padding(top = DshSpacing.sm),
+                                .padding(top = contentTopDp + DshSpacing.sm),
                         )
                     }
 
@@ -1667,6 +1937,26 @@ internal fun ChatPanel(
                         // the behaviour that existed before any of this was added.
                         DiagLazyList("chat", listState)
                         DiagFrames()
+                    // The pinned way out of an expanded thought or tool row.
+                    //
+                    // Drawn over the transcript rather than inside it, because the header
+                    // it stands in for scrolls away: once the reader is deep into a long
+                    // thought, the row's own collapse bar is off screen and the only way
+                    // out was to scroll back to it. This one is always in the part of
+                    // the screen a thumb can reach.
+                    expandedProcess.label?.let { openLabel ->
+                        ExpandedProcessCollapseBar(
+                            label = openLabel,
+                            onCollapse = expandedProcess::collapseAll,
+                            backdrop = glassBackdrop,
+                            // Below the chrome, not at the top of the window: this bar has
+                            // to be reachable, and a bar under the header is the one thing
+                            // "收起栏应该一直在屏幕可操作区域内" rules out.
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = contentTopDp + DshSpacing.md),
+                        )
+                    }
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
@@ -1676,7 +1966,11 @@ internal fun ChatPanel(
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                                 start = DshSpacing.xl,
                                 end = DshSpacing.xl,
-                                top = DshSpacing.xl,
+                                // Content padding, not layout padding: it is inside the
+                                // scrollable, so rows pass *through* it and are visible
+                                // under the transparent chrome instead of being cut off
+                                // below it.
+                                top = contentTopDp + DshSpacing.xl,
                                 // The floating stack's own height, measured, plus the gap the
                                 // last row keeps from the bottom edge. Without it the newest
                                 // message would sit permanently under the composer: the list
@@ -1702,7 +1996,19 @@ internal fun ChatPanel(
                                   // list: a selection that spans two lazily-composed
                                   // items loses its ends when either is recycled, and
                                   // "copy this answer" is the case that matters.
-                                  SelectionContainer {
+                                  val rowSelection = remember { SelectionState() }
+                                  // Report this row’s selection upward: the menu reads
+                                  // the holder, and a row that is recycled stops
+                                  // reporting, so a stale selection cannot survive the
+                                  // row it belonged to.
+                                  LaunchedEffect(rowSelection) {
+                                      snapshotFlow { rowSelection.selectedTexts }
+                                          .collect { texts ->
+                                              val joined = texts.joinToString("\n") { it.text }
+                                              if (joined.isNotEmpty()) transcriptSelection = joined
+                                          }
+                                  }
+                                  SelectionContainer(state = rowSelection) {
                                   Column {
                                     when (row) {
                                         is DisplayRow.Single -> when (val entry = row.entry) {
@@ -1721,6 +2027,13 @@ internal fun ChatPanel(
                                                     showFooter = entry.seq in closingSeqs,
                                                     durationMs = turnDurations[entry.turn],
                                                     onBranch = branch,
+                                                    // A finished turn’s reasoning is
+                                                    // translated when the reader opens it.
+                                                    translate = actions.translateFragment,
+                                                    collapseEpoch = expandedProcess.collapseEpoch,
+                                                    onReasoningExpanded = { open ->
+                                                        expandedProcess.onRowExpanded(open, reasoningLabel)
+                                                    },
                                                 )
                                             }
                                             is ChatEntry.ToolCall -> {
@@ -1730,13 +2043,24 @@ internal fun ChatPanel(
                                                 // to the same flat row as before.
                                                 val node = toolNodes[entry.callId]
                                                 if (node != null) {
-                                                    ToolCallTreeRow(node, actions.imageBitmap)
+                                                    ToolCallTreeRow(
+                                                        node,
+                                                        actions.imageBitmap,
+                                                        onExpandedChange = { open ->
+                                                            expandedProcess.onRowExpanded(open, toolLabel)
+                                                        },
+                                                        collapseEpoch = expandedProcess.collapseEpoch,
+                                                    )
                                                 } else {
                                                     ToolCallRow(
                                                         entry,
                                                         actions.imageBitmap,
                                                         jobOutput = ui.jobOutput,
                                                         onObserveJob = actions.observeJob,
+                                                        onExpandedChange = { open ->
+                                                            expandedProcess.onRowExpanded(open, toolLabel)
+                                                        },
+                                                        collapseEpoch = expandedProcess.collapseEpoch,
                                                     )
                                                 }
                                             }
@@ -1758,6 +2082,10 @@ internal fun ChatPanel(
 
                                         is DisplayRow.Live -> LiveAttemptRow(
                                             row.attempt,
+                                            translate = actions.translateFragment,
+                                            onReasoningExpanded = { open ->
+                                                expandedProcess.onRowExpanded(open, reasoningLabel)
+                                            },
                                         )
                                     }
 
@@ -1836,11 +2164,11 @@ internal fun ChatPanel(
                                     .padding(end = 1.dp),
                             )
                         }
-
                     }
                 }
                         }
                     }
+                        }
                 }
             }
         }
@@ -1915,18 +2243,37 @@ internal fun ChatPanel(
                         TodoCard(
                             items = todos,
                             backdrop = glassBackdrop,
-                            modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
+                            // The gap to the pill rail is the *same* gap the input bar
+                            // keeps from it (ComposerStackGap), which is what makes the
+                            // stack read as one column rather than as cards that happen
+                            // to float near each other.
+                            modifier = Modifier.padding(
+                                start = DshSpacing.xl,
+                                end = DshSpacing.xl,
+                                top = ComposerStackGap,
+                                bottom = DshSpacing.sm,
+                            ),
                         )
                     }
 
                     ui.goal?.takeIf { it.visible }?.let { goal ->
                         GoalBar(
                             goal = goal,
+                            // The same material as the to-dos card above it. The goal
+                            // bar used to be a tinted rectangle with a border, which on
+                            // a page that already has glass to-dos read as a different
+                            // kind of thing rather than as the same stack.
+                            backdrop = glassBackdrop,
                             onPause = actions.pauseGoal,
                             onResume = actions.resumeGoal,
                             onEdit = { actions.editGoal(it) },
                             onClear = actions.clearGoal,
-                            modifier = Modifier.padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),
+                            modifier = Modifier.padding(
+                                start = DshSpacing.xl,
+                                end = DshSpacing.xl,
+                                top = ComposerStackGap,
+                                bottom = DshSpacing.sm,
+                            ),
                         )
                     }
 
@@ -1966,14 +2313,17 @@ internal fun ChatPanel(
             // always open. A 56dp circle in the middle of a tablet would be a phone
             // affordance with no thumb to meet it.
             //
-            // **Exactly one of the two navigation surfaces is composed.** The dock on a
-            // phone, the rail on a wide window; both read the same `destination` and call
-            // the same `goToDestination`.
-            if (destination == Destination.CHAT || !wide) {
-                Column(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
+            // **The bar is on every page.**
+            //
+            // It used to be composed only on Chat, so leaving the conversation took the
+            // whole navigation surface away and Files/Plugins/Settings had to be left by
+            // swiping back. A phone whose bar disappears on three of its four pages has no
+            // navigation on three of its four pages, which is what made the round pencil
+            // feel like a conversation-only control.
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
                         // The dock is the one surface that still has to sit above the
                         // system navigation bar: it is a set of controls, not content.
                         // The measurement sits **outside** both bottom insets, so
@@ -2010,8 +2360,19 @@ internal fun ChatPanel(
                                 contextPercent = ui.contextPercent,
                                 contextTokens = ui.contextTokens,
                                 contextWindow = ui.contextWindow,
-                                contextBreakdown = ui.contextBreakdown,
                                 stats = ui.sessionStats,
+                                // Two readings that only exist once there is a
+                                // conversation: before the first message the speed is
+                                // "0 tok/s" and the cache share is meaningless, and a
+                                // pill that says nothing is worse than no pill.
+                                // `hasConversationStarted` is the same predicate the rest
+                                // of the transcript uses for "is this the hero", so the
+                                // pill appears at exactly the moment the page stops being
+                                // the hero.
+                                statsVisible = hasConversationStarted(entries),
+                                // The cache is per session: leaving one and opening
+                                // another must not show the previous session's speed.
+                                sessionKey = ui.currentSessionId,
                                 // Priced routes only. The rates follow the session's
                                 // *current* model, which is what the host bills the next
                                 // turn at.
@@ -2060,7 +2421,13 @@ internal fun ChatPanel(
 
                     ComposerDock(
                         state = draft,
-                        expanded = destination == Destination.CHAT && (composerExpanded || wide),
+                        // Expanded only where there is something to write into: on the
+                        // other pages the bar shows its resting circle, which is the
+                        // pencil the reader taps to come back and write. The shape
+                        // animation is the same one tapping the dock circle gives, so
+                        // swiping to Files collapses it exactly as tapping Chat did.
+                        expanded = destination == Destination.CHAT && readOnlyReason == null &&
+                            (composerExpanded || wide),
                         onExpand = { composerExpanded = true },
                         onCollapse = { composerExpanded = false },
                         onSend = sendFromComposer,
@@ -2073,6 +2440,11 @@ internal fun ChatPanel(
                         onToggleBusyEnter = toggleBusyEnter,
                         onToggleCommands = { menuOpen = !menuOpen },
                         onFullscreen = { fullScreenComposer = true },
+                        // The two rows the selection menu grows when there is a
+                        // selection. Both are null-safe no-ops by default, so a
+                        // caller without a host still gets copy/cut/paste.
+                        onQuote = quoteIntoDraft,
+                        onTranslate = translateSelection,
                         items = DESTINATION_ITEMS,
                         selectedKey = destination.name,
                         onSelect = { key ->
@@ -2080,10 +2452,12 @@ internal fun ChatPanel(
                         },
                         backdrop = glassBackdrop,
                         showNavigation = !wide,
-                        showInput = destination == Destination.CHAT && readOnlyReason == null,
+                        // The input stays in the row on every page — it is what the bar is
+                        // for — but collapsed to its circle off the conversation, so the
+                        // four destinations keep their stretched width there.
+                        showInput = readOnlyReason == null,
                     )
                 }
-            }
 
             // Back-to-bottom, composed *outside* the pager on purpose: its glass samples
             // the layer the transcript records, and a pane inside that layer would blur
@@ -2104,9 +2478,19 @@ internal fun ChatPanel(
                     backdrop = glassBackdrop,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
+                        // Above the *whole* floating stack, not just the dock.
+                        //
+                        // `composerStackPx` is the measured height of the cards plus the
+                        // dock area they are lifted above (to-dos, goal, queue, approval,
+                        // questions). It is the same number the transcript reserves as
+                        // bottom padding, so the button lands exactly on the top edge of
+                        // whatever is floating — which is what "有目标和 to-dos 时回到底部
+                        // 按钮放到条上面" asks for. Using `dockAreaDp` alone put it level
+                        // with the cards and the two overlapped.
                         .padding(
                             end = DshSpacing.xl,
-                            bottom = dockAreaDp + DshSpacing.md,
+                            bottom = with(LocalDensity.current) { composerStackPx.toDp() } +
+                                DshSpacing.md,
                         ),
                 )
             }
@@ -2135,6 +2519,19 @@ internal fun ChatPanel(
                 attachments = ui.attachments,
                 onRemoveAttachment = actions.removeAttachment,
                 onToggleCommands = { menuOpen = !menuOpen },
+                // The command menu is rendered *inside* the full-screen dialog's own
+                // window. Drawn outside it, it sorted below the full-screen surface and
+                // the `+` appeared to do nothing.
+                commandsOpen = menuOpen,
+                commandMenu = {
+                    CommandMenu(
+                        entries = triggers.shownEntries,
+                        onPick = onPickCommand,
+                        modifier = Modifier,
+                    )
+                },
+                onQuote = quoteIntoDraft,
+                onTranslate = translateSelection,
                 onSend = {
                     sendFromComposer()
                     fullScreenComposer = false
@@ -2161,15 +2558,6 @@ internal fun ChatPanel(
         )
     }
 
-    if (showSettings) {
-        // The same state holder and acts the Me page's tabs are handed, so the sheet and
-        // the pages are one rendering of one document rather than two (3.5b).
-        SettingsSheet(
-            state = meSettings,
-            actions = meSettingsActions,
-            onDismiss = { showSettings = false },
-        )
-    }
 
     // The router panel, opened from its header seat. Composed here rather than in the
     // body's view chain because it is a *panel* over the current view, not a view: the
@@ -2221,6 +2609,54 @@ internal fun ChatPanel(
         )
     }
 
+    // The translation answer.
+    //
+    // A sheet rather than an in-place replacement: the reader asked "what does this
+    // say", not "replace what it says", and the text they selected is still there
+    // behind it. Empty means the host could not answer — a deployment without the
+    // translation plugin, or a refused call — and that is said plainly rather than
+    // shown as a blank card.
+    if (translation != null) {
+        val answer = translation.orEmpty()
+        DshSheet(
+            onDismissRequest = { translation = null },
+            title = stringResource(R.string.composer_translate),
+        ) {
+            Column(Modifier.padding(horizontal = DshSpacing.xl)) {
+                if (answer.isBlank()) {
+                    Text(
+                        text = stringResource(R.string.chat_translate_unavailable),
+                        style = DshType.bodyMedium,
+                        color = colors.labelSecondary,
+                    )
+                } else {
+                    // Selectable, because the reason to translate is usually to use the
+                    // words somewhere else.
+                    SelectionContainer {
+                        Text(
+                            text = answer,
+                            style = DshType.bodyMedium,
+                            color = colors.labelPrimary,
+                        )
+                    }
+                    Spacer(Modifier.height(DshSpacing.lg))
+                    Row(horizontalArrangement = Arrangement.spacedBy(DshSpacing.sm)) {
+                        SmallGlassPill(
+                            label = stringResource(R.string.chat_translated_copy),
+                            icon = DshIconVectors.CopyOutline,
+                            active = false,
+                            backdrop = glassBackdrop,
+                            onClick = {
+                                clipboard.setText(AnnotatedString(answer))
+                                translation = null
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(DshSpacing.xl))
+            }
+        }
+    }
     if (showAbout) {
         AboutSheet(
             baseUrl = ui.baseUrl,
@@ -2528,48 +2964,6 @@ internal val WIDE_LAYOUT = 600.dp
 /** The rail's own width. Narrower than Material's 80dp because the labels are short. */
 private val RAIL_SIDEBAR_WIDTH = 72.dp
 
-/**
- * The header's lineage seat: the descendant count plus the chevron that opens the
- * tree, mirroring `SubagentHeaderLineage`.
- *
- * The label is deliberately terse (`+1 subagent`) — see [SubagentRollup.label] — so
- * a live session is signalled by the accent tint and an ongoing dot rather than by
- * the word "running", and the chip keeps the same width as subagents start and
- * finish. The full web sentence is the accessibility label.
- */
-@Composable
-private fun LineageChip(rollup: SubagentRollup, onClick: () -> Unit) {
-    val colors = DshTheme.colors
-    val running = rollup.running > 0
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(50))
-            .background(colors.hover)
-            .clickableNoRipple(onClick = onClick)
-            .padding(horizontal = DshSpacing.sm, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (running) {
-            StateDot(state = DotState.ONGOING, size = 8.dp)
-            Spacer(Modifier.width(DshSpacing.sm))
-        }
-        Text(
-            text = rollup.label,
-            style = DshType.micro,
-            color = if (running) colors.link else colors.labelTertiary,
-            maxLines = 1,
-            modifier = Modifier.semantics { contentDescription = rollup.description },
-        )
-        Icon(
-            Icons.Rounded.ExpandMore,
-            contentDescription = null,
-            tint = if (running) colors.link else colors.labelCaption,
-            modifier = Modifier
-                .size(14.dp)
-                .padding(start = 1.dp),
-        )
-    }
-}
 
 /** One row of the lineage tree: the subagent, indented by its depth. */
 private data class LineageRow(val session: uk.xa0.dsh.model.SessionItem, val depth: Int)
@@ -2720,277 +3114,240 @@ private fun ChatHeader(
     title: String,
     cwd: String?,
     onMenu: () -> Unit,
-    jobs: List<uk.xa0.dsh.model.JobItem> = emptyList(),
-    jobsFinishedUnseen: Boolean = false,
-    onJobs: () -> Unit = {},
     /**
-     * Whether the router panel's seat is offered at all.
+     * Everything the overflow circle holds, in order.
      *
-     * Conditional for the same reason `filesAvailable` is: a session whose selected
-     * route is not local has no router behind it, so there is nothing for the panel to
-     * describe. This is a *seat* rather than a bar destination precisely because it can
-     * be absent — see the gate in `ChatScreen` for the whole argument.
-     */
-    routerAvailable: Boolean = false,
-    routerOpen: Boolean = false,
-    onRouter: () -> Unit = {},
-    filesOpen: Boolean = false,
-    /**
-     * Whether the Files seat is offered at all. A session is what the panel
-     * resolves every path against, so the pending new-session hero — which has
-     * deliberately no session — does not draw the seat.
-     */
-    filesAvailable: Boolean = true,
-    onFiles: () -> Unit = {},
-    lineage: SubagentRollup? = null,
-    onLineage: () -> Unit = {},
-    /**
-     * The session above this one, when the open session is a subagent whose parent the
-     * roster can name. The title becomes the way up; null draws no affordance at all.
-     */
-    parent: SubagentParent? = null,
-    onParent: () -> Unit = {},
-    /**
-     * The one status fact this header wears, or null when there is nothing to say.
+     * The row used to be a cluster of icon seats (Files, Router, Jobs, the lineage
+     * chip, the status capsule) and the user's read of it was that the header is
+     * crowded: the files button goes away and the other controls move below the
+     * header as small pills, with a round three-dot button on the right. So the row
+     * is now **three things** — a circle, one pill, one circle — and every other seat
+     * moved: the ones that describe the open session (view tabs, Files, status) became
+     * pills *under* the header, and the ones that are rare one-shot actions (Jobs,
+     * Router, lineage) went in here.
      *
-     * One, not four: see [uk.xa0.dsh.model.StatusCapsules] for the ranking and the
-     * argument. The derivation happens at the call site because it needs the whole
-     * `UiState`; this composable only draws what it is handed, which is also what
-     * keeps the header fixture-able in a screenshot test.
+     * A caller that has nothing to put in the menu passes an empty list and the
+     * trailing circle still draws — as a dimmed placeholder, because the row is three
+     * fixed seats and a circle that comes and goes would move the pill beside it.
      */
-    capsule: StatusCapsule? = null,
-    /**
-     * What the capsule opens, or **null** when it opens nothing.
-     *
-     * Null rather than an empty lambda on purpose: a chip that looks tappable and
-     * does nothing is worse than a chip that plainly is not a button, and the three
-     * states that have no action are the majority. The composable drops the
-     * `clickable` when this is null, so the two are structurally the same decision.
-     */
-    onCapsule: (() -> Unit)? = null,
+    overflow: List<HeaderAction> = emptyList(),
     /**
      * The backdrop the chrome samples, or null on a device that paints the flat tier.
      *
-     * The header is chrome, not content: it sits *outside* the pager, so it is not part
-     * of what the bar records. Giving it the material is therefore not a second use of
-     * the same backdrop — it is the other half of "the shell floats over the
-     * conversation", which is the visual direction this step is about. Null is the
-     * honest value on API < 33 and in a capture, and [liquidPane] turns it into the flat
-     * fill the header had before, so the layout is identical either way.
+     * **Transparent, not painted.** The header no longer fills: content scrolls
+     * *behind* it and through the status-bar area above it, which is what was asked
+     * for in as many words (the whole top bar transparent so content slides up into
+     * the top bar and the notification bar). The material is therefore the only thing
+     * standing between the row's labels and the transcript sliding under them, and on
+     * a device that cannot blur it degrades to [flatFill] — which the caller passes as
+     * the page colour, because a transparent header over a flat page would put black
+     * text on moving text.
      */
     backdrop: GlassBarBackdrop? = null,
-    /**
-     * Whether the header is folded to its one-line form.
-     *
-     * **Per page, not per scroll.** `docs/PHASE-3-PLAN.md` §6 settles the semantics and
-     * the reason: the three readings share one header, and only Chat has a scroll
-     * position, so a fold that followed scrolling would jump every time the reader
-     * switched to a view that has no transcript to scroll. The fold follows the *page*
-     * instead — Chat is the one that has something worth two lines (a title and a
-     * directory), and Trajectory, Shell, Files, Plugins and Me are one line.
-     *
-     * The second line is the session's `cwd`, and dropping it is the whole of the fold:
-     * it is the only variable-height thing in this bar, and the seats on either side are
-     * fixed 40dp circles.
-     */
-    compact: Boolean = false,
+    flatFill: Color = Color.Transparent,
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
-    // The header wears the same material as the bar below it.
-    //
-    // `flatFill = Color.Transparent` is the whole reason this can be added without
-    // redrawing every flat-tier screen. `glassSurface` — the material's flat answer —
-    // is fill-plus-hairline, and a hairline is right for a pane that floats: it is the
-    // only boundary between that pane and the page. The header is *flush* with the page
-    // and spans the full width, so an all-round stroke puts a 0.5dp line along the
-    // screen's top edge and both side edges — a frame, not a surface. Passing the fill
-    // the header actually had (none) keeps the flat tier byte-identical and leaves the
-    // material to the tier that can show it.
-    // Animated rather than swapped: the header is the top of a very tall scroll view,
-    // and a 8dp jump between two states reads as the whole screen twitching. Measured
-    // through `onSizeChanged` at the call site, so the loading offset the transcript uses
-    // follows the animation frame by frame rather than moving once at the end.
-    val rowHeight by animateDpAsState(
-        targetValue = if (compact) 48.dp else 56.dp,
-        label = "HeaderHeight",
-    )
-    Column(
-        modifier.liquidPane(
-            backdrop = backdrop,
-            shape = RoundedCornerShape(0.dp),
-            flatFill = Color.Transparent,
-        ),
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(rowHeight),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Rounded.Menu,
-                contentDescription = "Sessions",
-                tint = colors.labelPrimary,
-                modifier = Modifier
-                    .size(HEADER_SEAT)
-                    .clip(CircleShape)
-                    .clickableNoRipple(onClick = onMenu)
-                    .padding(DshSpacing.md),
+    // One height, always. The row used to animate between a compact and an expanded
+    // form because Chat was the only page that had a second line worth showing; the
+    // directory now lives inside the pill, so there is no second line to fold and no
+    // reason for the top of every screen to jump.
+    val rowHeight = 56.dp
+    var menuOpen by remember { mutableStateOf(false) }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(rowHeight)
+            .liquidPane(
+                backdrop = backdrop,
+                shape = RoundedCornerShape(0.dp),
+                flatFill = flatFill,
             )
-            Spacer(Modifier.width(HEADER_SEAT_GAP))
-            // The way *up* is the whole seat, not just the words in it.
-            //
-            // The tap used to be on the title row, so it was only as wide as the arrow
-            // and the name and only as tall as one line — a tap a few pixels to the
-            // right of the title, in space that belongs to nothing else, did nothing at
-            // all. A bar's empty space belongs to the thing the bar is about.
-            val seat = Modifier.weight(1f).fillMaxHeight()
-            Column(
-                modifier = if (parent != null) {
-                    seat
-                        .clip(RoundedCornerShape(DshRadius.sm))
-                        .clickableNoRipple(onClick = onParent)
-                        .semantics {
-                            contentDescription = "Open parent session: ${parent.title}"
-                        }
-                } else {
-                    seat
-                },
-                verticalArrangement = Arrangement.Center,
-            ) {
-                // The arrow is the whole hint — it is drawn only when the tap actually
-                // leads somewhere (`SubagentParent` is null otherwise, so a top-level
-                // session's title is not secretly clickable).
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (parent != null) {
-                        Icon(
-                            Icons.Rounded.ArrowUpward,
-                            contentDescription = null,
-                            tint = colors.labelTertiary,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                    }
-                    Text(
-                        text = title,
-                        style = DshType.messageBody.copy(fontWeight = FontWeight.Medium),
-                        color = colors.labelPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                // The folded half. Animated out rather than dropped, so the title does
-                // not slide from a two-line block to a one-line block in one frame.
-                AnimatedVisibility(visible = !compact && !cwd.isNullOrBlank()) {
-                    Text(
-                        text = shortenPath(cwd.orEmpty()),
-                        style = DshType.bodySmall,
-                        color = colors.labelTertiary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            // The `SubagentHeaderLineage` seat, worn as one of the header's trailing
-            // seats rather than inline after the title.
-            //
-            // Inline, it centred on the title *line* while the block it sits in is
-            // two lines tall (title + directory), which measured 22px — about 8dp on
-            // this 420dpi screen — above the block's centre, so it read as floating
-            // high. Here it centres on the header row like the files and jobs seats,
-            // and the title gets its full width back instead of truncating to make
-            // room for it.
-            //
-            // Running only, and absent when nothing is running: this is a live
-            // indicator, and the drawer's per-session caret is the complete tree.
-            if (lineage != null && lineage.running > 0) {
-                LineageChip(lineage, onLineage)
-                Spacer(Modifier.width(HEADER_SEAT_GAP))
-            }
-            // The right panel's seat, which on the web is a header utility. It
-            // stays available on a blank-session hero too: a blank session still has
-            // a workspace worth listing. On the *pending* hero there is no session
-            // for the panel to address at all, so the seat is withheld.
-            if (filesAvailable) {
-                Icon(
-                    Icons.Rounded.Folder,
-                    contentDescription = if (filesOpen) "Close files" else "Files",
-                    tint = if (filesOpen) colors.link else colors.labelSecondary,
-                    modifier = Modifier
-                        .size(HEADER_SEAT)
-                        .clip(CircleShape)
-                        .clickableNoRipple(onClick = onFiles)
-                        .padding(DshSpacing.md),
-                )
-                Spacer(Modifier.width(HEADER_SEAT_GAP))
-            }
-            // The router panel's seat. Drawn before the jobs seat so the two cannot
-            // swap places as either one appears; both are conditional, and a fixed
-            // order is what keeps the cluster from reshuffling.
-            if (routerAvailable) {
-                Icon(
-                    Icons.Rounded.Hub,
-                    contentDescription = if (routerOpen) "Close router" else "Router",
-                    tint = if (routerOpen) colors.link else colors.labelSecondary,
-                    modifier = Modifier
-                        .size(HEADER_SEAT)
-                        .clip(CircleShape)
-                        .clickableNoRipple(onClick = onRouter)
-                        .padding(DshSpacing.md),
-                )
-                Spacer(Modifier.width(HEADER_SEAT_GAP))
-            }
-            JobsSeat(jobs = jobs, finishedUnseen = jobsFinishedUnseen, onClick = onJobs)
-            // The capsule is the *last* seat, after the utilities, because it is the
-            // one that changes width with its label: putting it before them would
-            // shift every utility sideways as states change.
-            //
-            // It is capped rather than free to grow. The header row has no trailing
-            // inset — every other seat is a fixed 40dp circle, so none of them ever
-            // needed one — and a label as long as "Waiting for approval" ran off the
-            // right edge the first time it was recorded. A maximum width plus the
-            // row's own end padding is what makes the longest of the four labels fit;
-            // the ellipsis then covers a label a future state adds that does not.
-            if (capsule != null) {
-                Spacer(Modifier.width(HEADER_SEAT_GAP))
-                StatusCapsuleChip(
-                    capsule,
-                    onClick = onCapsule,
-                    modifier = Modifier.widthIn(max = CAPSULE_MAX_WIDTH),
-                )
-                Spacer(Modifier.width(DshSpacing.sm))
-            }
-            // No separate running-turn dot here on purpose. `JobsSeat` already
-            // draws a `StateDot(ONGOING)` while a job runs, and this glyph is the
-            // same one, so a running turn plus a running job painted two identical
-            // spinners side by side, animating on two independent transitions -
-            // visibly out of step. The web has no running indicator in the
-            // conversation header at all (`conversation.session.header.utilities`
-            // has exactly one contributor, the desktop-only open-in-app button);
-            // running state is the sidebar row's status and the composer's own
-            // stop affordance, both of which this app already has.
-            Spacer(Modifier.width(HEADER_SEAT_GAP))
-        }
-        // The rule that separates the header from the content beneath it. The bar
-        // already floats; the header floating too is what makes the two read as one
-        // shell rather than a chrome strip with a bar under it.
-        //
-        // The hairline stays on every tier, unlike the pane's own edge stroke. The
-        // difference is what it is separating: a pane's rim is a boundary between two
-        // surfaces, which the lens already draws, while this line marks where chrome
-        // ends and scrolling content begins — a distinction the material does not
-        // express by itself. `borderL3` is the same rule the header had before it had
-        // a material.
+            // The status-bar inset is *paid*, not avoided: the header's own content
+            // sits below the clock, while the material behind it runs to the top of
+            // the window. Padding rather than a spacer because the pane has to be the
+            // thing that grows, or the blur starts below the system bar and leaves a
+            // hard edge there.
+            .statusBarsPadding()
+            .padding(horizontal = DshSpacing.lg),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // The drawer's door: a circle, and the *only* navigation affordance in the
+        // row. It used to be a bare icon with no container, which on a header that
+        // now has a pill and a circle beside it read as an alignment mistake.
         Box(
             Modifier
-                .fillMaxWidth()
-                .height(0.5.dp)
-                .background(colors.borderL3),
-        )
+                .size(HEADER_SEAT)
+                .glassLift(CircleShape)
+                .liquidPane(
+                    backdrop = backdrop,
+                    shape = CircleShape,
+                    flatFill = colors.bgLayer1,
+                )
+                .clip(CircleShape)
+                .clickableNoRipple(onClick = onMenu)
+                .semantics { contentDescription = "Sessions" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                DshIconVectors.PanelLeftOutline,
+                contentDescription = null,
+                tint = colors.labelPrimary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Spacer(Modifier.width(DshSpacing.sm))
+        // The middle: one large pill carrying what this session *is*. The title and
+        // the directory were two lines of left-aligned text; as a pill they take the
+        // whole middle of the row, and they get a surface because a transparent header
+        // over a scrolling transcript needs one.
+        Column(
+            Modifier
+                .weight(1f)
+                .height(HEADER_SEAT)
+                .glassLift(CircleShape)
+                .liquidPane(
+                    backdrop = backdrop,
+                    shape = CircleShape,
+                    flatFill = colors.bgLayer1,
+                )
+                .padding(horizontal = DshSpacing.md),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = title,
+                style = DshType.messageBody.copy(fontWeight = FontWeight.Medium),
+                color = colors.labelPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!cwd.isNullOrBlank()) {
+                Text(
+                    text = shortenPath(cwd),
+                    style = DshType.micro,
+                    color = colors.labelTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        // The trailing circle: a placeholder that holds the seat, or a real menu once
+        // a caller has something to put in it.
+        Spacer(Modifier.width(DshSpacing.sm))
+        Box(
+            Modifier
+                .size(HEADER_SEAT)
+                .glassLift(CircleShape)
+                .liquidPane(
+                    backdrop = backdrop,
+                    shape = CircleShape,
+                    flatFill = colors.bgLayer1,
+                )
+                .clip(CircleShape)
+                .clickableNoRipple(enabled = overflow.isNotEmpty()) { menuOpen = true }
+                .semantics { contentDescription = "More" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                DshIconVectors.EllipsisOutline,
+                contentDescription = null,
+                // Dimmed when the menu would be empty: a control that opens
+                // nothing should look like one.
+                tint = if (overflow.isEmpty()) colors.labelCaption else colors.labelSecondary,
+                modifier = Modifier.size(20.dp),
+            )
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+            ) {
+                overflow.forEach { action ->
+                    DropdownMenuItem(
+                        text = { Text(action.label, style = DshType.messageBody) },
+                        leadingIcon = {
+                            Icon(
+                                action.icon,
+                                contentDescription = null,
+                                tint = colors.labelSecondary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            action.onClick()
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
+/**
+ * One row of the conversation header's overflow menu.
+ *
+ * A list of these rather than a fixed parameter per action: the seats that used to be
+ * in the row are conditional on facts this header does not own (whether the route is
+ * local, whether the session has children), and threading four more booleans through
+ * it to draw four more icons is how the row got crowded in the first place.
+ */
+internal class HeaderAction(
+    val label: String,
+    val icon: ImageVector,
+    val onClick: () -> Unit,
+)
+
+/**
+ * A small liquid-glass pill in the strip under the conversation header.
+ *
+ * Deliberately a sibling of [uk.xa0.dsh.ui.components.GlassPill] rather than a call to it:
+ * that one is the *composer* rail's chip and lives in the composer package, whose height
+ * and padding are tuned to sit under the input. This strip belongs to the header, is one
+ * step smaller, and has to be usable from here without the composer's parameters. Both
+ * go through `liquidPane` + `glassLift`, so the material itself cannot drift.
+ */
+@Composable
+private fun SmallGlassPill(
+    label: String,
+    icon: ImageVector,
+    active: Boolean,
+    backdrop: GlassBarBackdrop?,
+    onClick: () -> Unit,
+) {
+    val colors = DshTheme.colors
+    val shape = RoundedCornerShape(DshRadius.thumb)
+    Row(
+        Modifier
+            .height(28.dp)
+            // Lift outside the pane, as everywhere else: the shadow is drawn beyond the
+            // shape's bounds, and `glassLift` is the one place that decides how much of
+            // one an appearance can carry.
+            .glassLift(shape)
+            .liquidPane(
+                backdrop = backdrop,
+                shape = shape,
+                tint = if (active) colors.accent.copy(alpha = 0.18f) else null,
+            )
+            .clip(shape)
+            .clickableNoRipple(onClick = onClick)
+            .semantics { contentDescription = label }
+            .padding(horizontal = DshSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(DshSpacing.xxs),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (active) colors.accent else colors.labelSecondary,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = label,
+            style = DshType.bodySmall,
+            color = if (active) colors.accent else colors.labelSecondary,
+            maxLines = 1,
+        )
+    }
+}
 /**
  * The three readings of one session: the transcript, its trajectory, and the shell.
  *
@@ -3025,8 +3382,8 @@ private enum class ChatView(val label: String) {
  */
 private val CHAT_VIEW_ITEMS: List<BottomBarItem> = listOf(
     BottomBarItem(ChatView.CHAT.name, ChatView.CHAT.label, Icons.Rounded.ChatBubble),
-    BottomBarItem(ChatView.TRAJECTORY.name, ChatView.TRAJECTORY.label, Icons.Rounded.Timeline),
-    BottomBarItem(ChatView.TERMINAL.name, ChatView.TERMINAL.label, Icons.Rounded.Terminal),
+    BottomBarItem(ChatView.TRAJECTORY.name, ChatView.TRAJECTORY.label, DshIconVectors.PlanOutline),
+    BottomBarItem(ChatView.TERMINAL.name, ChatView.TERMINAL.label, DshIconVectors.CodeOutline),
 )
 
 /**
@@ -3062,53 +3419,34 @@ private fun FilesSurface(
      * rather than a control that cannot work.
      */
     downloader: uk.xa0.dsh.model.FileDownloader? = null,
+    /**
+     * Writes a whole file back, for the preview's Edit mode. Null draws no Edit
+     * control at all, which is the same rule the downloader follows: a page without a
+     * writer does not offer a switch that can only fail.
+     */
+    onSaveFile: ((path: String, text: String) -> Unit)? = null,
+    /**
+     * The backdrop the page's own header samples, or null on the flat tier.
+     *
+     * The page header belongs to *this* page now rather than to the shell: the top bar
+     * is the conversation's, and Files draws its own. It is the same material as the
+     * rest of the chrome, so it takes the same handle.
+     */
+    backdrop: GlassBarBackdrop? = null,
 ) {
     val colors = DshTheme.colors
+    // No back row, and no "Files" title bar of its own: the page's header is the glass
+    // pill inside FilesPanel (path, then the toolbar pills under it), and a second row
+    // above it repeated the page name while offering a back arrow the drawer already
+    // gives you. Reported as "文件页上面重设计一下不要返回按钮了".
+    //
+    // `onClose` is kept in the signature because the pager still needs a way out on a
+    // wide window, where there is no drawer gesture to fall back on.
     Column(
         modifier
             .fillMaxWidth()
             .background(colors.bgBase),
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .padding(horizontal = DshSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Rounded.ArrowBack,
-                contentDescription = "Back to chat",
-                tint = colors.labelSecondary,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickableNoRipple(onClick = onClose)
-                    .padding(DshSpacing.md),
-            )
-            Spacer(Modifier.width(DshSpacing.sm))
-            Text(
-                text = "Files",
-                style = DshType.messageBody.copy(fontWeight = FontWeight.Medium),
-                color = colors.labelPrimary,
-            )
-            if (root != null) {
-                Spacer(Modifier.width(DshSpacing.md))
-                Text(
-                    text = shortenPath(root),
-                    style = DshType.bodySmall,
-                    color = colors.labelTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(0.5.dp)
-                .background(colors.borderL3),
-        )
         FilesPanel(
             files = files,
             root = root,
@@ -3117,27 +3455,11 @@ private fun FilesSurface(
             downloader = downloader,
             initialPath = focus,
             explorer = explorer,
+            onSaveFile = onSaveFile,
+            backdrop = backdrop,
             modifier = Modifier.weight(1f),
         )
     }
-}
-
-@Composable
-private fun RunningDot() {
-    val transition = rememberInfiniteTransition(label = "running")
-    val alpha by transition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
-        label = "alpha",
-    )
-    Box(
-        Modifier
-            .size(8.dp)
-            .alpha(alpha)
-            .clip(CircleShape)
-            .background(DshTheme.colors.accent),
-    )
 }
 
 /**
@@ -3163,7 +3485,7 @@ private fun ScrollToBottomButton(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Rounded.ArrowDownward,
+            DshIconVectors.ChevronDownOutline,
             contentDescription = "Scroll to latest",
             tint = colors.labelPrimary,
             modifier = Modifier.size(16.dp),
@@ -3715,7 +4037,7 @@ private fun HeroBody(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Rounded.Folder,
+                DshIconVectors.FolderOpenOutline,
                 contentDescription = null,
                 tint = colors.labelSecondary,
                 modifier = Modifier.size(13.dp),
@@ -3730,7 +4052,7 @@ private fun HeroBody(
             )
             Spacer(Modifier.width(DshSpacing.xxs))
             Icon(
-                Icons.Rounded.ExpandMore,
+                DshIconVectors.ChevronDownOutline,
                 contentDescription = null,
                 tint = colors.labelCaption,
                 modifier = Modifier.size(12.dp),
@@ -3782,7 +4104,7 @@ private fun AgentPresetChip(label: String, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(DshSpacing.xxs))
         Icon(
-            Icons.Rounded.ExpandMore,
+            DshIconVectors.ChevronDownOutline,
             contentDescription = null,
             tint = colors.labelCaption,
             modifier = Modifier.size(12.dp),
@@ -4100,115 +4422,3 @@ private fun BranchFromMessageDialog(
     )
 }
 
-/**
- * The Me destination, and the only place a settings tab's sub-page state lives.
- *
- * ## Why the sub-page is state here and not a second pager
- *
- * A settings tab is a *stack*, not a sibling: you go in and come back out. A pager would
- * make the tabs swipeable as if they were places beside each other, and it would put the
- * reader's position in a structure that is not showing them where they are.
- *
- * ## What the tabs are (3.5b)
- *
- * Real pages. Each one composes the card the Settings sheet composes for that subject
- * (`ui/settings/SettingsCards.kt`), so the two surfaces cannot disagree about a row or
- * about the host's write rules. The tab is the section with room to breathe; the sheet is
- * the whole document.
- *
- * **About** is the one exception, and it is not a page: it opens the About *sheet*, which
- * is a document about the host — connection, certificate, session, sign-out — rather than
- * a setting. Drawing it inside this page's column would put a second Close button on a
- * screen that already has a back arrow, and would hide the sign-out action behind a tab
- * nobody associates with it.
- *
- * ## Back
- *
- * A sub-page is on top of the page, so Back has to leave it before it leaves Me. That
- * handler is registered here rather than in the ordered one above because this is where
- * the state is — and because it must win over "return to Chat", which is the press the
- * reader would otherwise get.
- */
-@Composable
-private fun MeDestination(
-    username: String,
-    balance: BalanceState,
-    settings: MeSettingsState,
-    settingsActions: MeSettingsActions,
-    onOpenAbout: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    var openTab by rememberSaveable { mutableStateOf<String?>(null) }
-    val tab = openTab?.let { id -> ME_ENTRIES.firstOrNull { it.id == id } }
-    if (tab != null) {
-        BackHandler { openTab = null }
-    }
-    if (tab == null) {
-        MeTab(
-            username = username,
-            // The figure, not the state machine: the page has no room for a retry, and
-            // the balance sheet behind the stat pills is where a failed read is answered.
-            balanceText = (balance as? BalanceState.Ready)?.let { state ->
-                // The figure the stat pills already lead with: the whole total for the
-                // currency the account is billed in, not a derived number. Null when the
-                // reply carried no currency, and the header then draws only the name.
-                state.account.primary?.let { info ->
-                    "Balance · " + info.totalBalance + " " + info.currency
-                }
-            },
-            entries = ME_ENTRIES,
-            onOpen = { entry ->
-                // About is the sheet, not a page: see this function's note.
-                if (entry.id == "about") onOpenAbout() else openTab = entry.id
-            },
-        )
-    } else {
-        MeSubPage(
-            title = tab.title,
-            onBack = { openTab = null },
-            // The sheet's own reach: Settings remains a complete document, and the tab is
-            // one section of it. Nothing on the page needs the full sheet, but a reader
-            // who wants the rest of the document should not have to leave Me to find it.
-            trailing = {
-                Text(
-                    text = "All settings",
-                    style = DshType.bodySmall,
-                    color = DshTheme.colors.link,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(DshRadius.sm))
-                        .clickableNoRipple(onClick = onOpenSettings)
-                        .padding(DshSpacing.sm),
-                )
-            },
-        ) {
-            // The page takes the height the back bar leaves; the page owns its own scroll,
-            // so the bar never scrolls away with the rows.
-            MeSettingsPage(
-                id = tab.id,
-                state = settings,
-                actions = settingsActions,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-/**
- * The settings tabs, as rows on the Me page.
- *
- * Order is the reader's: the everyday settings first (how the app behaves and what it
- * looks like), then what powers it (model, agent), then what is rare or dangerous
- * (archived, plugins), then the facts (about). Each one's page is a PR of its own; the
- * list is here so the level is fixed before the contents are argued about.
- */
-internal val ME_ENTRIES: List<MeEntry> = listOf(
-    MeEntry("appearance", "Appearance", "Theme, and the seven appearances it resolves to.", Icons.Rounded.Palette),
-    MeEntry("general", "General", "Enter behaviour, transcript folding, and the host's own settings.", Icons.Rounded.Tune),
-    MeEntry("model", "Model", "Which route answers, and the provider order behind it.", Icons.Rounded.SmartToy),
-    MeEntry("agent", "Agent", "Presets, and the permission level a session starts at.", Icons.Rounded.Badge),
-    MeEntry("terminal", "Terminal", "The shell's font size and cells.", Icons.Rounded.Terminal),
-    MeEntry("plugins", "Plugins", "The surfaces this client is allowed to draw.", Icons.Rounded.Extension),
-    MeEntry("crashes", "Crash log", "What closed the app, kept so it can be shared.", Icons.Rounded.BugReport),
-    MeEntry("archived", "Archived sessions", "Sessions put away, and how to bring one back.", Icons.Rounded.Archive),
-    MeEntry("about", "About", "Connection, account, version and the way out.", Icons.Rounded.Info),
-)

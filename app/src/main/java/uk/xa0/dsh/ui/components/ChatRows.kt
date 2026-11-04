@@ -38,28 +38,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BrokenImage
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Flag
-import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lightbulb
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Send
-import androidx.compose.material.icons.rounded.SmartToy
-import androidx.compose.material.icons.rounded.Terminal
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -92,6 +72,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +84,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import uk.xa0.dsh.GoalState
+import uk.xa0.dsh.R
 import uk.xa0.dsh.model.ApprovalAnswer
 import uk.xa0.dsh.model.ApprovalCopy
 import uk.xa0.dsh.model.ChatEntry
@@ -194,7 +177,11 @@ fun UserMessageRow(
                     if (entry.text.isNotBlank() || entry.attachments.isNotEmpty()) {
                         Spacer(Modifier.height(DshSpacing.sm))
                     }
-                    Text(text = "Sending…", style = DshType.micro, color = colors.labelTertiary)
+                    Text(
+                        text = stringResource(R.string.chat_sending),
+                        style = DshType.micro,
+                        color = colors.labelTertiary,
+                    )
                 }
             }
         }
@@ -335,7 +322,7 @@ private fun AttachmentSkeleton(name: String) {
     ) {
         Icon(
             Icons.Rounded.Image,
-            contentDescription = "Loading $name",
+            contentDescription = stringResource(R.string.chat_attachment_loading, name),
             tint = colors.labelTertiary,
             modifier = Modifier
                 .size(20.dp)
@@ -365,7 +352,7 @@ private fun AttachmentLoadFailed() {
         )
         Spacer(Modifier.height(DshSpacing.sm))
         Text(
-            text = "Couldn't load picture",
+            text = stringResource(R.string.chat_attachment_load_failed),
             style = DshType.micro,
             color = colors.labelTertiary,
         )
@@ -399,7 +386,7 @@ private fun MessageAttachmentChip(attachment: MessageAttachment) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (attachment.kind == "image") Icons.Rounded.Image else Icons.Rounded.Description,
+            if (attachment.kind == "image") Icons.Rounded.Image else DshIconVectors.BrowseOutline,
             contentDescription = null,
             tint = colors.labelTertiary,
             modifier = Modifier.size(16.dp),
@@ -465,14 +452,14 @@ fun MessageActions(
 
         if (durationMs != null && durationMs > 0) {
             Icon(
-                Icons.Rounded.Schedule,
+                DshIconVectors.AlarmClockOutline,
                 contentDescription = null,
                 tint = colors.labelCaption,
                 modifier = Modifier.size(13.dp),
             )
             Spacer(Modifier.width(DshSpacing.xs))
             Text(
-                "Ran for ${formatDuration(durationMs)}",
+                stringResource(R.string.chat_ran_for, formatDuration(durationMs)),
                 style = DshType.micro,
                 color = colors.labelTertiary,
             )
@@ -491,8 +478,10 @@ fun MessageActions(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (copied) Icons.Rounded.Check else Icons.Rounded.ContentCopy,
-                contentDescription = if (copied) "Copied" else "Copy",
+                imageVector = if (copied) DshIconVectors.CheckOutline else DshIconVectors.CopyOutline,
+                contentDescription = stringResource(
+                    if (copied) R.string.chat_copied else R.string.chat_copy,
+                ),
                 tint = if (copied) colors.success else colors.labelTertiary,
                 modifier = Modifier.size(14.dp),
             )
@@ -511,7 +500,7 @@ fun MessageActions(
             ) {
                 Icon(
                     imageVector = DshIconBranch16,
-                    contentDescription = "Branch into a new conversation",
+                    contentDescription = stringResource(R.string.chat_branch),
                     tint = colors.labelTertiary,
                     modifier = Modifier.size(14.dp),
                 )
@@ -607,7 +596,7 @@ fun TurnStatusRow(elapsedMs: Long?, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Deep diving...",
+            text = stringResource(R.string.chat_turn_status_deep_diving),
             style = DshType.messageBody.copy(fontWeight = FontWeight.SemiBold, brush = shimmer),
             maxLines = 1,
             modifier = Modifier.onSizeChanged { textWidth = it.width.toFloat() },
@@ -646,10 +635,25 @@ fun AssistantMessageRow(
     showFooter: Boolean = false,
     durationMs: Long? = null,
     onBranch: (() -> Unit)? = null,
+    /** Translates this turn’s reasoning when the reader opens it; see [ReasoningRow]. */
+    translate: ((String, (String?) -> Unit) -> Unit)? = null,
+    /**
+     * Told when the reader opens or shuts this turn’s reasoning, so the host’s
+     * pinned collapse bar can appear. See [ReasoningRow].
+     */
+    onReasoningExpanded: ((Boolean) -> Unit)? = null,
+    /** A tick from [ExpandedProcessState.collapseAll]; see [ReasoningRow]. */
+    collapseEpoch: Int = 0,
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(DshSpacing.xl)) {
         if (entry.reasoning.isNotBlank()) {
-            ReasoningRow(entry.reasoning, running = false)
+            ReasoningRow(
+                reasoning = entry.reasoning,
+                running = false,
+                onExpandedChange = onReasoningExpanded,
+                translate = translate,
+                collapseEpoch = collapseEpoch,
+            )
         }
         if (entry.text.isNotBlank()) {
             MarkdownText(entry.text)
@@ -670,7 +674,14 @@ fun AssistantMessageRow(
 
 /** The in-flight attempt: live reasoning, live answer text, plus a streaming dot. */
 @Composable
-fun LiveAttemptRow(attempt: LiveAttempt, modifier: Modifier = Modifier) {
+fun LiveAttemptRow(
+    attempt: LiveAttempt,
+    modifier: Modifier = Modifier,
+    /** Translates the in-flight reasoning on open; see [ReasoningRow]. */
+    translate: ((String, (String?) -> Unit) -> Unit)? = null,
+    /** Told when the in-flight reasoning opens or shuts; see [ReasoningRow]. */
+    onReasoningExpanded: ((Boolean) -> Unit)? = null,
+) {
     val colors = DshTheme.colors
     Column(
         modifier.fillMaxWidth(),
@@ -678,7 +689,12 @@ fun LiveAttemptRow(attempt: LiveAttempt, modifier: Modifier = Modifier) {
     ) {
         val reasoning = attempt.reasoning
         if (reasoning.isNotBlank()) {
-            ReasoningRow(reasoning, running = !attempt.finished)
+            ReasoningRow(
+                reasoning = reasoning,
+                running = !attempt.finished,
+                onExpandedChange = onReasoningExpanded,
+                translate = translate,
+            )
         }
         val text = attempt.text
         if (text.isNotBlank()) {
@@ -687,7 +703,7 @@ fun LiveAttemptRow(attempt: LiveAttempt, modifier: Modifier = Modifier) {
         val pending = attempt.toolNames
         if (pending.isNotEmpty() && text.isBlank() && reasoning.isBlank()) {
             Text(
-                text = "Calling ${pending.last()}…",
+                text = stringResource(R.string.chat_calling_tool, pending.last()),
                 style = DshType.bodyMedium,
                 color = colors.labelTertiary,
             )
@@ -698,30 +714,208 @@ fun LiveAttemptRow(attempt: LiveAttempt, modifier: Modifier = Modifier) {
 }
 
 /**
+ * Whether this conversation has been spoken to yet — the first user message has landed.
+ *
+ * The composer's session readings (speed, cache share) are instruments for a
+ * conversation; before the reader has said anything they measure nothing, and a rail that
+ * states "0 tok/s" on a blank session is reporting on a conversation that does not exist.
+ * The judgement needs the transcript, which the rail cannot see, so it lives here next to
+ * the rows and the caller passes the answer down as `statsVisible`.
+ *
+ * A notice or a tool row does not count: those arrive *because* a turn was asked for.
+ */
+fun hasConversationStarted(entries: List<ChatEntry>): Boolean =
+    entries.any { it is ChatEntry.UserMessage }
+
+/**
+ * How tall an expanded Think / tool body may grow before it scrolls inside its own row.
+ *
+ * The header is the reader's only way back out of an expanded row, so it must not be
+ * pushed off the screen by the row's own content. A cap keeps the whole disclosure — the
+ * 24dp header plus this body — inside a thumb's reach of wherever the row sits, and the
+ * body's own scroll is what takes the reader through a long thought.
+ *
+ * A host that pins the header itself (see [ExpandedProcessCollapseBar]) gets the same
+ * guarantee from the other side: whatever is expanded, its own collapse control is drawn
+ * over the transcript.
+ */
+internal val ExpandedProcessBodyMax = 280.dp
+
+/**
+ * Which disclosure the reader has open, and the way to shut it from outside the row.
+ *
+ * A row's own header is inside the row, and the row scrolls; a long thought can carry
+ * that header off the screen. Capping the body
+ * ([ExpandedProcessBodyMax]) bounds the damage but cannot stop the row itself from
+ * scrolling away, and a pinned control needs two things the row does not publish on its
+ * own: *which* row is open, and a way to close it without tapping it.
+ *
+ * The list owner holds one of these, hands [collapseEpoch] to every disclosure row and
+ * draws [ExpandedProcessCollapseBar] while [label] is set. Rows report through
+ * `onExpandedChange`, and a bumped epoch is how [collapseAll] reaches rows that are
+ * currently off screen (they are collapsed when they come back).
+ */
+class ExpandedProcessState {
+    /** The open row's title, or null when nothing is expanded. */
+    var label by mutableStateOf<String?>(null)
+        private set
+
+    /** Bumped by [collapseAll]; every disclosure row collapses when it changes. */
+    var collapseEpoch by mutableStateOf(0)
+        private set
+
+    /**
+     * A row reports its own toggle. [title] is what the pinned bar reads back, so the
+     * control says which disclosure it is about to close.
+     */
+    fun onRowExpanded(expanded: Boolean, title: String) {
+        label = if (expanded) title else null
+    }
+
+    /** Shut whatever is open, including a row that is currently scrolled off screen. */
+    fun collapseAll() {
+        collapseEpoch += 1
+        label = null
+    }
+}
+
+/** Remembers one [ExpandedProcessState] for a transcript. */
+@Composable
+fun rememberExpandedProcessState(): ExpandedProcessState =
+    remember { ExpandedProcessState() }
+
+/**
+ * The pinned collapse control a conversation can draw while a disclosure is expanded.
+ *
+ * ## Why this exists as a public surface
+ *
+ * The header lives inside its row, and a row scrolls: open a long thought, scroll up into
+ * it, and the chevron that shuts it leaves the screen with the header. Capping the body
+ * ([ExpandedProcessBodyMax]) removes the worst of that, but the row itself can still
+ * scroll away. So the list owner can also draw this bar at the top of the transcript,
+ * outside the scrolling content, for as long as anything is open — and the reader can
+ * always shut it. The `onExpandedChange` parameter of [ReasoningRow] and [ToolCallRow] is
+ * how a row tells its host it is the open one.
+ */
+@Composable
+fun ExpandedProcessCollapseBar(
+    label: String,
+    onCollapse: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** The transcript's backdrop: this bar floats over it, so it wears the same glass. */
+    backdrop: GlassBarBackdrop? = null,
+) {
+    val colors = DshTheme.colors
+    val shape = RoundedCornerShape(DshRadius.thumb)
+    Row(
+        modifier
+            .glassLift(shape)
+            .liquidPane(backdrop, shape)
+            .clickableNoRipple(onClick = onCollapse)
+            .padding(start = DshSpacing.lg, end = DshSpacing.md, top = DshSpacing.sm, bottom = DshSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Rounded.Lightbulb,
+            contentDescription = null,
+            tint = colors.labelTertiary,
+            modifier = Modifier.size(13.dp),
+        )
+        Spacer(Modifier.width(DshSpacing.sm))
+        Text(
+            text = label,
+            style = DshType.micro,
+            color = colors.labelSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 200.dp),
+        )
+        Spacer(Modifier.width(DshSpacing.sm))
+        Icon(
+            DshIconVectors.ChevronUpOutline,
+            contentDescription = stringResource(R.string.chat_collapse),
+            tint = colors.labelTertiary,
+            modifier = Modifier.size(14.dp),
+        )
+    }
+}
+
+/**
  * "Think" disclosure: one 24dp header row collapsing to a summary, expanding to
  * pre-wrapped secondary text.
  */
 @Composable
-fun ReasoningRow(reasoning: String, running: Boolean) {
+fun ReasoningRow(
+    reasoning: String,
+    running: Boolean,
+    modifier: Modifier = Modifier,
+    /**
+     * Told when the reader opens or shuts this row, so a host that draws a sticky
+     * collapse bar knows which disclosure is open. Null (the default) keeps the row a
+     * self-contained disclosure with no host involvement.
+     */
+    onExpandedChange: ((Boolean) -> Unit)? = null,
+    /**
+     * A tick from [ExpandedProcessState.collapseAll]. When it changes, this row shuts —
+     * including a row whose own header has been scrolled off the screen.
+     */
+    collapseEpoch: Int = 0,
+    /**
+     * Translates one thought, or null to draw no translation at all.
+     *
+     * Fired **once**, the first time the reader opens this row, and never again for
+     * this text: the host keeps a translation of an exact fragment in the session log,
+     * so a second ask for the same thought is answered from its own record rather than
+     * from a provider. The state lives in the row rather than in the host because it is
+     * per-fragment and dies with the row that owns it — a translation of a thought from
+     * three turns ago is not something the panel has any reason to hold.
+     *
+     * The reader is not made to wait: the original is drawn immediately and the
+     * translation appears above it when it arrives.
+     */
+    translate: ((String, (String?) -> Unit) -> Unit)? = null,
+) {
     val colors = DshTheme.colors
     var expanded by rememberSaveable(reasoning.take(32)) { mutableStateOf(false) }
+    LaunchedEffect(collapseEpoch) {
+        if (collapseEpoch > 0 && expanded) expanded = false
+    }
+    // Keyed on the text, so a row recycled for a different thought does not show the
+    // previous one’s translation — which is the whole hazard of a slot in a lazy list.
+    var translation by remember(reasoning) { mutableStateOf<String?>(null) }
+    var translating by remember(reasoning) { mutableStateOf(false) }
+    LaunchedEffect(expanded, reasoning) {
+        val ask = translate ?: return@LaunchedEffect
+        if (!expanded || translation != null || translating) return@LaunchedEffect
+        translating = true
+        ask(reasoning) { result ->
+            translating = false
+            if (result != null) translation = result
+        }
+    }
     val summary = remember(reasoning) {
         reasoning.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
     }
 
-    Column(Modifier.fillMaxWidth()) {
+    Column(modifier.fillMaxWidth()) {
+        // The collapse header. It stays *outside* the scroller below, so once the reader
+        // is scrolling up through a long thought this row — title and chevron — is still
+        // on screen and still the way out of it.
         Row(
             Modifier
                 .fillMaxWidth()
                 .height(24.dp)
                 .clip(RoundedCornerShape(DshRadius.sm))
-                .clickableNoRipple { expanded = !expanded },
+                .clickableNoRipple {
+                    expanded = !expanded
+                    onExpandedChange?.invoke(expanded)
+                },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
                 if (expanded) {
                     Icon(
-                        Icons.Rounded.ExpandMore,
+                        DshIconVectors.ChevronDownOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),
@@ -737,7 +931,7 @@ fun ReasoningRow(reasoning: String, running: Boolean) {
             }
             Spacer(Modifier.width(DshSpacing.sm))
             Text(
-                text = if (running) "Thinking…" else "Think",
+                text = stringResource(if (running) R.string.chat_thinking else R.string.chat_think),
                 style = DshType.rowTitle,
                 color = colors.labelSecondary,
                 maxLines = 1,
@@ -763,17 +957,70 @@ fun ReasoningRow(reasoning: String, running: Boolean) {
         }
 
         if (expanded) {
-            // Markdown, not a plain `Text` — which is what this was, and why a link in
-            // thinking was dead. Reasoning is where this model puts most of its URLs
-            // ("Let me check https://…/issues/1448"): measured on one session, the
-            // assistant's own prose carried them in reasoning, and the plain text here
-            // made every one of them unclickable. The renderer is the same one the
-            // answer body uses, so a link taps the same way in both.
-            MarkdownText(
-                text = reasoning.trim(),
-                color = colors.labelTertiary,
-                modifier = Modifier.padding(start = 22.dp, top = DshSpacing.xs, bottom = DshSpacing.xs),
-            )
+            // A body that scrolls *inside* the row, capped so the header above can never
+            // be pushed out by the reader's own content. A thought can be thousands of
+            // words; unbounded it made this row a page of its own, and the only way back
+            // was to scroll up past all of it — the reported complaint. Capped, the
+            // chevron that opened it is always the next thing under the thumb.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = ExpandedProcessBodyMax)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                // Markdown, not a plain `Text` — which is what this was, and why a link in
+                // thinking was dead. Reasoning is where this model puts most of its URLs
+                // ("Let me check https://…/issues/1448"): measured on one session, the
+                // assistant's own prose carried them in reasoning, and the plain text here
+                // made every one of them unclickable. The renderer is the same one the
+                // answer body uses, so a link taps the same way in both.
+                // The translation sits *above* the original, not instead of it.
+                //
+                // Reasoning is evidence: the reader opened this row to see what the
+                // model actually did, and replacing that with a translation would hide
+                // the thing they came for. Above rather than below because the
+                // translation is what they can read — putting it under a page of
+                // source text means scrolling to find it.
+                translation?.let { translated ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 22.dp, top = DshSpacing.xs, bottom = DshSpacing.md),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.chat_translated),
+                            style = DshType.micro,
+                            color = colors.labelCaption,
+                        )
+                        Spacer(Modifier.height(DshSpacing.xxs))
+                        MarkdownText(
+                            text = translated,
+                            color = colors.labelSecondary,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(DshSpacing.md))
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(0.5.dp)
+                                .background(colors.borderL1),
+                        )
+                    }
+                }
+                if (translating) {
+                    Text(
+                        text = stringResource(R.string.chat_translating),
+                        style = DshType.micro,
+                        color = colors.labelCaption,
+                        modifier = Modifier.padding(start = 22.dp, bottom = DshSpacing.xs),
+                    )
+                }
+                MarkdownText(
+                    text = reasoning.trim(),
+                    color = colors.labelTertiary,
+                    modifier = Modifier.padding(start = 22.dp, top = DshSpacing.xs, bottom = DshSpacing.xs),
+                )
+            }
         }
     }
 }
@@ -796,6 +1043,14 @@ fun ToolCallRow(
     jobOutput: JobObservation? = null,
     /** Opens — or closes — that observation for the job this call started. */
     onObserveJob: (String?) -> Unit = {},
+    /**
+     * Told when the reader opens or shuts this row, so a host drawing a sticky collapse
+     * bar knows which disclosure is open. Null keeps the row self-contained. Last in the
+     * list on purpose: existing callers pass `entry` and the image loader positionally.
+     */
+    onExpandedChange: ((Boolean) -> Unit)? = null,
+    /** A tick from [ExpandedProcessState.collapseAll]; see [ReasoningRow]. */
+    collapseEpoch: Int = 0,
 ) {
     val colors = DshTheme.colors
     // The ask-question call owns a transcript row of its own: its args and result
@@ -893,8 +1148,13 @@ fun ToolCallRow(
         return
     }
     var expanded by rememberSaveable(entry.callId) { mutableStateOf(false) }
+    LaunchedEffect(collapseEpoch) {
+        if (collapseEpoch > 0 && expanded) expanded = false
+    }
     val summary = remember(entry.name, entry.arguments) { toolSummary(entry.name, entry.arguments) }
-    val title = remember(entry.name) { toolTitle(entry.name) }
+    // Not remembered on the key: the title is a resource now, and a cached string
+    // would keep the old locale's word after an in-app language switch.
+    val title = toolTitle(entry.name)
     // The background job this call started, when it started one.
     //
     // A shell call sent to the background answers with the literal `started
@@ -916,6 +1176,7 @@ fun ToolCallRow(
                 .clip(RoundedCornerShape(DshRadius.sm))
                 .clickableNoRipple {
                     expanded = !expanded
+                    onExpandedChange?.invoke(expanded)
                     // Opening the row is what opens the job's stream; shutting it
                     // releases the stream, as collapsing does in the web's panel.
                     if (backgroundJob != null) onObserveJob(if (expanded) backgroundJob else null)
@@ -925,7 +1186,7 @@ fun ToolCallRow(
             Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
                 if (expanded) {
                     Icon(
-                        Icons.Rounded.ExpandMore,
+                        DshIconVectors.ChevronDownOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),
@@ -950,10 +1211,13 @@ fun ToolCallRow(
             // row that is only its title shows no trailing dot. A blank summary on
             // an in-flight call still says "running", since the row has no other
             // signal that the call has started.
+            // The state words are resources; the summary itself is the model's own
+            // words and stays runtime data.
             val rowSummary = when {
-                summary.isNotBlank() && entry.result == null -> "$summary · running"
+                summary.isNotBlank() && entry.result == null ->
+                    stringResource(R.string.chat_summary_running, summary)
                 summary.isNotBlank() -> summary
-                entry.result == null -> "running"
+                entry.result == null -> stringResource(R.string.chat_running)
                 else -> ""
             }
             if (rowSummary.isNotBlank()) {
@@ -978,10 +1242,16 @@ fun ToolCallRow(
 
         if (expanded) {
             Spacer(Modifier.height(DshSpacing.xs))
+            // Deliberately not wrapped in a scroller of its own: the IN/OUT card already
+            // caps each section at 150dp with its own scroll, and the job panel below
+            // caps itself at 224dp. A third, outer scroll around two inner ones would be
+            // three nested scrollers fighting for one vertical drag — the same gesture
+            // ambiguity `JobsCard` refuses for horizontal scrolling. The header stays
+            // reachable because the body is already bounded, which is what the cap is for.
             ToolIoCard(
                 sections = buildList {
-                    add("IN" to entry.arguments)
-                    entry.result?.let { add("OUT" to it) }
+                    add(IN_KEY to entry.arguments)
+                    entry.result?.let { add(OUT_KEY to it) }
                 },
                 isError = entry.isError,
             )
@@ -1001,6 +1271,17 @@ fun ToolCallRow(
         }
     }
 }
+
+/**
+ * The two section keys the IN/OUT card is built from.
+ *
+ * They are identifiers rather than copy: three cards in this package build sections
+ * with them (`ChatRows`, `PlanRow`, `AskQuestionRow`) and the card keys the error
+ * tint on [OUT_KEY]. Only the word drawn in the gutter is translated
+ * (`tool_in_label` / `tool_out_label`), so a locale can widen it without moving logic.
+ */
+internal const val IN_KEY = "IN"
+internal const val OUT_KEY = "OUT"
 
 /**
  * The IN/OUT card: 0.5dp hairline, 12dp radius, code surface, 11/16 mono, each
@@ -1037,10 +1318,18 @@ internal fun ToolIoCard(sections: List<Pair<String, String>>, isError: Boolean) 
                     .padding(horizontal = DshSpacing.xl, vertical = DshSpacing.lg),
             ) {
                 Text(
-                    text = label,
+                    text = when (label) {
+                        IN_KEY -> stringResource(R.string.tool_in_label)
+                        OUT_KEY -> stringResource(R.string.tool_out_label)
+                        else -> label
+                    },
                     style = DshType.micro,
                     color = colors.labelCaption,
-                    modifier = Modifier.width(30.dp),
+                    // A minimum rather than a fixed width: a locale may name the
+                    // section with a longer word than "OUT", and a hard 30dp would
+                    // clip it. The body beside it is weighted, so the row still
+                    // gives the value the rest of the line.
+                    modifier = Modifier.widthIn(min = 30.dp),
                 )
                 // Wrapped, not panned. The terminal card did this first and for the
                 // same reason — the widest lines in a tool's own input or output are
@@ -1051,7 +1340,7 @@ internal fun ToolIoCard(sections: List<Pair<String, String>>, isError: Boolean) 
                 Text(
                     text = body.ifEmpty { "—" },
                     style = DshType.codeSmall,
-                    color = if (isError && label == "OUT") colors.error else colors.labelSecondary,
+                    color = if (isError && label == OUT_KEY) colors.error else colors.labelSecondary,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -1081,20 +1370,37 @@ fun ToolCallTreeRow(
      * every row in the subtree.
      */
     loadImage: suspend (String) -> ImageBitmap? = { null },
+    /** Forwarded to the root row; see [ToolCallRow]. */
+    onExpandedChange: ((Boolean) -> Unit)? = null,
+    /** Forwarded to every row in the subtree; see [ReasoningRow]. */
+    collapseEpoch: Int = 0,
 ) {
     if (node.children.isEmpty()) {
-        ToolCallRow(node.entry, loadImage)
+        ToolCallRow(
+            node.entry,
+            loadImage,
+            onExpandedChange = onExpandedChange,
+            collapseEpoch = collapseEpoch,
+        )
         return
     }
     var expanded by rememberSaveable(node.entry.callId) { mutableStateOf(false) }
+    LaunchedEffect(collapseEpoch) {
+        if (collapseEpoch > 0 && expanded) expanded = false
+    }
     Column(Modifier.fillMaxWidth()) {
-        ToolCallRow(node.entry, loadImage)
+        ToolCallRow(
+            node.entry,
+            loadImage,
+            onExpandedChange = onExpandedChange,
+            collapseEpoch = collapseEpoch,
+        )
         NestedCallDisclosure(
             count = node.descendantCount,
             expanded = expanded,
             onToggle = { expanded = !expanded },
         )
-        if (expanded) NestedCalls(node.children, loadImage)
+        if (expanded) NestedCalls(node.children, loadImage, collapseEpoch)
     }
 }
 
@@ -1107,6 +1413,7 @@ fun ToolCallTreeRow(
 private fun NestedCalls(
     children: List<ToolCallNode>,
     loadImage: suspend (String) -> ImageBitmap?,
+    collapseEpoch: Int = 0,
 ) {
     val colors = DshTheme.colors
     Column(
@@ -1124,7 +1431,9 @@ private fun NestedCalls(
         verticalArrangement = Arrangement.spacedBy(DshSpacing.xs),
     ) {
         for (child in children) {
-            key(child.entry.callId) { ToolCallTreeRow(child, loadImage) }
+            key(child.entry.callId) {
+                ToolCallTreeRow(child, loadImage, collapseEpoch = collapseEpoch)
+            }
         }
     }
 }
@@ -1147,14 +1456,16 @@ private fun NestedCallDisclosure(count: Int, expanded: Boolean, onToggle: () -> 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            imageVector = if (expanded) Icons.Rounded.ExpandMore else Icons.Rounded.ChevronRight,
-            contentDescription = if (expanded) "Collapse subtool calls" else "Expand subtool calls",
+            imageVector = if (expanded) DshIconVectors.ChevronDownOutline else DshIconVectors.ChevronRightOutline,
+            contentDescription = stringResource(
+                if (expanded) R.string.tool_collapse_subcalls else R.string.tool_expand_subcalls,
+            ),
             tint = colors.labelTertiary,
             modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(DshSpacing.sm))
         Text(
-            text = if (count == 1) "1 subtool call" else "$count subtool calls",
+            text = pluralStringResource(R.plurals.tool_subcall_count, count, count),
             style = DshType.rowSummary,
             color = colors.labelTertiary,
             maxLines = 1,
@@ -1201,14 +1512,14 @@ fun TodoCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Rounded.Checklist,
+                DshIconVectors.ChecklistOutline,
                 contentDescription = null,
                 tint = colors.labelSecondary,
                 modifier = Modifier.size(14.dp),
             )
             Spacer(Modifier.width(DshSpacing.sm))
             Text(
-                text = "To-dos",
+                text = stringResource(R.string.chat_todos_title),
                 style = DshType.rowTitle.copy(fontWeight = FontWeight.Medium),
                 color = colors.labelPrimary,
                 maxLines = 1,
@@ -1222,8 +1533,10 @@ fun TodoCard(
             )
             Spacer(Modifier.width(DshSpacing.md))
             Icon(
-                imageVector = if (collapsed) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                contentDescription = if (collapsed) "Expand to-dos" else "Collapse to-dos",
+                imageVector = if (collapsed) DshIconVectors.ChevronUpOutline else DshIconVectors.ChevronDownOutline,
+                contentDescription = stringResource(
+                    if (collapsed) R.string.chat_expand_todos else R.string.chat_collapse_todos,
+                ),
                 tint = colors.labelTertiary,
                 modifier = Modifier.size(14.dp),
             )
@@ -1269,16 +1582,25 @@ fun TodoCard(
 /**
  * `progressLabel`: only non-zero buckets, joined with en-space · en-space because
  * HTML/Compose both collapse runs of ASCII spaces.
+ *
+ * `@Composable` because each bucket is a plural resource: English inflects the noun
+ * and Chinese does not, which is exactly what a resource fixes and a concatenated
+ * sentence cannot.
  */
+@Composable
 private fun todoProgressLabel(items: List<TodoItem>): String {
     val done = items.count { it.isDone }
     val active = items.count { it.isActive }
     val pending = items.size - done - active
-    return buildList {
-        if (done > 0) add("$done completed")
-        if (active > 0) add("$active in progress")
-        if (pending > 0) add("$pending pending")
-    }.joinToString("\u2002·\u2002")
+    // One plural per bucket rather than one sentence: the buckets that are zero are
+    // dropped, so each has to be a complete phrase on its own. The list is built by
+    // hand rather than with `buildList`, because the figures are read from resources
+    // and a composable call belongs in this function's own scope.
+    val parts = mutableListOf<String>()
+    if (done > 0) parts.add(pluralStringResource(R.plurals.chat_todos_completed, done, done))
+    if (active > 0) parts.add(pluralStringResource(R.plurals.chat_todos_in_progress, active, active))
+    if (pending > 0) parts.add(pluralStringResource(R.plurals.chat_todos_pending, pending, pending))
+    return parts.joinToString("\u2002·\u2002")
 }
 
 /**
@@ -1338,7 +1660,7 @@ fun NoticeRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = if (isCompaction) Icons.Rounded.Info else Icons.Rounded.SmartToy,
+                imageVector = if (isCompaction) DshIconVectors.InfoOutline else DshIconVectors.AgentPresetOutline,
                 contentDescription = null,
                 tint = colors.labelCaption,
                 modifier = Modifier.size(13.dp),
@@ -1355,8 +1677,10 @@ fun NoticeRow(
             if (entry.detail != null || entry.jobId != null) {
                 Spacer(Modifier.width(DshSpacing.sm))
                 Icon(
-                    imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                    contentDescription = if (expanded) "Hide details" else "Show details",
+                    imageVector = if (expanded) DshIconVectors.ChevronUpOutline else DshIconVectors.ChevronDownOutline,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.chat_hide_details else R.string.chat_show_details,
+                    ),
                     tint = colors.labelTertiary,
                     modifier = Modifier.size(14.dp),
                 )
@@ -1448,14 +1772,20 @@ fun ApprovalCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Rounded.Warning,
+                DshIconVectors.WarningTriangleOutline,
                 contentDescription = null,
                 tint = colors.warn,
                 modifier = Modifier.size(15.dp),
             )
             Spacer(Modifier.width(DshSpacing.md))
             Text(
-                if (answer is ApprovalAnswer.Sent) "Approval sent" else "Approval required",
+                stringResource(
+                    if (answer is ApprovalAnswer.Sent) {
+                        R.string.chat_approval_sent
+                    } else {
+                        R.string.chat_approval_required
+                    },
+                ),
                 style = DshType.meta,
                 color = colors.warn,
                 // One line whatever it says: this banner is the other thing on the
@@ -1468,7 +1798,7 @@ fun ApprovalCard(
 
         Column(Modifier.padding(DshSpacing.xl)) {
             Text(
-                text = "$toolName wants to run",
+                text = stringResource(R.string.chat_approval_tool_wants_to_run, toolName),
                 style = DshType.titleMedium,
                 color = colors.labelPrimary,
             )
@@ -1480,8 +1810,18 @@ fun ApprovalCard(
             ApprovalStatusStrip(answer)
             Spacer(Modifier.height(DshSpacing.xl))
             Row(horizontalArrangement = Arrangement.spacedBy(DshSpacing.lg)) {
-                PillButton("Reject", primary = false, enabled = tappable, onClick = onReject)
-                PillButton("Allow once", primary = true, enabled = tappable, onClick = onAllow)
+                PillButton(
+                    label = stringResource(R.string.chat_approval_reject),
+                    primary = false,
+                    enabled = tappable,
+                    onClick = onReject,
+                )
+                PillButton(
+                    label = stringResource(R.string.chat_approval_allow_once),
+                    primary = true,
+                    enabled = tappable,
+                    onClick = onAllow,
+                )
             }
         }
     }
@@ -1560,9 +1900,9 @@ private fun ApprovalStatusStrip(
 /** The strip's mark: a shape per state, so the state is never carried by tint alone. */
 private fun ApprovalAnswer.statusMark(): ImageVector? = when (this) {
     ApprovalAnswer.Waiting -> null
-    is ApprovalAnswer.Answering -> Icons.Rounded.Schedule
-    is ApprovalAnswer.Sent -> Icons.Rounded.Send
-    is ApprovalAnswer.Unsent -> Icons.Rounded.Warning
+    is ApprovalAnswer.Answering -> DshIconVectors.AlarmClockOutline
+    is ApprovalAnswer.Sent -> DshIconVectors.SendOutline
+    is ApprovalAnswer.Unsent -> DshIconVectors.WarningTriangleOutline
 }
 
 /** The strip's tint. It reinforces the claim; it never has to make it on its own. */
@@ -1624,6 +1964,12 @@ fun GoalBar(
     onEdit: (String) -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * The transcript's backdrop, so the bar wears the same liquid material as the to-do
+     * card beside it. Null paints the flat tier, which is the whole material story on a
+     * device that cannot sample a backdrop.
+     */
+    backdrop: GlassBarBackdrop? = null,
 ) {
     val colors = DshTheme.colors
     var collapsed by rememberSaveable(goal.id) { mutableStateOf(true) }
@@ -1637,12 +1983,14 @@ fun GoalBar(
         if (editing) runCatching { focusRequester.requestFocus() }
     }
 
-    val label = when (goal.phase) {
-        "paused" -> "Paused Goal"
-        "blocked" -> "Blocked Goal"
-        "active" -> "Ongoing Goal"
-        else -> "Goal"
-    }
+    val label = stringResource(
+        when (goal.phase) {
+            "paused" -> R.string.chat_goal_phase_paused
+            "blocked" -> R.string.chat_goal_phase_blocked
+            "active" -> R.string.chat_goal_phase_active
+            else -> R.string.chat_goal_phase_none
+        },
+    )
     val accent = when (goal.phase) {
         "paused", "blocked" -> colors.warn
         else -> colors.accent
@@ -1652,9 +2000,10 @@ fun GoalBar(
     Column(
         modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(colors.tip)
-            .border(0.5.dp, colors.borderL1, shape),
+            // The same floating material as the To-dos card it shares a seat with: one
+            // of the cards lifted above the dock, not an opaque slab beside them.
+            .glassLift(shape)
+            .liquidPane(backdrop, shape),
     ) {
         Row(
             Modifier
@@ -1667,7 +2016,7 @@ fun GoalBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Rounded.Flag,
+                DshIconVectors.GoalOutline,
                 contentDescription = null,
                 tint = accent,
                 modifier = Modifier.size(14.dp),
@@ -1697,8 +2046,10 @@ fun GoalBar(
             }
             Spacer(Modifier.width(DshSpacing.md))
             Icon(
-                imageVector = if (collapsed) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                contentDescription = if (collapsed) "Expand goal" else "Collapse goal",
+                imageVector = if (collapsed) DshIconVectors.ChevronUpOutline else DshIconVectors.ChevronDownOutline,
+                contentDescription = stringResource(
+                    if (collapsed) R.string.chat_goal_expand else R.string.chat_goal_collapse,
+                ),
                 tint = colors.labelTertiary,
                 modifier = Modifier.size(14.dp),
             )
@@ -1733,11 +2084,13 @@ fun GoalBar(
                     )
                     Spacer(Modifier.height(DshSpacing.md))
                     Row(horizontalArrangement = Arrangement.spacedBy(DshSpacing.lg)) {
-                        GoalAction("Save", primary = true) {
+                        GoalAction(stringResource(R.string.chat_goal_save), primary = true) {
                             editing = false
                             onEdit(draft)
                         }
-                        GoalAction("Cancel", primary = false) { editing = false }
+                        GoalAction(stringResource(R.string.chat_goal_cancel), primary = false) {
+                            editing = false
+                        }
                     }
                 } else {
                     Text(
@@ -1748,15 +2101,27 @@ fun GoalBar(
                     Spacer(Modifier.height(DshSpacing.md))
                     Row(horizontalArrangement = Arrangement.spacedBy(DshSpacing.lg)) {
                         if (goal.phase == "active") {
-                            GoalAction("Pause", primary = false, onClick = onPause)
+                            GoalAction(
+                                stringResource(R.string.chat_goal_pause),
+                                primary = false,
+                                onClick = onPause,
+                            )
                         } else {
-                            GoalAction("Resume", primary = false, onClick = onResume)
+                            GoalAction(
+                                stringResource(R.string.chat_goal_resume),
+                                primary = false,
+                                onClick = onResume,
+                            )
                         }
-                        GoalAction("Edit", primary = false) {
+                        GoalAction(stringResource(R.string.chat_goal_edit), primary = false) {
                             draft = goal.objective
                             editing = true
                         }
-                        GoalAction("Clear", primary = false, onClick = onClear)
+                        GoalAction(
+                            stringResource(R.string.chat_goal_clear),
+                            primary = false,
+                            onClick = onClear,
+                        )
                     }
                 }
             }
@@ -1796,8 +2161,10 @@ fun TurnProcessRow(row: DisplayRow.TurnProcess, onToggle: () -> Unit) {
     ) {
         Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = if (row.expanded) Icons.Rounded.ExpandMore else Icons.Rounded.ChevronRight,
-                contentDescription = if (row.expanded) "Collapse process" else "Expand process",
+                imageVector = if (row.expanded) DshIconVectors.ChevronDownOutline else DshIconVectors.ChevronRightOutline,
+                contentDescription = stringResource(
+                    if (row.expanded) R.string.tool_collapse_process else R.string.tool_expand_process,
+                ),
                 tint = colors.labelTertiary,
                 modifier = Modifier.size(14.dp),
             )
@@ -1815,32 +2182,41 @@ fun TurnProcessRow(row: DisplayRow.TurnProcess, onToggle: () -> Unit) {
 // ------------------------------------------------------------------ helpers
 
 private fun toolIcon(name: String): ImageVector = when (name.lowercase()) {
-    "bash", "shell", "terminal", "run_command" -> Icons.Rounded.Terminal
-    "read", "read_file" -> Icons.Rounded.Description
-    "write", "write_file" -> Icons.Rounded.Edit
-    "edit", "str_replace", "apply_patch" -> Icons.Rounded.Edit
-    "grep", "search" -> Icons.Rounded.Search
-    "glob", "ls", "list" -> Icons.Rounded.FolderOpen
-    "web_search" -> Icons.Rounded.Language
-    "web_fetch" -> Icons.Rounded.Download
-    "task", "subagent", "delegate" -> Icons.Rounded.SmartToy
-    "todo_write", "todos" -> Icons.Rounded.Checklist
-    "present" -> Icons.Rounded.Visibility
-    "ask_user_question", "ask" -> Icons.Rounded.HelpOutline
+    "bash", "shell", "terminal", "run_command" -> DshIconVectors.CodeOutline
+    "read", "read_file" -> DshIconVectors.BrowseOutline
+    "write", "write_file" -> DshIconVectors.EditOutline
+    "edit", "str_replace", "apply_patch" -> DshIconVectors.EditOutline
+    "grep", "search" -> DshIconVectors.SearchOutline
+    "glob", "ls", "list" -> DshIconVectors.FolderOpenOutline
+    "web_search" -> DshIconVectors.GlobeOutline
+    "web_fetch" -> DshIconVectors.DownloadOutline
+    "task", "subagent", "delegate" -> DshIconVectors.AgentPresetOutline
+    "todo_write", "todos" -> DshIconVectors.ChecklistOutline
+    "present" -> DshIconVectors.InspectOutline
+    "ask_user_question", "ask" -> DshIconVectors.QuestionOutline
     else -> Icons.Rounded.Build
 }
 
+/**
+ * The word a reader sees for a tool key.
+ *
+ * The keys themselves are protocol and stay in code; the titles are copy, so the
+ * ten that the web client names are resources. An unknown key — a host plugin's own
+ * tool, which no resource can know — still falls back to the key prettified, which
+ * is what the old `when` did for everything outside this list.
+ */
+@Composable
 private fun toolTitle(name: String): String = when (name.lowercase()) {
-    "bash" -> "Bash"
-    "read", "read_file" -> "Read"
-    "write", "write_file" -> "Write"
-    "edit" -> "Edit"
-    "grep" -> "Grep"
-    "glob" -> "Glob"
-    "web_search" -> "Web Search"
-    "web_fetch" -> "Web Fetch"
-    "ask_user_question" -> "Question"
-    "todo_write" -> "Plan"
+    "bash" -> stringResource(R.string.tool_title_bash)
+    "read", "read_file" -> stringResource(R.string.tool_title_read)
+    "write", "write_file" -> stringResource(R.string.tool_title_write)
+    "edit" -> stringResource(R.string.tool_title_edit)
+    "grep" -> stringResource(R.string.tool_title_grep)
+    "glob" -> stringResource(R.string.tool_title_glob)
+    "web_search" -> stringResource(R.string.tool_title_web_search)
+    "web_fetch" -> stringResource(R.string.tool_title_web_fetch)
+    "ask_user_question" -> stringResource(R.string.tool_title_question)
+    "todo_write" -> stringResource(R.string.tool_title_plan)
     else -> name.replaceFirstChar { it.uppercase() }.replace('_', ' ')
 }
 

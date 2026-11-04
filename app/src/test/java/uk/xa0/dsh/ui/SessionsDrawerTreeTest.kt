@@ -128,6 +128,14 @@ class SessionsDrawerTreeTest {
         }
         rule.waitForIdle()
 
+        // The three modes moved into one menu.
+        //
+        // They used to be three chips on their own row, which is the crowding the
+        // redesign answered: a header, a row of Group chips, a row of Order chips and a
+        // shrunken switch is four rows of controls above a list. They are now one
+        // sliders button whose menu carries all three groups, so a test that wants to
+        // see them has to open it first -- which is itself the thing worth pinning.
+        rule.onNodeWithTag(VIEW_OPTIONS_TAG).performClick()
         rule.onNodeWithTag(GROUP_WORKSPACE_TAG).assertExists()
         rule.onNodeWithTag(GROUP_TREE_TAG).assertExists()
         rule.onNodeWithTag(GROUP_LIST_TAG).assertExists()
@@ -148,8 +156,9 @@ class SessionsDrawerTreeTest {
         }
         rule.waitForIdle()
 
-        // "Tree" is the shortened visible label; the full web name is its spoken one.
-        rule.onNodeWithContentDescription("Workspace Tree").assertExists()
+        // The full web name is the menu item's visible label now: the shortened "Tree"
+        // chip existed to fit three of them on one row, and there is no such row.
+        rule.onNodeWithTag(VIEW_OPTIONS_TAG).performClick()
         rule.onNodeWithTag(GROUP_TREE_TAG).performClick()
         assertEquals(DrawerGrouping.TREE, picked)
     }

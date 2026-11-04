@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -37,6 +36,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
+import uk.xa0.dsh.R
 import uk.xa0.dsh.model.FamilyUsage
 import uk.xa0.dsh.model.PRICE_SOURCE
 import uk.xa0.dsh.model.SessionStats
@@ -101,54 +101,87 @@ fun SessionSpeedPill(
     stats: SessionStats?,
     backdrop: GlassBarBackdrop?,
     modifier: Modifier = Modifier,
+    /**
+     * False until this session has something to measure — the host's reading is the
+     * conversation's instrument, and a session that has not been asked anything yet has
+     * no conversation to instrument. Defaulted to true so every existing caller keeps
+     * the always-present seat; [ComposerAccessoryRail] forwards its own gate here.
+     */
+    visible: Boolean = true,
+    /**
+     * What identifies the conversation these readings belong to; the held reading is
+     * forgotten when it changes. Null (the default) holds for the life of the
+     * composition, which is what a preview or a single-session host wants.
+     */
+    sessionKey: Any? = null,
 ) {
+    if (!visible) return
+    // The last **whole** reading, not just the last figure. The pill's own number was
+    // already held across a projection that resets to null; the panel behind it was not,
+    // so a reader who opened the statistics while the host was between blocks got an
+    // empty popover, or none at all. Holding the reading is what makes the panel the same
+    // instrument as the pill: whatever it last said, it can still be read.
+    val shown = rememberLastReading(stats, sessionKey)
     // The last measured figure, per composition of this rail. `SideEffect` rather than an
     // assignment in the body so the state write happens after composition settles, the same
     // discipline `rememberUpdatedState` follows.
-    var lastSpeed by remember { mutableStateOf<String?>(null) }
+    var lastSpeed by remember(sessionKey) { mutableStateOf<String?>(null) }
     val reported = stats?.tokensPerSecondText
     SideEffect {
         if (reported != null && reported != lastSpeed) lastSpeed = reported
     }
     val speed = reported ?: lastSpeed ?: "0"
     var open by remember { mutableStateOf(false) }
-    val canOpen = stats?.hasTiming == true
+    // A held reading still opens: that is the point of holding it. Only a session that
+    // has never reported timing stays a plain reading.
+    val canOpen = shown?.hasTiming == true
 
     Box(modifier.testTag(STATS_SPEED_PILL_TAG)) {
         GlassPill(
             backdrop = backdrop,
             onClick = if (canOpen) ({ open = !open }) else null,
-            pillDescription = "Output speed, $speed tokens per second",
+            pillDescription = stringResource(R.string.stats_speed_pill_description, speed),
         ) {
             Icon(
-                imageVector = Icons.Rounded.Speed,
+                imageVector = DshIconVectors.GaugeOutline,
                 contentDescription = null,
                 tint = DshTheme.colors.labelCaption,
                 modifier = Modifier.size(13.dp),
             )
             Spacer(Modifier.width(DshSpacing.sm))
             Text(
-                text = "$speed tok/s",
+                text = stringResource(R.string.stats_tokens_per_second, speed),
                 style = DshType.bodyMedium,
                 color = DshTheme.colors.labelSecondary,
                 maxLines = 1,
             )
         }
-        if (open && stats != null) {
+        if (open && shown != null) {
             PillPopover(onDismiss = { open = false }) {
-                StatPanel(title = "Session statistics") {
+                StatPanel(title = stringResource(R.string.stats_session_statistics)) {
                     // A row is absent, not zeroed: an untimed figure is not the same
                     // fact as a figure that measured zero.
-                    if (stats.llmMs > 0) StatRow("LLM time", formatCompactDuration(stats.llmMs))
-                    if (stats.toolMs > 0) StatRow("Tool time", formatCompactDuration(stats.toolMs))
-                    stats.averageTtftMs?.let {
-                        StatRow("Avg time to first token (TTFT)", formatCompactDuration(it))
+                    if (shown.llmMs > 0) {
+                        StatRow(stringResource(R.string.stats_llm_time), formatCompactDuration(shown.llmMs))
                     }
-                    if (stats.decodeMs > 0) {
-                        StatRow("Tokens per second (TPS)", "$speed tok/s")
+                    if (shown.toolMs > 0) {
+                        StatRow(stringResource(R.string.stats_tool_time), formatCompactDuration(shown.toolMs))
                     }
-                    if (stats.turns > 0) StatRow("Turns", stats.turns.toString())
-                    if (stats.steps > 0) StatRow("Steps", stats.steps.toString())
+                    shown.averageTtftMs?.let {
+                        StatRow(stringResource(R.string.stats_avg_ttft), formatCompactDuration(it))
+                    }
+                    if (shown.decodeMs > 0) {
+                        StatRow(
+                            label = stringResource(R.string.stats_tps),
+                            value = stringResource(R.string.stats_tokens_per_second, speed),
+                        )
+                    }
+                    if (shown.turns > 0) {
+                        StatRow(stringResource(R.string.stats_turns), shown.turns.toString())
+                    }
+                    if (shown.steps > 0) {
+                        StatRow(stringResource(R.string.stats_steps), shown.steps.toString())
+                    }
                 }
             }
         }
@@ -170,26 +203,35 @@ fun SessionCachePill(
     family: FamilyUsage? = null,
     onBalance: () -> Unit = {},
     modifier: Modifier = Modifier,
+    /** Same gate as [SessionSpeedPill]: no conversation, no readings. */
+    visible: Boolean = true,
+    /** Same memory key as [SessionSpeedPill]. */
+    sessionKey: Any? = null,
 ) {
-    if (stats == null || !stats.visible || !stats.hasTokenActivity) return
-    val cacheHit = stats.cacheHitPercent ?: return
+    if (!visible) return
+    // The last reading that actually carried billing, held the same way the speed pill
+    // holds its own: the panel behind this pill is the session's only view of tokens and
+    // its estimated cost, and it emptied every time the host's projection blinked.
+    val shown = rememberLastReading(stats, sessionKey) { it.visible && it.hasTokenActivity }
+    if (shown == null) return
+    val cacheHit = shown.cacheHitPercent ?: return
     var open by remember { mutableStateOf(false) }
 
     Box(modifier.testTag(STATS_CACHE_PILL_TAG)) {
         GlassPill(
             backdrop = backdrop,
             onClick = { open = !open },
-            pillDescription = "Token usage, $cacheHit percent served from cache",
+            pillDescription = stringResource(R.string.stats_cache_pill_description, cacheHit),
         ) {
             Icon(
-                imageVector = Icons.Rounded.Storage,
+                imageVector = DshIconVectors.DatabaseOutline,
                 contentDescription = null,
                 tint = DshTheme.colors.labelCaption,
                 modifier = Modifier.size(13.dp),
             )
             Spacer(Modifier.width(DshSpacing.sm))
             Text(
-                text = "Cache $cacheHit%",
+                text = stringResource(R.string.stats_cache_percent, cacheHit),
                 style = DshType.bodyMedium,
                 color = DshTheme.colors.labelSecondary,
                 maxLines = 1,
@@ -198,38 +240,62 @@ fun SessionCachePill(
         if (open) {
             PillPopover(onDismiss = { open = false }) {
                 StatPanel(
-                    title = "Token usage",
-                    headline = "${formatExactTokens(stats.totalTokens)} tok",
+                    title = stringResource(R.string.stats_token_usage),
+                    headline = stringResource(
+                        R.string.stats_token_count,
+                        formatExactTokens(shown.totalTokens),
+                    ),
                 ) {
-                    StatRow("Cache hit", "$cacheHit%")
-                    StatRow("Uncached input", exactCount(stats.uncachedInputTokens))
-                    StatRow("Cached input", exactCount(stats.cacheReadTokens))
+                    // The value is a bare percentage: the figure is the same in every
+                    // language, and the word that names it is the row's label.
+                    StatRow(stringResource(R.string.stats_cache_hit), "$cacheHit%")
+                    StatRow(
+                        stringResource(R.string.stats_uncached_input),
+                        exactCount(shown.uncachedInputTokens),
+                    )
+                    StatRow(
+                        stringResource(R.string.stats_cached_input),
+                        exactCount(shown.cacheReadTokens),
+                    )
                     // A session that never wrote cache drops the row.
-                    if (stats.cacheWriteTokens != 0L) {
-                        StatRow("Cache write", exactCount(stats.cacheWriteTokens))
+                    if (shown.cacheWriteTokens != 0L) {
+                        StatRow(
+                            stringResource(R.string.stats_cache_write),
+                            exactCount(shown.cacheWriteTokens),
+                        )
                     }
-                    StatRow("Output", exactCount(stats.outputTokens))
+                    StatRow(stringResource(R.string.stats_output), exactCount(shown.outputTokens))
                     // The session's own estimate: the rows above are what the host
                     // counted, this one is arithmetic on a published price list that can
                     // change.
                     val priced = rates?.let {
                         costRange(
-                            cacheHitTokens = stats.cacheReadTokens,
+                            cacheHitTokens = shown.cacheReadTokens,
                             // A cache write is an input token that did not come from
                             // the cache, and the published list has no third input rate.
-                            cacheMissTokens = stats.uncachedInputTokens + stats.cacheWriteTokens,
-                            outputTokens = stats.outputTokens,
+                            cacheMissTokens = shown.uncachedInputTokens + shown.cacheWriteTokens,
+                            outputTokens = shown.outputTokens,
                             rates = it,
                         )
                     }
-                    if (priced != null) StatRow("Cost (off-peak – peak)", formatCostRange(priced))
+                    if (priced != null) {
+                        StatRow(
+                            stringResource(R.string.stats_cost_range),
+                            formatCostRange(priced),
+                        )
+                    }
 
                     // The family, under the session's own rows and never in place of
                     // them. Only drawn when there is a family.
                     if (family != null && family.members > 0) {
                         StatRow(family.label, exactCount(family.tokens))
-                        StatRow("Subagents", family.memberCountText)
-                        family.cost?.let { StatRow("Family cost (off-peak – peak)", formatCostRange(it)) }
+                        StatRow(stringResource(R.string.stats_subagents), family.memberCountText)
+                        family.cost?.let {
+                            StatRow(
+                                stringResource(R.string.stats_family_cost),
+                                formatCostRange(it),
+                            )
+                        }
                         family.notes.forEach { StatNote(it) }
                     }
 
@@ -240,6 +306,37 @@ fun SessionCachePill(
             }
         }
     }
+}
+
+/**
+ * The last reading a pill can still show, held for the life of this composition.
+ *
+ * ## Why a whole reading rather than its figure
+ *
+ * The host's projection is not monotonic: a new turn's first block arrives without
+ * `decodeMs`, and a session switch hands the rail `null` for a frame. The speed pill
+ * used to hold only its own number, so its *panel* — the same measurement, one tap
+ * deeper — went blank exactly when the pill kept its figure, and a reader who opened
+ * the statistics between blocks found an empty card. Holding the whole reading makes
+ * the panel as durable as the pill it belongs to.
+ *
+ * [accept] is the pill's own gate (the cache pill wants a billing-bearing reading, the
+ * speed pill any timed one); a reading that fails it is not worth remembering.
+ */
+@Composable
+private fun rememberLastReading(
+    stats: SessionStats?,
+    sessionKey: Any?,
+    accept: (SessionStats) -> Boolean = { true },
+): SessionStats? {
+    // Keyed on the session: the memory is there to survive the *projection* blinking
+    // inside one conversation, never to carry a previous conversation's figures into
+    // the next one.
+    var last by remember(sessionKey) { mutableStateOf<SessionStats?>(null) }
+    SideEffect {
+        if (stats != null && accept(stats) && stats != last) last = stats
+    }
+    return if (stats != null && accept(stats)) stats else last
 }
 
 /**
@@ -270,7 +367,9 @@ private fun PillPopover(onDismiss: () -> Unit, panel: @Composable () -> Unit) {
 }
 
 /** Web `message.turnUsage.count`: `{count} tok`. */
-private fun exactCount(value: Long): String = "${formatExactTokens(value)} tok"
+@Composable
+private fun exactCount(value: Long): String =
+    stringResource(R.string.stats_token_count, formatExactTokens(value))
 
 /**
  * The shared stat-panel skin (`stat-dialog.module.css`): menu surface, 12dp
@@ -373,7 +472,7 @@ private fun BalanceAction(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Balance & top up",
+            text = stringResource(R.string.stats_balance_action),
             style = DshType.bodySmall,
             color = colors.link,
             modifier = Modifier.weight(1f),

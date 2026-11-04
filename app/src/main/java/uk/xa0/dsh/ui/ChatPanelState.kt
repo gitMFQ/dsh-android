@@ -12,15 +12,19 @@ import uk.xa0.dsh.UiState
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.model.ExplorerState
-import uk.xa0.dsh.model.WorkspaceTreeState
 import uk.xa0.dsh.model.FileDownloader
-import uk.xa0.dsh.model.ScheduleEntry
 import uk.xa0.dsh.model.GeneralSettings
 import uk.xa0.dsh.model.LiveAttempt
+import uk.xa0.dsh.model.ScheduleEntry
 import uk.xa0.dsh.model.SessionHeader
 import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.TodoItem
 import uk.xa0.dsh.model.WorkspaceFileLoader
+import uk.xa0.dsh.model.WorkspaceFileSaver
+import uk.xa0.dsh.model.WorkspaceTreeState
+import uk.xa0.dsh.model.fileWriteCommand
+import uk.xa0.dsh.model.translationTargetOf
+import uk.xa0.dsh.model.translationTextOf
 
 /**
  * Everything [ChatPanel] draws from, with the view model taken out.
@@ -201,6 +205,31 @@ data class ChatActions(
     /** Expands or collapses one directory in the Files tree. */
     val toggleWorkspaceDirectory: (String) -> Unit = {},
     val workspaceFileLoader: () -> WorkspaceFileLoader? = { null },
+    /**
+     * The write half of the Files preview, for hosts with no file-write RPC.
+     *
+     * Null on a caller with no session to write through, which is what keeps the
+     * editor from being drawn at all rather than drawn and failing.
+     */
+    val workspaceFileSaver: () -> WorkspaceFileSaver? = { null },
+    /**
+     * Translates one fragment through the host, answering null when it could not.
+     *
+     * A callback rather than a flow: a translation is a one-shot answer to a gesture,
+     * and holding it in app state would make it survive the screen it belongs to. The
+     * caller owns where the result is shown.
+     */
+    val translateFragment: (String, (String?) -> Unit) -> Unit = { _, done -> done(null) },
+    /**
+     * Turns AMOLED black on or off. Independent of which appearance is selected.
+     */
+    val updateAmoled: (Boolean) -> Unit = {},
+
+    /** Turns the Trajectory and Shell readings on or off. */
+    val setChatViewsEnabled: (Boolean) -> Unit = {},
+
+    /** Sets the in-app language, or clears it back to the device’s own. */
+    val setAppLanguage: (String) -> Unit = {},
     val workspaceFileDownloader: () -> FileDownloader? = { null },
     /** Reads `pluginInventory/list`; the Plugins page's one invalidation. */
     val loadPluginInventory: () -> Unit = {},

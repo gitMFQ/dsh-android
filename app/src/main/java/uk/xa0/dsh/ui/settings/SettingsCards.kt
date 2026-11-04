@@ -1,5 +1,6 @@
 package uk.xa0.dsh.ui.settings
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,8 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -29,11 +28,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.AgentPresetOption
 import uk.xa0.dsh.ModelOption
+import uk.xa0.dsh.R
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.model.GeneralSettings
@@ -44,6 +46,7 @@ import uk.xa0.dsh.term.TerminalCellSize
 import uk.xa0.dsh.ui.agentPresetDescription
 import uk.xa0.dsh.ui.agentPresetLabel
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.components.DshTextField
 import uk.xa0.dsh.ui.isBuiltInPreset
 import uk.xa0.dsh.ui.list.SegmentedColumn
@@ -95,12 +98,81 @@ import uk.xa0.dsh.ui.theme.DshType
 // ------------------------------------------------------------------ page cards
 
 /**
- * Appearance: the seven shapes this device can draw.
+ * This device: the one switch the host has no schema for.
+ *
+ * AMOLED lives on the Appearance page instead, because it *modifies* the appearance rather
+ * than being a separate fact — but it is the same kind of thing, and the note above the row
+ * says so.
+ */
+
+/**
+ * The languages this build can draw in.
+ *
+ * Only the two the app actually carries resources for. Listing eight and having six of
+ * them fall back to English would be a menu that lies about what it does; the host's own
+ * eight-language set is a *web* fact, and the Android resources are a separate
+ * translation effort (`docs/I18N.md`).
+ */
+private val APP_LANGUAGES = listOf(
+    "" to "Follow the device",
+    "en" to "English",
+    "zh-CN" to "简体中文",
+)
+
+/**
+ * The language row.
+ *
+ * A client-local setting, beside the Trajectory/Shell switch, because it is a fact about
+ * this phone rather than about the host: the host's locale drives the *web* client, and a
+ * phone in one language driven from a console in another is a real setup.
+ */
+@Composable
+internal fun LanguageSettingCard(state: MeSettingsState, actions: MeSettingsActions) {
+    val index = APP_LANGUAGES.indexOfFirst { it.first == state.appLanguage }
+        .coerceAtLeast(0)
+    SegmentedColumn(
+        title = stringResource(R.string.settings_language_title),
+        content = listOf(
+            {
+                SegmentedDropdownItem(
+                    title = stringResource(R.string.settings_language_row_title),
+                    summary = stringResource(R.string.settings_language_row_summary),
+                    icon = DshIconVectors.GlobeOutline,
+                    items = APP_LANGUAGES.map { it.second },
+                    selectedIndex = index,
+                    onItemSelected = { picked ->
+                        actions.onLanguage(APP_LANGUAGES[picked].first)
+                    },
+                )
+            },
+        ),
+    )
+}
+@Composable
+internal fun LocalSettingCard(state: MeSettingsState, actions: MeSettingsActions) {
+    SegmentedColumn(
+        title = stringResource(R.string.settings_local_title),
+        content = listOf(
+            {
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_local_chat_views_title),
+                    checked = state.chatViewsEnabled,
+                    onCheckedChange = actions.onChatViews,
+                    icon = DshIconVectors.PlanOutline,
+                    summary = stringResource(R.string.settings_local_chat_views_summary),
+                )
+            },
+        ),
+    )
+}
+
+/**
+ * Appearance: the six shapes this device can draw.
  *
  * The list is the client's, not the host's appearance.choices: the schema's enum is
- * light/dark/system, while AMOLED and the three Monet variants describe *this device* — an
- * OLED panel and a wallpaper — which no host can know about. A successful local change is
- * still mirrored to the host for the three modes it can express.
+ * light/dark/system, while AMOLED (a separate switch) and the three Monet variants describe
+ * *this device* — an OLED panel and a wallpaper — which no host can know about. A successful
+ * local change is still mirrored to the host for the three modes it can express.
  */
 @Composable
 internal fun AppearanceSettingCard(state: MeSettingsState, actions: MeSettingsActions) {
@@ -109,27 +181,54 @@ internal fun AppearanceSettingCard(state: MeSettingsState, actions: MeSettingsAc
         GeneralSettings.THEME_PREFERENCE_FIELD,
     )
     val appearanceWrite = writerFor(appearance, state, actions)
+    // Two readings of one list: the index is a pure value lookup (no resources needed),
+    // and the drawn labels come from the composable accessor.
     val index = APPEARANCE_CHOICES.indexOfFirst { it.value == state.themeMode }
+    val choices = appearanceChoices()
     val rows: List<@Composable () -> Unit> = listOf(
         {
             SegmentedDropdownItem(
-                title = "Theme",
-                summary = "Light and dark follow the system; AMOLED and Monet are this device's own.",
+                title = stringResource(R.string.settings_theme_title),
+                summary = stringResource(R.string.settings_theme_summary),
                 icon = Icons.Rounded.Palette,
-                items = APPEARANCE_CHOICES.map { it.label },
+                items = choices.map { it.label },
                 selectedIndex = index,
                 onItemSelected = { picked ->
-                    val mode = APPEARANCE_CHOICES[picked].value
+                    val mode = choices[picked].value
                     actions.onTheme(mode)
-                    // Mirror only what the host can represent: sending "amoled" would be
-                    // refused by a schema whose enum is light/dark/system, and the reader
-                    // already sees the appearance they picked.
+                    // Mirror only what the host can represent: its schema enum is
+                    // light/dark/system, and the reader already sees what they picked.
                     if (mode in HOST_THEME_MODES) appearanceWrite?.invoke(mode)
                 },
             )
         },
+        {
+            // A switch, not a seventh appearance.
+            //
+            // As an entry in the list above it *replaced* the appearance rather than
+            // modifying it, so "black at night, light at the desk" was two changes each
+            // time, and the palette it drew was a frozen copy of Dark rather than
+            // whatever dark appearance was selected. As a switch it applies to whichever
+            // dark appearance wins — Dark, System-as-dark, or a Monet dark — which is
+            // what "开启后是所有深色时使用 amoled 模式" asks for.
+            SegmentedSwitchItem(
+                title = stringResource(R.string.settings_amoled_title),
+                checked = state.amoled,
+                onCheckedChange = actions.onAmoled,
+                icon = DshIconVectors.DarkOutline,
+                // Two sentences rather than one with a clause cut out: they describe
+                // different states, and a translation of the pair reads as one voice.
+                summary = stringResource(
+                    if (ThemeMode.isDark(state.themeMode, state.systemDark)) {
+                        R.string.settings_amoled_summary_dark
+                    } else {
+                        R.string.settings_amoled_summary_light
+                    },
+                ),
+            )
+        },
     )
-    SegmentedColumn(title = "Appearance", content = rows)
+    SegmentedColumn(title = stringResource(R.string.settings_appearance_title), content = rows)
 }
 
 /**
@@ -149,11 +248,11 @@ internal fun HostSettingsNotes(state: MeSettingsState) {
     if (wired) {
         when {
             state.hostSettingsError != null -> SettingErrorNote(state.hostSettingsError)
-            state.hostSettings == null -> SettingNote("Reading settings…")
+            state.hostSettings == null -> SettingNote(stringResource(R.string.settings_reading))
             // The web's own read-only copy (settings.models.readOnly); the fact is the
             // same one on this panel.
             !state.hostSettings.writable ->
-                SettingNote("The settings document is read-only in this deployment.")
+                SettingNote(stringResource(R.string.settings_readonly_document))
         }
     }
     // The refusal is about an action the user just took, so it keeps the host's own
@@ -183,8 +282,8 @@ internal fun PermissionSettingCard(state: MeSettingsState, actions: MeSettingsAc
     val rows: List<@Composable () -> Unit> = listOf(
         {
             SegmentedDropdownItem(
-                title = "Default mode",
-                summary = "What new sessions start at. The open session's own mode is on About.",
+                title = stringResource(R.string.settings_permission_default_title),
+                summary = stringResource(R.string.settings_permission_default_summary),
                 items = items,
                 selectedIndex = selected,
                 enabled = write != null,
@@ -198,7 +297,7 @@ internal fun PermissionSettingCard(state: MeSettingsState, actions: MeSettingsAc
             )
         },
     )
-    SegmentedColumn(title = "Permission", content = rows)
+    SegmentedColumn(title = stringResource(R.string.settings_permission_title), content = rows)
 }
 
 /** Conversation display: the web's ui-chat.transcriptView, and what it folds. */
@@ -210,16 +309,21 @@ internal fun ConversationSettingCard(state: MeSettingsState, actions: MeSettings
     )
     val write = writerFor(field, state, actions)
     val hostLabels = field?.choices?.map { it.label }.orEmpty()
-    val items = hostLabels.ifEmpty { listOf("Compact", "Normal") }
+    // The client's own fallback labels, from resources: the host's labels win when it
+    // advertised any, but this pair is the app speaking and is translated.
+    val fallbackLabels = listOf(
+        stringResource(R.string.settings_transcript_compact),
+        stringResource(R.string.settings_transcript_normal),
+    )
+    val items = hostLabels.ifEmpty { fallbackLabels }
     val selected = field?.choices?.indexOfFirst { it.value == field.value }
         ?.takeIf { it >= 0 }
         ?: if (state.transcriptView == "normal") 1 else 0
     val rows: List<@Composable () -> Unit> = listOf(
         {
             SegmentedDropdownItem(
-                title = "Completed turns",
-                summary = "Compact folds a finished turn behind one summary line; " +
-                    "normal keeps every row.",
+                title = stringResource(R.string.settings_transcript_title),
+                summary = stringResource(R.string.settings_transcript_summary),
                 items = items,
                 selectedIndex = selected,
                 enabled = write != null,
@@ -236,7 +340,7 @@ internal fun ConversationSettingCard(state: MeSettingsState, actions: MeSettings
             )
         },
     )
-    SegmentedColumn(title = "Conversation display", content = rows)
+    SegmentedColumn(title = stringResource(R.string.settings_conversation_title), content = rows)
 }
 
 /** Send behaviour while the agent is running: queue the message, or steer the turn. */
@@ -248,14 +352,17 @@ internal fun BusyEnterSettingCard(state: MeSettingsState, actions: MeSettingsAct
     )
     val write = writerFor(field, state, actions)
     val wired = state.hostSettings != null
-    val choices = field?.choices.orEmpty().ifEmpty { BUSY_ENTER_CHOICES }
+    // The host's options win; the client's own pair is the fallback, resolved here
+    // because a picker handler below is not composable.
+    val fallbackChoices = busyEnterChoices()
+    val choices = field?.choices.orEmpty().ifEmpty { fallbackChoices }
     val current = field?.value ?: state.busyEnter
     val selected = choices.indexOfFirst { it.value == current }
     val rows: List<@Composable () -> Unit> = listOf(
         {
             SegmentedDropdownItem(
-                title = "While the agent is running",
-                summary = "What Enter and Send do mid-turn; Cmd/Ctrl+Enter uses the other.",
+                title = stringResource(R.string.settings_busy_enter_row_title),
+                summary = stringResource(R.string.settings_busy_enter_summary),
                 items = choices.map { it.label },
                 selectedIndex = selected,
                 // A wired-but-unwritable host keeps the row as a reading; an unwired one
@@ -268,7 +375,7 @@ internal fun BusyEnterSettingCard(state: MeSettingsState, actions: MeSettingsAct
             )
         },
     )
-    SegmentedColumn(title = "Send behavior while busy", content = rows)
+    SegmentedColumn(title = stringResource(R.string.settings_busy_enter_title), content = rows)
 }
 
 /** Models: the host's catalog, grouped by provider, as a reading rather than a picker. */
@@ -288,13 +395,13 @@ internal fun ModelSettingCards(state: MeSettingsState) {
             }
     }
 
-    SettingNote("Enter your API keys to use models from the following providers.")
+    SettingNote(stringResource(R.string.settings_models_note_keys))
     // A remote phone is handed the memory settings scope, which the web marks read-only;
     // the notice is the web's own settings.models.readOnly copy.
-    SettingNote("The settings document is read-only in this deployment.")
+    SettingNote(stringResource(R.string.settings_readonly_document))
 
     if (providers.isEmpty()) {
-        SettingNote("The host has not reported any model providers for this session.")
+        SettingNote(stringResource(R.string.settings_models_empty))
         return
     }
 
@@ -338,7 +445,7 @@ private fun ModelRow(model: ModelOption, selected: ModelOption?) {
         // the effort that goes with it is chosen in the same sheet. This page answers
         // "what can answer", not "switch to it".
         trailing = if (current) {
-            { SettingTag("Current", colors.accent) }
+            { SettingTag(stringResource(R.string.settings_models_current), colors.accent) }
         } else {
             null
         },
@@ -348,20 +455,15 @@ private fun ModelRow(model: ModelOption, selected: ModelOption?) {
 /** Agent: the preset roster, and the picker's own state. */
 @Composable
 internal fun AgentSettingCards(state: MeSettingsState, actions: MeSettingsActions) {
-    SettingNote(
-        "A preset is the plugin composition one session's agent runs — its tools, " +
-            "prompt, and capabilities. Duplicate an existing one and make it yours, " +
-            "or let the agent draft one for you in Creator mode.",
-    )
+    SettingNote(stringResource(R.string.settings_agent_intro))
 
     // The picker switch is a settings/update, so a remote client cannot flip it; it
     // renders the app's real state disabled.
     val pickerRows: List<@Composable () -> Unit> = listOf(
         {
             SegmentedSwitchItem(
-                title = "Allow switching Agent modes",
-                summary = "When enabled, new tasks can choose Standard, PTC, Creator, " +
-                    "Minimal, and custom modes. Only affects new tasks.",
+                title = stringResource(R.string.settings_agent_picker_title),
+                summary = stringResource(R.string.settings_agent_picker_summary),
                 checked = state.agentModePickerEnabled,
                 onCheckedChange = {},
                 enabled = false,
@@ -371,7 +473,7 @@ internal fun AgentSettingCards(state: MeSettingsState, actions: MeSettingsAction
     SegmentedColumn(content = pickerRows)
 
     if (state.agentPresetOptions.isEmpty()) {
-        SettingNote("Could not load agent presets.")
+        SettingNote(stringResource(R.string.settings_agent_presets_failed))
         return
     }
 
@@ -387,13 +489,13 @@ internal fun AgentSettingCards(state: MeSettingsState, actions: MeSettingsAction
         val rows: List<@Composable () -> Unit> = builtIn.map { option ->
             { PresetRow(option, option.id == defaultId, state, actions) }
         }
-        SegmentedColumn(title = "Built-in", content = rows)
+        SegmentedColumn(title = stringResource(R.string.settings_agent_built_in), content = rows)
     }
     if (custom.isNotEmpty()) {
         val rows: List<@Composable () -> Unit> = custom.map { option ->
             { PresetRow(option, option.id == defaultId, state, actions) }
         }
-        SegmentedColumn(title = "Custom", content = rows)
+        SegmentedColumn(title = stringResource(R.string.settings_agent_custom), content = rows)
     }
 }
 
@@ -411,13 +513,19 @@ private fun PresetRow(
     state: MeSettingsState,
     actions: MeSettingsActions,
 ) {
-    val summary = agentPresetDescription(option.id, option.description) ?: "No description."
+    // A preset's own description arrives from the host and is drawn as received; only
+    // the *prefix* is the app speaking, so only the prefix is a resource. The three
+    // prefixes are format strings rather than concatenations: "Failed to load. " + text
+    // bakes the English full stop and word order into a place no translator can reach.
+    val summary = agentPresetDescription(option.id, option.description)
+        ?: stringResource(R.string.settings_agent_no_description)
     SegmentedRadioItem(
         title = agentPresetLabel(option.id, option.name),
         summary = when {
-            option.broken -> "Failed to load. " + summary
-            isDefault && !state.agentModePickerEnabled -> "Default. " + summary
-            isDefault -> "New task default. " + summary
+            option.broken -> stringResource(R.string.settings_agent_prefix_failed, summary)
+            isDefault && !state.agentModePickerEnabled ->
+                stringResource(R.string.settings_agent_prefix_default, summary)
+            isDefault -> stringResource(R.string.settings_agent_prefix_new_task_default, summary)
             else -> summary
         },
         selected = isDefault,
@@ -430,29 +538,33 @@ private fun PresetRow(
 @Composable
 internal fun TerminalSettingCards(state: MeSettingsState, actions: MeSettingsActions) {
     val cell = TerminalCellSize.of(state.terminalFontSp)
-    SettingNote(
-        "The Shell page's text size — the same value the shell's own A- / A+ buttons " +
-            "and a pinch inside a shell change.",
-    )
+    SettingNote(stringResource(R.string.settings_terminal_note))
     val rows: List<@Composable () -> Unit> = listOf(
         {
             SegmentedListItem(
                 headline = {
                     Text(
-                        "Text size",
+                        stringResource(R.string.settings_terminal_text_size),
                         style = DshType.rowTitle,
                         color = DshTheme.colors.labelPrimary,
                     )
                 },
                 supporting = {
+                    // Two readings in one sentence: the format string keeps the middle
+                    // dot and the word "line" translatable, and the numbers are data.
                     Text(
-                        text = cell.fontSp.toInt().toString() + " sp · line " +
-                            cell.lineHeightSp.toInt().toString() + " sp",
+                        text = stringResource(
+                            R.string.settings_terminal_sp_pair,
+                            cell.fontSp.toInt().toString(),
+                            cell.lineHeightSp.toInt().toString(),
+                        ),
                         style = DshType.rowSummary,
                         color = DshTheme.colors.labelTertiary,
                     )
                 },
                 trailing = {
+                    // "sp" is a unit symbol, not prose: it is the same four letters in
+                    // every locale this app ships and Android has no localised form.
                     SettingStepper(
                         value = cell.fontSp.toInt().toString(),
                         unit = "sp",
@@ -471,16 +583,16 @@ internal fun TerminalSettingCards(state: MeSettingsState, actions: MeSettingsAct
             )
         },
     )
-    SegmentedColumn(title = "Cell size", content = rows)
+    SegmentedColumn(title = stringResource(R.string.settings_terminal_cell_size), content = rows)
 }
 
 /** Plugins: the deployment's plugin surfaces, which this client cannot list yet. */
 @Composable
 internal fun PluginSettingCards() {
-    SettingNote("Configure and inspect the plugins installed in this deployment.")
+    SettingNote(stringResource(R.string.settings_plugins_note))
     // The configurable tab's read-only state. No cards render: the client never calls
     // pluginInventory/list, so there is no inventory to list here.
-    SettingNote("This deployment stores settings read-only.")
+    SettingNote(stringResource(R.string.settings_plugins_note_readonly))
 }
 
 /** Archived sessions: search, grouped by workspace, unarchive. */
@@ -500,7 +612,7 @@ internal fun ArchivedSettingCards(state: MeSettingsState, actions: MeSettingsAct
             query = it
             expanded = false
         },
-        placeholder = "Search archived sessions",
+        placeholder = stringResource(R.string.settings_archived_search_placeholder),
         // Vertical only: the page already insets its content by 16dp, and the field is the
         // one thing on this page that is not inside a card.
         modifier = Modifier.padding(vertical = DshSpacing.md),
@@ -514,21 +626,24 @@ internal fun ArchivedSettingCards(state: MeSettingsState, actions: MeSettingsAct
     )
 
     if (state.sessionsLoading) {
-        SettingNote("Reading sessions…")
+        SettingNote(stringResource(R.string.settings_archived_reading))
         return
     }
     if (state.archivedSessions.isEmpty()) {
-        SettingNote("No archived sessions.")
+        SettingNote(stringResource(R.string.settings_archived_empty))
         return
     }
 
     // The web filters on title and owning-workspace title only, and groups the survivors by
     // that workspace, with a synthetic Ungrouped bucket.
     val normalized = query.trim().lowercase()
-    val rows = remember(state.archivedSessions, state.workspaces, normalized) {
+    // The synthetic bucket is the app's own word, so it is resolved here rather than
+    // inside the remembered block, which is not a composable scope.
+    val ungrouped = stringResource(R.string.settings_archived_ungrouped)
+    val rows = remember(state.archivedSessions, state.workspaces, normalized, ungrouped) {
         state.archivedSessions.map { session ->
             val owner = state.workspaces.firstOrNull { session.id in it.sessionIds }?.title
-            session to (owner ?: "Ungrouped")
+            session to (owner ?: ungrouped)
         }.filter { (session, workspace) ->
             normalized.isEmpty() ||
                 session.title.lowercase().contains(normalized) ||
@@ -537,7 +652,7 @@ internal fun ArchivedSettingCards(state: MeSettingsState, actions: MeSettingsAct
     }
 
     if (rows.isEmpty()) {
-        SettingNote("No matching sessions.")
+        SettingNote(stringResource(R.string.settings_archived_no_match))
         return
     }
 
@@ -553,10 +668,13 @@ internal fun ArchivedSettingCards(state: MeSettingsState, actions: MeSettingsAct
     // The drawer's own wording and its own shape: one line, centred, that says how many are
     // left rather than just "more".
     if (hidden > 0 || expanded) {
+        // A plural rather than "Show " + n + " more sessions": the count is the word
+        // that changes, and a language with three plural forms cannot be served by a
+        // ternary on English's own "s".
         val label = if (expanded) {
-            "Show less"
+            stringResource(R.string.settings_archived_show_less)
         } else {
-            "Show " + hidden.toString() + " more session" + (if (hidden == 1) "" else "s")
+            pluralStringResource(R.plurals.settings_archived_show_more, hidden, hidden)
         }
         Text(
             text = label,
@@ -583,7 +701,7 @@ private fun ArchivedRow(
             Text(
                 // The web sets no title attribute; the full text is only in the row's
                 // accessible name.
-                text = session.title.ifBlank { "Untitled" },
+                text = session.title.ifBlank { stringResource(R.string.settings_archived_untitled) },
                 style = DshType.rowTitle,
                 color = colors.labelPrimary,
                 maxLines = 1,
@@ -601,7 +719,10 @@ private fun ArchivedRow(
         },
         trailing = if (unarchive != null) {
             {
-                SettingTag("Unarchive", colors.labelPrimary) { unarchive(session.id) }
+                SettingTag(
+                    stringResource(R.string.settings_archived_unarchive),
+                    colors.labelPrimary,
+                ) { unarchive(session.id) }
             }
         } else {
             null
@@ -716,8 +837,16 @@ private fun SettingStepper(
         Text(value, style = DshType.rowSummary, color = colors.labelPrimary, maxLines = 1)
         Spacer(Modifier.width(DshSpacing.sm))
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            StepperArrow(Icons.Rounded.ExpandLess, "Increase text size", increase)
-            StepperArrow(Icons.Rounded.ExpandMore, "Decrease text size", decrease)
+            StepperArrow(
+                DshIconVectors.ChevronUpOutline,
+                stringResource(R.string.settings_terminal_increase),
+                increase,
+            )
+            StepperArrow(
+                DshIconVectors.ChevronDownOutline,
+                stringResource(R.string.settings_terminal_decrease),
+                decrease,
+            )
         }
         Spacer(Modifier.width(DshSpacing.sm))
         Text(unit, style = DshType.micro, color = colors.labelCaption, maxLines = 1)
@@ -785,41 +914,85 @@ private fun writerFor(
 /**
  * Every appearance this client can draw, in the order the page lists them.
  *
- * Not the host's choices: three of the seven shapes describe *this device* — an OLED panel
+ * Not the host's choices: three of the six shapes describe *this device* — an OLED panel
  * and a wallpaper — which no host can know about. Taking the choices from the host would
  * have hidden them on every wired connection.
+ *
+ * The *value* is what this list is for: the picker's index and the mirror to the host both
+ * read it. The drawn label is [appearanceChoices]' business — a label is a translated
+ * resource now, and a resource cannot be read at class-initialisation time, so it cannot
+ * live in a top-level list. The English in `label` below is **not drawn by the app**; it
+ * is kept because `MeSettingsPageTest` reads the names off this list, and a name is the
+ * one thing that list still has to carry for that test to mean anything.
  */
-internal val APPEARANCE_CHOICES = listOf(
+internal val APPEARANCE_CHOICES: List<SettingsChoice> = listOf(
     SettingsChoice(ThemeMode.LIGHT, "Light"),
     SettingsChoice(ThemeMode.DARK, "Dark"),
     SettingsChoice(ThemeMode.SYSTEM, "System"),
-    SettingsChoice(ThemeMode.AMOLED, "AMOLED"),
     SettingsChoice(ThemeMode.MONET_LIGHT, "Monet light"),
     SettingsChoice(ThemeMode.MONET_DARK, "Monet dark"),
     SettingsChoice(ThemeMode.MONET_SYSTEM, "Monet"),
 )
 
+/** [APPEARANCE_CHOICES] with the picker's own labels, in the same order. */
+@Composable
+internal fun appearanceChoices(): List<SettingsChoice> = APPEARANCE_CHOICES.map { choice ->
+    SettingsChoice(choice.value, stringResource(appearanceLabel(choice.value)))
+}
+
+/** The theme picker's label for one stored appearance. */
+@StringRes
+private fun appearanceLabel(mode: String): Int = when (mode) {
+    ThemeMode.LIGHT -> R.string.settings_theme_light
+    ThemeMode.DARK -> R.string.settings_theme_dark
+    ThemeMode.SYSTEM -> R.string.settings_theme_system
+    ThemeMode.MONET_LIGHT -> R.string.settings_theme_monet_light
+    ThemeMode.MONET_DARK -> R.string.settings_theme_monet_dark
+    ThemeMode.MONET_SYSTEM -> R.string.settings_theme_monet_system
+    // Unreachable for a value that came out of APPEARANCE_MODES, but a stored appearance
+    // from a build that had a shape this one no longer draws must not crash the page.
+    else -> R.string.settings_theme_system
+}
+
 /** The appearances the host's ui-theme.preference enum can carry. */
 internal val HOST_THEME_MODES = setOf(ThemeMode.LIGHT, ThemeMode.DARK, ThemeMode.SYSTEM)
 
-/** The web's own two busy-Enter options (EnterBehaviorRow.tsx), same fallback. */
-private val BUSY_ENTER_CHOICES = listOf(
-    SettingsChoice(BusyEnter.QUEUE, "Queue"),
-    SettingsChoice(BusyEnter.STEER, "Steer"),
+/**
+ * The web's own two busy-Enter options (EnterBehaviorRow.tsx), same fallback.
+ *
+ * A composable property owner rather than a top-level `val`: a label is a translated
+ * resource now, and a resource can only be read through a [android.content.Context].
+ */
+@Composable
+private fun busyEnterChoices(): List<SettingsChoice> = listOf(
+    SettingsChoice(BusyEnter.QUEUE, stringResource(R.string.settings_busy_enter_queue)),
+    SettingsChoice(BusyEnter.STEER, stringResource(R.string.settings_busy_enter_steer)),
 )
 
 /**
- * The web's archivedSessions row time: relative, coarse, and never localized beyond the
- * unit (now, {n}min, {n}h, {n}d, {n}mo, {n}y).
+ * The web's archivedSessions row time: relative, coarse, and — unlike the web — localized.
+ *
+ * The six units are the app speaking, so each is a resource. They are `%1$d` formats
+ * rather than a number plus a literal suffix: Chinese writes 5 分钟 with a space and a
+ * word, German writes 5 Min., and neither is derivable from a Kotlin `+`.
+ *
+ * Composable because a resource is read through a context; it is still a pure reading of
+ * [updatedAt] and [now], which is why [now] stays injectable.
  */
+@Composable
 private fun relativeTime(updatedAt: Long, now: Long = System.currentTimeMillis()): String {
     val minutes = ((now - updatedAt).coerceAtLeast(0)) / 60_000
     return when {
-        minutes < 1 -> "now"
-        minutes < 60 -> minutes.toString() + "min"
-        minutes < 60 * 24 -> (minutes / 60).toString() + "h"
-        minutes < 60 * 24 * 30 -> (minutes / (60 * 24)).toString() + "d"
-        minutes < 60 * 24 * 365 -> (minutes / (60 * 24 * 30)).toString() + "mo"
-        else -> (minutes / (60 * 24 * 365)).toString() + "y"
+        minutes < 1 -> stringResource(R.string.settings_time_now)
+        minutes < 60 ->
+            stringResource(R.string.settings_time_minutes, minutes.toInt())
+        minutes < 60 * 24 ->
+            stringResource(R.string.settings_time_hours, (minutes / 60).toInt())
+        minutes < 60 * 24 * 30 ->
+            stringResource(R.string.settings_time_days, (minutes / (60 * 24)).toInt())
+        minutes < 60 * 24 * 365 ->
+            stringResource(R.string.settings_time_months, (minutes / (60 * 24 * 30)).toInt())
+        else ->
+            stringResource(R.string.settings_time_years, (minutes / (60 * 24 * 365)).toInt())
     }
 }

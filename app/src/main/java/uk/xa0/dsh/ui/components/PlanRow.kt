@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,7 +88,7 @@ internal fun PlanCallRow(entry: ChatEntry.ToolCall, model: PlanRowModel) {
             Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
                 when {
                     expanded -> Icon(
-                        Icons.Rounded.ExpandMore,
+                        DshIconVectors.ChevronDownOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),
@@ -98,7 +96,7 @@ internal fun PlanCallRow(entry: ChatEntry.ToolCall, model: PlanRowModel) {
                     model.isError -> StateDot(DotState.ERROR)
                     model.stopped -> StateDot(DotState.WARNING)
                     else -> Icon(
-                        Icons.Rounded.Checklist,
+                        DshIconVectors.ChecklistOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),

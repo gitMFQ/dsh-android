@@ -20,8 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -166,14 +164,14 @@ internal fun BashCallRow(entry: ChatEntry.ToolCall, model: BashTerminalModel) {
             Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
                 when {
                     expanded -> Icon(
-                        Icons.Rounded.ExpandMore,
+                        DshIconVectors.ChevronDownOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),
                     )
                     model.failed -> StateDot(DotState.ERROR)
                     else -> Icon(
-                        Icons.Rounded.Terminal,
+                        DshIconVectors.CodeOutline,
                         contentDescription = null,
                         tint = colors.labelTertiary,
                         modifier = Modifier.size(14.dp),

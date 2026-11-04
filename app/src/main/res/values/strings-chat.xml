@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  Chat, tool cards, the queue dock, the jobs sheet, the composer and its
+  full-screen surface — the copy owned by `ui/components/`.
+
+  ## Why a second file
+
+  `res/values/strings.xml` already holds the widget labels and the Plugins page,
+  and `docs/I18N.md` is explicit that a file being re-skinned gets its strings
+  extracted at the same time. This batch touches six components at once, so its
+  copy lives here rather than being appended to a file several people are editing.
+  Android merges every `res/values/*.xml` by resource name, so the split is
+  invisible to the app and to `R`.
+
+  ## Naming
+
+  `chat_*`   transcript rows (messages, reasoning, approvals, goal bar, to-dos)
+  `tool_*`   the tool-call cards, including the IN/OUT section keys' display labels
+  `stats_*`  the speed and cache pills and the panels behind them
+  `composer_*` the composer bar, its send menu and the full-screen surface
+  `queue_*`  the queued-message dock
+  `jobs_*`   the background-jobs seat and sheet, and the job output panel
+
+  Names are globally unique, so a later move between files cannot collide.
+
+  ## What is deliberately not here
+
+  Tool **identifiers** (`bash`, `read_image`, `todo_write` …) — those are protocol
+  keys the code branches on, never shown. What *is* here is the display title each
+  key maps to (`tool_title_*`), because that word is read by a human and the web
+  client localises its own (`dsh-client-ui-tool/locale/*`).
+
+  Job labels, session titles, todo text, goal objectives, file paths and host
+  diagnostics are runtime data and stay out: a resource file holds the app's own
+  voice, not the deployment's data.
+  ============================================================================
+-->
+<resources>
+
+    <!--
+      Shared one-word verbs. Several components in this group draw the same word
+      (the transcript's copy button, the jobs panel's, the queue's status line),
+      and one resource per word is what keeps a translation from disagreeing with
+      itself between two surfaces.
+    -->
+    <string name="chat_copy">Copy</string>
+    <string name="chat_copied">Copied</string>
+    <string name="chat_sending">Sending…</string>
+    <string name="chat_steering">Steering…</string>
+    <string name="chat_running">running</string>
+    <string name="chat_collapse">Collapse</string>
+
+    <!-- ======================= the transcript ======================= -->
+
+    <string name="chat_attachment_loading">Loading %1$s</string>
+    <string name="chat_attachment_load_failed">Couldn\'t load picture</string>
+    <string name="chat_ran_for">Ran for %1$s</string>
+    <string name="chat_branch">Branch into a new conversation</string>
+    <!-- The running-turn status line, and the live attempt's "calling a tool" line. -->
+    <string name="chat_turn_status_deep_diving">Deep diving...</string>
+    <string name="chat_calling_tool">Calling %1$s…</string>
+    <!-- The Think disclosure: its live and its settled title. -->
+    <string name="chat_thinking">Thinking…</string>
+    <string name="chat_think">Think</string>
+
+    <!-- A tool row's summary line: a summary plus the state, or the state alone. -->
+    <string name="chat_summary_running">%1$s · running</string>
+
+    <!-- The subtool disclosure under a nested tool call. -->
+    <plurals name="tool_subcall_count">
+        <item quantity="one">%1$d subtool call</item>
+        <item quantity="other">%1$d subtool calls</item>
+    </plurals>
+    <string name="tool_collapse_subcalls">Collapse subtool calls</string>
+    <string name="tool_expand_subcalls">Expand subtool calls</string>
+    <string name="tool_collapse_process">Collapse process</string>
+    <string name="tool_expand_process">Expand process</string>
+
+    <!--
+      The display labels of the IN/OUT section keys. The keys themselves
+      (`"IN"`, `"OUT"`) stay identifiers in the code: the card also uses `"OUT"`
+      to decide the error tint, and two other rows build the sections.
+    -->
+    <string name="tool_in_label">IN</string>
+    <string name="tool_out_label">OUT</string>
+
+    <!-- The to-do card. -->
+    <string name="chat_todos_title">To-dos</string>
+    <string name="chat_expand_todos">Expand to-dos</string>
+    <string name="chat_collapse_todos">Collapse to-dos</string>
+    <!--
+      The header tally, one bucket per plural: only non-zero buckets are drawn and
+      they are joined with a separator, so each bucket has to stand alone rather
+      than being a fragment of one sentence.
+    -->
+    <plurals name="chat_todos_completed">
+        <item quantity="one">%1$d completed</item>
+        <item quantity="other">%1$d completed</item>
+    </plurals>
+    <plurals name="chat_todos_in_progress">
+        <item quantity="one">%1$d in progress</item>
+        <item quantity="other">%1$d in progress</item>
+    </plurals>
+    <plurals name="chat_todos_pending">
+        <item quantity="one">%1$d pending</item>
+        <item quantity="other">%1$d pending</item>
+    </plurals>
+
+    <!-- A notice row's disclosure. -->
+    <string name="chat_show_details">Show details</string>
+    <string name="chat_hide_details">Hide details</string>
+
+    <!-- The approval card. -->
+    <string name="chat_approval_sent">Approval sent</string>
+    <string name="chat_approval_required">Approval required</string>
+    <string name="chat_approval_tool_wants_to_run">%1$s wants to run</string>
+    <string name="chat_approval_reject">Reject</string>
+    <string name="chat_approval_allow_once">Allow once</string>
+
+    <!-- The goal bar: its phase title and its lifecycle actions. -->
+    <string name="chat_goal_phase_paused">Paused Goal</string>
+    <string name="chat_goal_phase_blocked">Blocked Goal</string>
+    <string name="chat_goal_phase_active">Ongoing Goal</string>
+    <string name="chat_goal_phase_none">Goal</string>
+    <string name="chat_goal_expand">Expand goal</string>
+    <string name="chat_goal_collapse">Collapse goal</string>
+    <string name="chat_goal_save">Save</string>
+    <string name="chat_goal_cancel">Cancel</string>
+    <string name="chat_goal_pause">Pause</string>
+    <string name="chat_goal_resume">Resume</string>
+    <string name="chat_goal_edit">Edit</string>
+    <string name="chat_goal_clear">Clear</string>
+
+    <!--
+      The tool rows' title per tool key. The keys stay in code; only the word a
+      reader sees is here. An unknown key still falls back to the key itself,
+      prettified, in `toolTitle`.
+    -->
+    <string name="tool_title_bash">Bash</string>
+    <string name="tool_title_read">Read</string>
+    <string name="tool_title_write">Write</string>
+    <string name="tool_title_edit">Edit</string>
+    <string name="tool_title_grep">Grep</string>
+    <string name="tool_title_glob">Glob</string>
+    <string name="tool_title_web_search">Web Search</string>
+    <string name="tool_title_web_fetch">Web Fetch</string>
+    <string name="tool_title_question">Question</string>
+    <string name="tool_title_plan">Plan</string>
+
+    <!-- ==================== the session readings ==================== -->
+
+    <string name="stats_speed_pill_description">Output speed, %1$s tokens per second</string>
+    <!-- Web `message.turnUsage.rate`; also the TPS row's value in the panel. -->
+    <string name="stats_tokens_per_second">%1$s tok/s</string>
+    <string name="stats_session_statistics">Session statistics</string>
+    <string name="stats_llm_time">LLM time</string>
+    <string name="stats_tool_time">Tool time</string>
+    <string name="stats_avg_ttft">Avg time to first token (TTFT)</string>
+    <string name="stats_tps">Tokens per second (TPS)</string>
+    <string name="stats_turns">Turns</string>
+    <string name="stats_steps">Steps</string>
+
+    <string name="stats_cache_pill_description">Token usage, %1$s percent served from cache</string>
+    <string name="stats_cache_percent">Cache %1$s%%</string>
+    <string name="stats_token_usage">Token usage</string>
+    <!-- Web `message.turnUsage.count`: a token count with its unit. -->
+    <string name="stats_token_count">%1$s tok</string>
+    <string name="stats_cache_hit">Cache hit</string>
+    <string name="stats_uncached_input">Uncached input</string>
+    <string name="stats_cached_input">Cached input</string>
+    <string name="stats_cache_write">Cache write</string>
+    <string name="stats_output">Output</string>
+    <string name="stats_cost_range">Cost (off-peak – peak)</string>
+    <string name="stats_subagents">Subagents</string>
+    <string name="stats_family_cost">Family cost (off-peak – peak)</string>
+    <string name="stats_balance_action">Balance &amp; top up</string>
+
+    <!-- ========================= the composer ========================= -->
+
+    <string name="composer_add_files_or_commands">Add files or run commands</string>
+    <string name="composer_placeholder">Message DSH…</string>
+    <string name="composer_stop">Stop</string>
+    <string name="composer_send_and_steer">Send and steer</string>
+    <string name="composer_send_and_queue">Send and queue</string>
+    <string name="composer_steer_now">Steer now</string>
+    <string name="composer_steer_now_subtitle">Cut into the current turn</string>
+    <string name="composer_queue_for_later">Queue for later</string>
+    <string name="composer_queue_for_later_subtitle">Deliver when this turn ends</string>
+    <string name="composer_default_while_busy">Default while busy</string>
+    <string name="composer_default_while_busy_subtitle">What Send does while the agent runs</string>
+    <string name="composer_mode_steer">Steer</string>
+    <string name="composer_mode_queue">Queue</string>
+    <string name="composer_switch_default">Switch default</string>
+    <string name="composer_current_default">Current default</string>
+    <string name="composer_attachment_uploading">%1$s · uploading…</string>
+    <string name="composer_remove_attachment">Remove attachment</string>
+
+    <!-- The full-screen writing surface and the selection menu both surfaces share. -->
+    <string name="composer_full_screen">Full screen</string>
+    <string name="composer_close_full_screen">Close full screen input</string>
+    <string name="composer_full_screen_title">Message</string>
+    <string name="composer_select_all">Select all</string>
+    <string name="composer_cut">Cut</string>
+    <string name="composer_paste">Paste</string>
+    <string name="composer_quote_text">Quote text</string>
+    <string name="composer_translate">Translate</string>
+
+    <!-- ====================== the queue dock ====================== -->
+
+    <plurals name="queue_count">
+        <item quantity="one">%1$d queued message</item>
+        <item quantity="other">%1$d queued messages</item>
+    </plurals>
+    <string name="queue_expand">Expand queue</string>
+    <string name="queue_collapse">Collapse queue</string>
+    <string name="queue_steering_glyph">Steering</string>
+    <string name="queue_no_text">(no text)</string>
+    <string name="queue_save_edit">Save queued message</string>
+    <string name="queue_cancel_edit">Cancel editing</string>
+    <string name="queue_edit">Edit queued message</string>
+    <string name="queue_edit_non_text">Contains non-text content; editing is not supported yet</string>
+    <string name="queue_remove">Remove queued message</string>
+    <string name="queue_steer">Steer queued message</string>
+    <string name="queue_steer_unavailable">Steering is available only while the agent is running</string>
+
+    <!-- ====================== the background jobs ====================== -->
+
+    <!-- The header seat's count. The seat shares the phone's header, so it is terser than the web's sentence. -->
+    <plurals name="jobs_seat_count">
+        <item quantity="one">%1$d job</item>
+        <item quantity="other">%1$d jobs</item>
+    </plurals>
+    <string name="jobs_seat_done">done</string>
+    <string name="jobs_title">Background jobs</string>
+    <string name="jobs_close">Close background jobs</string>
+    <string name="jobs_empty">No background jobs in this session.</string>
+    <string name="jobs_section_running">Running</string>
+    <string name="jobs_section_finished">Finished %1$d</string>
+    <string name="jobs_collapse_finished">Collapse finished jobs</string>
+    <string name="jobs_expand_finished">Expand finished jobs</string>
+    <string name="jobs_clear">Clear</string>
+    <string name="jobs_show_more">Show more</string>
+    <string name="jobs_show_less">Show less</string>
+    <string name="jobs_show_live_output">Show live output of %1$s</string>
+    <string name="jobs_hide_live_output">Hide live output of %1$s</string>
+    <string name="jobs_confirm_stop">Confirm stop</string>
+    <string name="jobs_stop_task">Stop task %1$s</string>
+    <!-- The output panel's three statements about the stream itself. -->
+    <string name="jobs_output_gap">… earlier output dropped …</string>
+    <string name="jobs_output_interrupted">live output stream interrupted: %1$s</string>
+    <string name="jobs_waiting_output">Waiting for output…</string>
+    <string name="jobs_no_output">(no output)</string>
+
+    <!-- The reasoning translation. "Translated" is a label above the translated text,
+         so a reader knows which of the two blocks they are looking at; the original
+         stays below it, because reasoning is the evidence they opened the row for. -->
+    <string name="chat_translated">Translated</string>
+    <string name="chat_translating">Translating\u2026</string>
+    <!-- The pinned collapse bar names what it will close. "Details" is the tool-call
+         half; reasoning uses the same "Think" label its own header carries. -->
+    <string name="chat_details">Details</string>
+    <!-- Shown when the host refuses or cannot answer a translation: an empty card
+         would read as "the translation is nothing". -->
+    <string name="chat_translate_unavailable">The host did not return a translation.</string>
+    <string name="chat_translated_copy">Copy</string>
+</resources>

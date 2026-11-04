@@ -17,8 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.HelpOutline
-import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -99,7 +97,7 @@ fun QuestionCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                if (planReview) Icons.Rounded.PushPin else Icons.Rounded.HelpOutline,
+                if (planReview) DshIconVectors.PinOutline else DshIconVectors.QuestionOutline,
                 contentDescription = null,
                 tint = colors.accent,
                 modifier = Modifier.size(15.dp),

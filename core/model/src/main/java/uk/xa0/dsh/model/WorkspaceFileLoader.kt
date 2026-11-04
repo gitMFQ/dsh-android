@@ -207,3 +207,157 @@ private val LANGUAGE_BY_EXTENSION = mapOf(
 fun interface WorkspaceFileLoader {
     suspend fun load(path: String): FilePreview
 }
+/**
+ * Writes one workspace file back, returning the host's refusal or null on success.
+ *
+ * The counterpart of [WorkspaceFileLoader], and injected for the same reason: the
+ * panel stays host-free and the parent binds the session. There is no
+ * `workspaceFiles/write` on the host, so the production implementation goes through
+ * the session's own shell — see `DshViewModel.workspaceFileSaver` for why, and for
+ * the encoding that makes arbitrary text safe to send.
+ *
+ * A `String?` rather than an exception because a refusal is a *page-level fact* the
+ * editor draws in place ("the file is gone", "the workspace refused the path"), not a
+ * crash: the buffer the reader typed is still theirs and must survive it.
+ */
+fun interface WorkspaceFileSaver {
+    suspend fun save(path: String, text: String): String?
+}
+/**
+ * The shell line that writes [text] to [path], for hosts with no file-write RPC.
+ *
+ * ## The encoding problem
+ *
+ * The text is whatever the reader typed: it may contain single quotes, double quotes,
+ * backticks, `$(...)`, a leading `-`, newlines, or a whole shell script. Every scheme
+ * that quotes it into the command line is a bug waiting for the one input that breaks
+ * out of the quoting — and the failure mode is not "the save failed", it is "the shell
+ * ran something else". Base64 sidesteps the question entirely: the encoded form contains
+ * only `A-Z a-z 0-9 + / =`, none of which mean anything to a shell inside single quotes.
+ *
+ * `printf %s` and `base64 -d` are both POSIX, so this works on the host's shell wherever
+ * it runs. The output goes to a temporary file beside the target and is then renamed over
+ * it, so an interrupted decode leaves the original intact instead of truncating it — the
+ * difference between a refused save and a destroyed file.
+ *
+ * ## The path
+ *
+ * The path is single-quoted with the one escape single quotes require (`'\''`), which is
+ * exact: a POSIX path cannot contain a NUL byte, and every other byte is representable
+ * inside that quoting. Paths are workspace-relative as the host spells them, so they never
+ * start with `-` in practice — but the quoting covers that too.
+ */
+fun fileWriteCommand(path: String, text: String): String {
+    val encoded = java.util.Base64.getEncoder()
+        .encodeToString(text.toByteArray(Charsets.UTF_8))
+    // The temp name is derived from the *unquoted* path and then quoted once, so the
+    // quoting cannot be applied twice — which would embed a literal quote pair in the
+    // filename and write to a file nobody looks at.
+    val quoted = shellSingleQuote(path)
+    val quotedTemp = shellSingleQuote("$path.dsh-save")
+    // `base64 -d` on GNU coreutils and on busybox both read from stdin; the `printf`
+    // feeds it without a second temporary file. `&&` chains, so a decode failure never
+    // reaches the rename.
+    return "printf %s '$encoded' | base64 -d > $quotedTemp && mv -f $quotedTemp $quoted"
+}
+
+/**
+ * [value] inside POSIX single quotes.
+ *
+ * The only character single quotes cannot hold is a single quote itself, and the way out
+ * is to end the quoting, emit an escaped quote, and start again: `'` → `'\''`. Every
+ * other byte — including newlines and every shell metacharacter — is literal inside the
+ * quotes, which is the whole point of using them rather than double quotes.
+ */
+internal fun shellSingleQuote(value: String): String =
+    "'" + value.replace("'", "'\\''") + "'"
+/**
+ * The language a Translate action asks the host for, from a system locale tag.
+ *
+ * The host's translator normalizes the common Chinese tags itself (`zh`, `zh-CN`,
+ * `zh-SG`, `zh-Hans` to Simplified; `zh-TW`, `zh-HK`, `zh-MO`, `zh-Hant` to
+ * Traditional) and passes anything else through, so this only has to answer the one
+ * question it can answer better: what to send when the tag is *empty* or malformed.
+ *
+ * English is the fallback rather than a guess, because a translate button whose
+ * target was silently invented is worse than one that says what it did.
+ */
+fun translationTargetOf(localeTag: String?): String {
+    val tag = localeTag?.trim().orEmpty()
+    if (tag.isEmpty()) return "en"
+    // A locale tag is `language[-Script][-REGION]`; the host wants a language tag and
+    // normalizes the variants itself, so the language subtag is what travels. Keeping
+    // the region would also be valid — but only for the Chinese tags, and dropping it
+    // for every other locale keeps this one rule instead of two.
+    val language = tag.substringBefore('-').substringBefore('_').lowercase()
+    return if (language.length in 2..3 && language.all { it.isLetter() }) language else "en"
+}
+
+/**
+ * The string a `cotTranslation/translate` reply carries.
+ *
+ * The descriptor declares a plain string result, so that is the normal shape. A host
+ * that answered `{"text": "..."}` instead is also accepted — not because the protocol
+ * says so, but because a *missing* translation and an unreadable one look identical on
+ * screen, and telling them apart is worth four lines.
+ */
+fun translationTextOf(value: Any?): String? = when (value) {
+    is String -> value.takeIf { it.isNotBlank() }
+    is org.json.JSONObject ->
+        (value.opt("text") as? String)?.takeIf { it.isNotBlank() }
+            ?: (value.opt("translation") as? String)?.takeIf { it.isNotBlank() }
+    else -> null
+}
+
+/**
+ * The three access modes this app draws distinctly, as a value rather than an icon.
+ *
+ * [uk.xa0.dsh.ui.components.ComposerAccessoryRail] turns these into `ImageVector`s; the
+ * *classification* lives here because it is the part that can be wrong in a way a picture
+ * cannot show — an unknown preset must fall back to a neutral glyph rather than to a
+ * shield that implies a permission level the host never granted.
+ *
+ * The pill used to draw one shield for every mode, so a reader had to open the sheet to
+ * see which of the three they were in. The mode is the most consequential state on that
+ * row: it decides whether the agent may write to the workspace or run anything at all.
+ */
+enum class AccessModeGlyph {
+    /** Reads without writing: the eye, not the lock. */
+    READ_ONLY,
+
+    /** Writes inside the workspace: a pen, which is what the permission is *for*. */
+    WORKSPACE_WRITE,
+
+    /** Unconfined: a filled shield, the strongest of the three. */
+    FULL_ACCESS,
+
+    /**
+     * A preset this build does not know.
+     *
+     * Deliberately its own value rather than reusing one of the three: a host that adds a
+     * fourth mode should be drawn as "something else" and not as the most permissive, nor
+     * as the most restrictive.
+     */
+    OTHER,
+}
+
+/**
+ * Which glyph [preset] wears.
+ *
+ * Matched case-insensitively and by substring, because the host has spelled the tree
+ * preset as `workspace-write`, `workspaceWrite` and `workspace_write` across descriptor
+ * versions, and a mode that only sometimes gets its own icon would be worse than one
+ * that never does.
+ */
+fun accessModeGlyphOf(preset: String?): AccessModeGlyph {
+    val key = preset?.trim()?.lowercase().orEmpty()
+    if (key.isEmpty()) return AccessModeGlyph.OTHER
+    return when {
+        key.contains("read") && key.contains("only") -> AccessModeGlyph.READ_ONLY
+        key.contains("readonly") -> AccessModeGlyph.READ_ONLY
+        key.contains("workspace") -> AccessModeGlyph.WORKSPACE_WRITE
+        key.contains("full") -> AccessModeGlyph.FULL_ACCESS
+        key.contains("unrestricted") || key.contains("unconfined") -> AccessModeGlyph.FULL_ACCESS
+        else -> AccessModeGlyph.OTHER
+    }
+}

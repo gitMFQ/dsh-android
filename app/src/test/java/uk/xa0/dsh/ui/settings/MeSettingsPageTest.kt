@@ -76,9 +76,17 @@ class MeSettingsPageTest {
      */
     @Test
     fun `appearance offers every shape this device can draw`() {
-        assertEquals(7, APPEARANCE_CHOICES.size)
+        // Six appearances, not seven.
+        //
+        // AMOLED used to be an entry in this list, which made it something you
+        // *switched to* rather than something you turned on: choosing it replaced
+        // Light or Dark instead of modifying it, and the palette it drew was a frozen
+        // copy of Dark rather than whatever dark appearance was selected. It is a
+        // switch now (DshConfig.amoled), applies to whichever dark appearance wins, and
+        // is therefore deliberately absent from this list.
+        assertEquals(6, APPEARANCE_CHOICES.size)
         assertEquals(
-            listOf("Light", "Dark", "System", "AMOLED", "Monet light", "Monet dark", "Monet"),
+            listOf("Light", "Dark", "System", "Monet light", "Monet dark", "Monet"),
             APPEARANCE_CHOICES.map { it.label },
         )
         // And only the three the host can carry are mirrored to it.

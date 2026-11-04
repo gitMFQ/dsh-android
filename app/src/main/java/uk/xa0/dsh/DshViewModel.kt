@@ -8,6 +8,9 @@ import android.util.Base64
 import android.util.Log
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
+import java.security.cert.X509Certificate
+import java.util.UUID
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -19,171 +22,174 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import uk.xa0.dsh.data.BusyEnter
-import uk.xa0.dsh.data.DshConfig
 import uk.xa0.dsh.data.DraftStore
+import uk.xa0.dsh.data.DshConfig
 import uk.xa0.dsh.data.ThemeMode
+import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.model.AccountBalance
 import uk.xa0.dsh.model.ApprovalAnswer
-import uk.xa0.dsh.model.DrawerGrouping
-import uk.xa0.dsh.diag.ScrollDiag
+import uk.xa0.dsh.model.AutomationCatalog
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.ConnectionRestart
-import uk.xa0.dsh.model.JobsMarker
+import uk.xa0.dsh.model.DownloadResult
+import uk.xa0.dsh.model.DrawerGrouping
+import uk.xa0.dsh.model.ExplorerState
+import uk.xa0.dsh.model.FileDownloader
+import uk.xa0.dsh.model.FilePreview
+import uk.xa0.dsh.model.HostSettings
+import uk.xa0.dsh.model.HostVersion
+import uk.xa0.dsh.model.JobItem
 import uk.xa0.dsh.model.JobObservation
 import uk.xa0.dsh.model.JobOutput
-import uk.xa0.dsh.model.JobsWire
 import uk.xa0.dsh.model.JobTail
+import uk.xa0.dsh.model.JobsMarker
+import uk.xa0.dsh.model.JobsWire
 import uk.xa0.dsh.model.LiveAttempt
+import uk.xa0.dsh.model.LocalProvider
+import uk.xa0.dsh.model.MembershipHold
 import uk.xa0.dsh.model.MessageAttachment
+import uk.xa0.dsh.model.MissingMembersLatch
 import uk.xa0.dsh.model.ModelChoice
 import uk.xa0.dsh.model.ModelRef
 import uk.xa0.dsh.model.ModelSelectionState
 import uk.xa0.dsh.model.PendingSessionTarget
 import uk.xa0.dsh.model.PluginInventory
 import uk.xa0.dsh.model.PluginInventoryWire
+import uk.xa0.dsh.model.PreviewFormat
 import uk.xa0.dsh.model.QUEUE_PREVIEW_CHARS
-import uk.xa0.dsh.model.inboxQueueItems
-import uk.xa0.dsh.model.parseHostModelSelection
-import uk.xa0.dsh.model.parseQueueItems
-import uk.xa0.dsh.model.parseModelRef
-import uk.xa0.dsh.model.SessionIntentPlan
-import uk.xa0.dsh.model.subagentTreeIds
+import uk.xa0.dsh.model.QueueAttachment
+import uk.xa0.dsh.model.QueuedMessage
+import uk.xa0.dsh.model.ROUTER_READOUT_NO_SESSION
+import uk.xa0.dsh.model.ROUTER_STATUS_METHOD
+import uk.xa0.dsh.model.RouterCallFailure
+import uk.xa0.dsh.model.RouterProbeRecord
+import uk.xa0.dsh.model.RouterProbeResult
+import uk.xa0.dsh.model.RouterStatusOutcome
+import uk.xa0.dsh.model.RouterTarget
 import uk.xa0.dsh.model.RunningBook
-import uk.xa0.dsh.model.durableRunningOf
-import uk.xa0.dsh.model.providerRank
-import uk.xa0.dsh.model.withRunning
-import uk.xa0.dsh.model.warrantsIdleAlert
-import uk.xa0.dsh.model.landingSessionId
-import uk.xa0.dsh.model.activeTaskCounts
-import uk.xa0.dsh.model.AutomationCatalog
-import uk.xa0.dsh.model.readAutomationCatalog
-import uk.xa0.dsh.model.ScheduleSignalLatch
+import uk.xa0.dsh.model.SUBAGENT_ATTACHMENT_INVALID
+import uk.xa0.dsh.model.SUBAGENT_ATTACHMENT_REFUSAL
+import uk.xa0.dsh.model.SUBAGENT_FILE_UNSUPPORTED
 import uk.xa0.dsh.model.ScheduleCatalogRead
 import uk.xa0.dsh.model.ScheduleDeleteOutcome
 import uk.xa0.dsh.model.ScheduleEntry
 import uk.xa0.dsh.model.ScheduleHistoryRead
-import uk.xa0.dsh.model.activeScheduleCount
-import uk.xa0.dsh.model.readScheduleDeleteResult
-import uk.xa0.dsh.model.readScheduleEntries
-import uk.xa0.dsh.model.readScheduleHistory
-import uk.xa0.dsh.model.sortScheduleEntries
-import uk.xa0.dsh.model.MissingMembersLatch
-import uk.xa0.dsh.model.failedSendBanner
-import uk.xa0.dsh.model.omittedMembersWarning
-import uk.xa0.dsh.model.FilePreview
-import uk.xa0.dsh.model.ExplorerState
-import uk.xa0.dsh.model.WorkspaceEntry
-import uk.xa0.dsh.model.WorkspaceEntryKind
-import uk.xa0.dsh.model.WorkspaceListing
-import uk.xa0.dsh.model.WorkspaceTreeState
-import uk.xa0.dsh.model.DownloadResult
-import uk.xa0.dsh.model.FileDownloader
-import uk.xa0.dsh.model.readWholeFile
+import uk.xa0.dsh.model.ScheduleSignalLatch
 import uk.xa0.dsh.model.SessionHeader
+import uk.xa0.dsh.model.SessionIntentPlan
+import uk.xa0.dsh.model.SessionItem
 import uk.xa0.dsh.model.SessionSearch
-import uk.xa0.dsh.model.sessionForkRequest
-import uk.xa0.dsh.model.sessionRowTitle
-import uk.xa0.dsh.model.SettingsApply
-import uk.xa0.dsh.model.SettingsWritePlan
 import uk.xa0.dsh.model.SessionSearchHit
-import uk.xa0.dsh.model.StartupStep
-import uk.xa0.dsh.model.HostSettings
-import uk.xa0.dsh.model.HostVersion
-import uk.xa0.dsh.model.RouterProbeRecord
-import uk.xa0.dsh.model.LocalProvider
-import uk.xa0.dsh.model.RouterProbeResult
-import uk.xa0.dsh.model.RouterTarget
-import uk.xa0.dsh.model.discoverModelsArgs
-import uk.xa0.dsh.model.routerFailureText
-import uk.xa0.dsh.model.ROUTER_STATUS_METHOD
-import uk.xa0.dsh.model.RouterCallFailure
-import uk.xa0.dsh.model.RouterStatusOutcome
-import uk.xa0.dsh.model.classifyRouterStatus
-import uk.xa0.dsh.model.routerStatusArgs
-import uk.xa0.dsh.model.routerTargetOf
-import uk.xa0.dsh.model.ROUTER_READOUT_NO_SESSION
-import uk.xa0.dsh.net.RouterReadoutAttempt
-import uk.xa0.dsh.net.RouterReadoutTransport
-import uk.xa0.dsh.model.parseLocalProviders
 import uk.xa0.dsh.model.SessionStats
 import uk.xa0.dsh.model.SessionTarget
 import uk.xa0.dsh.model.SessionTargetCandidate
 import uk.xa0.dsh.model.SessionTargetPlan
 import uk.xa0.dsh.model.SessionTargets
-import uk.xa0.dsh.model.sessionListErrorNote
-import uk.xa0.dsh.model.sessionListItems
-import uk.xa0.dsh.model.SUBAGENT_ATTACHMENT_INVALID
-import uk.xa0.dsh.model.SUBAGENT_ATTACHMENT_REFUSAL
-import uk.xa0.dsh.model.SUBAGENT_FILE_UNSUPPORTED
+import uk.xa0.dsh.model.SettingsApply
+import uk.xa0.dsh.model.SettingsWritePlan
+import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.model.SubagentCatalog
 import uk.xa0.dsh.model.SubagentCatalogEntry
 import uk.xa0.dsh.model.SubagentTarget
 import uk.xa0.dsh.model.TodoItem
-import uk.xa0.dsh.model.PreviewFormat
+import uk.xa0.dsh.model.TranscriptReducer
+import uk.xa0.dsh.model.WorkspaceEntry
+import uk.xa0.dsh.model.WorkspaceEntryKind
 import uk.xa0.dsh.model.WorkspaceFileLoader
+import uk.xa0.dsh.model.WorkspaceFileSaver
+import uk.xa0.dsh.model.WorkspaceItem
 import uk.xa0.dsh.model.WorkspaceListPhase
+import uk.xa0.dsh.model.WorkspaceListing
 import uk.xa0.dsh.model.WorkspaceMove
+import uk.xa0.dsh.model.WorkspaceTreeState
+import uk.xa0.dsh.model.activeScheduleCount
+import uk.xa0.dsh.model.activeTaskCounts
 import uk.xa0.dsh.model.applyWorkspaceMove
 import uk.xa0.dsh.model.applyWorkspaceOrder
-import uk.xa0.dsh.model.workspaceMoveRefusal
-import uk.xa0.dsh.model.previewFormatOf
-import uk.xa0.dsh.model.TranscriptReducer
 import uk.xa0.dsh.model.arr
 import uk.xa0.dsh.model.bool
+import uk.xa0.dsh.model.classifyRouterStatus
+import uk.xa0.dsh.model.discoverModelsArgs
+import uk.xa0.dsh.model.durableRunningOf
+import uk.xa0.dsh.model.failedSendBanner
+import uk.xa0.dsh.model.fileWriteCommand
 import uk.xa0.dsh.model.hasFileContentPart
+import uk.xa0.dsh.model.inboxQueueItems
 import uk.xa0.dsh.model.int
+import uk.xa0.dsh.model.landingSessionId
 import uk.xa0.dsh.model.long
 import uk.xa0.dsh.model.obj
+import uk.xa0.dsh.model.omittedMembersWarning
+import uk.xa0.dsh.model.parseHostModelSelection
+import uk.xa0.dsh.model.parseHostSettings
+import uk.xa0.dsh.model.parseLocalProviders
+import uk.xa0.dsh.model.parseModelRef
+import uk.xa0.dsh.model.parseQueueItems
 import uk.xa0.dsh.model.parseSessionSearchResults
 import uk.xa0.dsh.model.parseSessionStats
-import uk.xa0.dsh.model.parseHostSettings
-import uk.xa0.dsh.model.permissionCommandMode
 import uk.xa0.dsh.model.parseSubagentCatalogProjection
-import uk.xa0.dsh.model.MembershipHold
+import uk.xa0.dsh.model.permissionCommandMode
+import uk.xa0.dsh.model.previewFormatOf
+import uk.xa0.dsh.model.providerRank
+import uk.xa0.dsh.model.readAutomationCatalog
+import uk.xa0.dsh.model.readScheduleDeleteResult
+import uk.xa0.dsh.model.readScheduleEntries
+import uk.xa0.dsh.model.readScheduleHistory
+import uk.xa0.dsh.model.readWholeFile
 import uk.xa0.dsh.model.removeSession
+import uk.xa0.dsh.model.routerFailureText
+import uk.xa0.dsh.model.routerStatusArgs
+import uk.xa0.dsh.model.routerTargetOf
+import uk.xa0.dsh.model.sessionForkRequest
+import uk.xa0.dsh.model.sessionListErrorNote
+import uk.xa0.dsh.model.sessionListItems
+import uk.xa0.dsh.model.sessionRowTitle
+import uk.xa0.dsh.model.sortScheduleEntries
 import uk.xa0.dsh.model.str
 import uk.xa0.dsh.model.subagentInterruptArgs
 import uk.xa0.dsh.model.subagentPromptRequest
 import uk.xa0.dsh.model.subagentTargetOf
+import uk.xa0.dsh.model.subagentTreeIds
+import uk.xa0.dsh.model.translationTargetOf
+import uk.xa0.dsh.model.translationTextOf
 import uk.xa0.dsh.model.upsertSession
-import uk.xa0.dsh.model.JobItem
-import uk.xa0.dsh.model.QueueAttachment
-import uk.xa0.dsh.model.QueuedMessage
-import uk.xa0.dsh.model.SessionItem
-import uk.xa0.dsh.model.WorkspaceItem
-import uk.xa0.dsh.net.BalanceFailure
-import uk.xa0.dsh.net.DeepSeekAccount
+import uk.xa0.dsh.model.warrantsIdleAlert
+import uk.xa0.dsh.model.withRunning
+import uk.xa0.dsh.model.workspaceMoveRefusal
 import uk.xa0.dsh.net.AcceptedCert
+import uk.xa0.dsh.net.BalanceFailure
 import uk.xa0.dsh.net.CertProbe
 import uk.xa0.dsh.net.CertReadout
+import uk.xa0.dsh.net.DeepSeekAccount
 import uk.xa0.dsh.net.DoorFault
 import uk.xa0.dsh.net.DshAuthException
 import uk.xa0.dsh.net.DshCertificateException
 import uk.xa0.dsh.net.DshRpcException
-import uk.xa0.dsh.net.multipartBytes
-import uk.xa0.dsh.net.multipartByteParts
-import uk.xa0.dsh.net.boundaryOf
 import uk.xa0.dsh.net.DshUnreachableException
-import uk.xa0.dsh.net.MuxState
 import uk.xa0.dsh.net.JobClient
+import uk.xa0.dsh.net.MuxState
+import uk.xa0.dsh.net.RouterReadoutAttempt
+import uk.xa0.dsh.net.RouterReadoutTransport
 import uk.xa0.dsh.net.StreamEvent
 import uk.xa0.dsh.net.TerminalClient
-import java.security.cert.X509Certificate
+import uk.xa0.dsh.net.boundaryOf
+import uk.xa0.dsh.net.multipartByteParts
+import uk.xa0.dsh.net.multipartBytes
+import uk.xa0.dsh.term.HOST_SHELL_PRESET
 import uk.xa0.dsh.term.HostShellIssue
 import uk.xa0.dsh.term.HostShellProgress
 import uk.xa0.dsh.term.HostShellRoot
 import uk.xa0.dsh.term.HostShellStep
-import uk.xa0.dsh.term.HOST_SHELL_PRESET
 import uk.xa0.dsh.term.SeatOption
 import uk.xa0.dsh.term.TerminalAttachmentSession
 import uk.xa0.dsh.term.TerminalCellSize
@@ -199,19 +205,17 @@ import uk.xa0.dsh.term.TerminalState
 import uk.xa0.dsh.term.hostShellCreateRequest
 import uk.xa0.dsh.term.hostShellIssueFact
 import uk.xa0.dsh.term.hostShellRoot
-import uk.xa0.dsh.term.isRouterReadoutTerminal
-import uk.xa0.dsh.ui.hostShellOwnerOf
 import uk.xa0.dsh.term.hostShellSessionName
+import uk.xa0.dsh.term.isRouterReadoutTerminal
 import uk.xa0.dsh.term.terminalIssueFact
 import uk.xa0.dsh.term.terminalIssueOf
 import uk.xa0.dsh.term.terminalReapList
 import uk.xa0.dsh.term.terminalSeats
 import uk.xa0.dsh.term.terminalToAdopt
 import uk.xa0.dsh.term.withHostShellSession
+import uk.xa0.dsh.ui.hostShellOwnerOf
 import uk.xa0.dsh.widget.WidgetPublisher
 import uk.xa0.dsh.widget.WidgetSession
-import java.util.UUID
-import kotlin.math.roundToInt
 
 enum class AppPhase { LOADING, SETUP, READY }
 
@@ -823,6 +827,17 @@ data class UiState(
     val completedSessionIds: Set<String> = emptySet(),
     /** The appearance this device draws in — see `DshConfig.themeMode`. */
     val themeMode: String = ThemeMode.SYSTEM,
+    /**
+     * Whether a dark appearance is drawn in AMOLED black — see `DshConfig.amoled`.
+     *
+     * An overlay rather than an appearance: it applies to whichever dark appearance
+     * won, and is ignored while a light one is selected.
+     */
+    val amoled: Boolean = false,
+    /** Whether the Trajectory and Shell readings are offered; see DshConfig. */
+    val chatViewsEnabled: Boolean = true,
+    /** The in-app language override (BCP-47), or blank to follow the device. */
+    val appLanguage: String = "",
     /**
      * The host's `ui-theme.preference`, mirrored.
      *
@@ -3175,6 +3190,9 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         client.applyConfig(config)
         _ui.value = _ui.value.copy(
             themeMode = ThemeMode.parse(config.themeMode),
+            amoled = config.amoled,
+            chatViewsEnabled = config.chatViewsEnabled,
+            appLanguage = config.appLanguage,
             hostThemeMode = config.hostThemeMode,
             agentPreset = config.agentPreset,
             terminalFontSp = config.terminalFontSp,
@@ -3614,6 +3632,47 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val config = configStore.load().copy(themeMode = parsed)
         configStore.save(config)
         _ui.value = _ui.value.copy(themeMode = parsed)
+    }
+
+    /**
+     * Turns AMOLED black on or off, independently of the appearance.
+     *
+     * Separate from [updateTheme] because the two are different acts: this one does not
+     * change *which* appearance is selected, and the appearance row does not change this
+     * one. A reader on Light can turn it on and see nothing change until they switch to
+     * a dark appearance, which is what a switch that outlives its present effect means.
+     */
+    fun updateAmoled(on: Boolean) {
+        val config = configStore.load().copy(amoled = on)
+        configStore.save(config)
+        _ui.value = _ui.value.copy(amoled = on)
+    }
+
+    /**
+     * Turns the Trajectory and Shell readings on or off.
+     *
+     * Off does not delete either view's state: a Shell keeps running and a Trajectory is
+     * still derived when it is asked for. What changes is whether the strip offers the
+     * seat, and a reader on Shell when it is turned off is returned to the conversation
+     * rather than left on a page with no way back.
+     */
+    fun setChatViewsEnabled(on: Boolean) {
+        val config = configStore.load().copy(chatViewsEnabled = on)
+        configStore.save(config)
+        _ui.value = _ui.value.copy(chatViewsEnabled = on)
+    }
+
+    /**
+     * Sets the in-app language, or clears it back to the device's own.
+     *
+     * Applied through `AppCompatDelegate` in `MainActivity` — the resources are ordinary
+     * Android ones, so the platform does the switching; this only records the choice and
+     * tells the UI to redraw with it.
+     */
+    fun setAppLanguage(tag: String) {
+        val config = configStore.load().copy(appLanguage = tag)
+        configStore.save(config)
+        _ui.value = _ui.value.copy(appLanguage = tag)
     }
 
     /**
@@ -6069,14 +6128,27 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun toggleWorkspaceDirectory(path: String) {
         if (path.isEmpty()) return
-        val current = _workspaceTree.value.open
-        if (path in current) {
-            _workspaceTree.value = _workspaceTree.value.copy(open = current - path)
+        // The **field**, not the published tree, is what changes.
+        //
+        // [explorerTreeOpen] is the source of truth [publishTree] derives the tree
+        // from, so writing the published snapshot instead left the field empty and
+        // the very next publishTree() — called a few lines below, and again by the
+        // listing reply — rebuilt a tree with nothing open. On the phone that is a
+        // folder that flashes its spinner and closes again, which is exactly what
+        // a directory that will not stay expanded looks like.
+        val current = explorerTreeOpen
+        val opening = path !in current
+        explorerTreeOpen = if (opening) current + path else current - path
+        if (!opening) {
+            // Collapsing never forgets the level: reopening must be instant, and
+            // the endpoint is a one-shot call the reader has already paid for.
+            publishTree()
             return
         }
-        _workspaceTree.value = _workspaceTree.value.copy(open = current + path)
         if (explorerLevels[path] == null) {
             explorerTreeFailures.remove(path)
+            // Publish first so the row draws its LOADING state, then ask. The reply
+            // publishes again with the level in place.
             publishTree()
             listWorkspaceDirectory(path)
         } else {
@@ -6089,6 +6161,9 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         explorerGeneration++
         explorerLevels.clear()
         explorerTreeFailures.clear()
+        // The open set belongs to one workspace root; carrying it to another
+        // session would expand paths that name nothing in the new tree.
+        explorerTreeOpen = emptySet()
         explorerPath = ""
         _workspaceExplorer.value = ExplorerState.Idle
         _workspaceTree.value = WorkspaceTreeState()
@@ -8725,6 +8800,129 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
      * The pane prefers whatever the transcript itself read or wrote and only falls
      * back to this, matching the web's resource resolution order.
      */
+    /**
+     * Writes a workspace file back through the session's own shell.
+     *
+     * ## Why the terminal, and not a file RPC
+     *
+     * The host does not expose a write path for workspace files. Its `workspaceFiles`
+     * Remote is `list` / `read` / `readBytes` / `stat` / `changes` — read-only by
+     * construction, and every consumer in the shipped web client proves it: the file
+     * preview there is a *preview*, and even the sidebar's document pane has no
+     * editor. So a save has to reach the workspace some other way, and the only
+     * sanctioned one is the terminal — a real PTY in this session's own environment,
+     * which is the same machine the agent writes to.
+     *
+     * ## Why a fresh one-shot shell rather than the Shell tab's
+     *
+     * The Shell tab's terminal belongs to the reader: it has their current directory,
+     * their scrollback, and a half-typed command that a save must not clobber. Typing
+     * a heredoc into it would also be visible as a flicker of foreign text. A
+     * dedicated shell that is created, written to, and closed is invisible and cannot
+     * touch what they were doing.
+     *
+     * ## Why the content is base64
+     *
+     * The edit buffer is arbitrary text: it can hold quotes, newlines, `$(...)`, a
+     * backtick, or a leading `-`. Every attempt to quote it into a shell line is a
+     * bug waiting for the one input that breaks it. Base64 over `printf` is the one
+     * encoding that survives all of them, and `base64 -d` is in every POSIX shell
+     * environment the host runs. The path is quoted separately, which is enough
+     * because a path cannot contain a NUL and the host validates it anyway.
+     *
+     * The write is atomic-by-rename: a failed `base64 -d` leaves the original file
+     * untouched rather than truncated, which is the difference between a rejected save
+     * and a destroyed file.
+     */
+    /**
+     * Translates one fragment through the host's own translation plugin.
+     *
+     * `cotTranslation/translate` is the endpoint the web's CoT-translation plugin
+     * publishes, and it is a *host-side* call: the provider (Bing/Google by default,
+     * or a paid DeepSeek route) is chosen there, so this client needs no network of its
+     * own and no API key. The reply is the translated string, and passing the session id
+     * makes the host keep it — the same fragment asked for twice is served from its own
+     * durable record rather than a second provider call.
+     *
+     * The target language is the reader's system locale, which is what "translate" means
+     * when the button does not offer a language: a reader whose phone is Chinese gets
+     * Chinese.
+     */
+    fun translateFragment(text: String, onResult: (String?) -> Unit) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        val sessionId = _ui.value.currentSessionId
+        val target = translationTargetOf(java.util.Locale.getDefault().toLanguageTag())
+        uiScope.launch {
+            val outcome = runCatching {
+                val args = JSONObject()
+                    .put("text", trimmed)
+                    .put("targetLanguage", target)
+                if (!sessionId.isNullOrBlank()) args.put("sessionId", sessionId)
+                client.rpc("cotTranslation/translate", args)
+            }
+            outcome.fold(
+                onSuccess = { value ->
+                    val translated = translationTextOf(value)
+                    if (translated != null) onResult(translated)
+                    else onResult(null)
+                },
+                onFailure = { error ->
+                    // A deployment without the translation plugin answers
+                    // `method-unavailable`; that is a fact about this host, not a
+                    // failure of the reader's action, so it is said plainly.
+                    Log.w(TAG, "translate failed", error)
+                    onResult(null)
+                },
+            )
+        }
+    }
+    fun workspaceFileSaver(): WorkspaceFileSaver {
+        val sessionId = _ui.value.currentSessionId
+        return object : WorkspaceFileSaver {
+            override suspend fun save(path: String, text: String): String? {
+                if (sessionId.isNullOrBlank()) return "No open session to write through."
+                if (path.isBlank()) return "No file to write."
+                val agentId = sessionId
+                val environment = runCatching { terminalClient.environment(agentId) }.getOrNull()
+                    ?: return "The host did not answer for this session's shell."
+                val id = UUID.randomUUID().toString()
+                var created: TerminalInfo? = null
+                return try {
+                    val info = terminalClient.create(
+                        agentId = agentId,
+                        id = id,
+                        columns = minOf(80, environment.maxCols),
+                        rows = minOf(24, environment.maxRows),
+                        shellPath = runCatching { terminalClient.shells(agentId) }
+                            .getOrNull()?.firstOrNull()?.path,
+                    )
+                    created = info
+                    // A fresh attachment owns input; the host hands input to the newest
+                    // one, so this is also what makes the write land.
+                    val attachment = UUID.randomUUID().toString()
+                    terminalClient.write(
+                        agentId = agentId,
+                        id = info.id,
+                        attachmentId = attachment,
+                        data = fileWriteCommand(path, text),
+                    )
+                    null
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    describe(error)
+                } finally {
+                    // Closed unconditionally: a shell left behind counts against the
+                    // host's per-session limit, and three failed saves would take the
+                    // reader's own Shell tab away.
+                    created?.let { info ->
+                        runCatching { terminalClient.close(agentId, info.id) }
+                    }
+                }
+            }
+        }
+    }
     fun workspaceFileLoader(): WorkspaceFileLoader {
         val sessionId = _ui.value.currentSessionId
         return object : WorkspaceFileLoader {

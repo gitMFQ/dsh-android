@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The sessions drawer's copy (SessionsDrawer.kt).
+
+  ## Why a second file beside values/strings.xml
+
+  Android merges every res/values file by resource *name*, so extraction can land
+  screen by screen instead of one 1 100-string file. That is the plan docs/I18N.md
+  lays out ("换哪个文件就抽哪个文件"), and it keeps three agents editing three
+  screens from colliding in one file.
+
+  Every name carries the `drawer_` prefix because resource names are global: a
+  second screen that also says "Cancel" gets its own `..._cancel` rather than
+  sharing one, so a translator can change one of them without changing the other.
+
+  ## Placeholders, never concatenation
+
+  "12 sessions" is a <plurals> because English distinguishes one from the rest
+  and Chinese does not; a single string with %d baked in is the mistake that makes
+  a later translation impossible. The same rule gives "Show 5 more sessions" its
+  own plural and "Workspace actions for X" its %1$s.
+
+  ## What is deliberately *not* here
+
+  Three kinds of string stay in Kotlin:
+
+    * **test tags** (`VIEW_OPTIONS_TAG`, `GROUP_TREE_TAG`, …) — they are identity
+      for the Compose tests, not text a reader sees;
+    * **protocol-side copy** — `WorkspaceCopy.*`, `SessionSearchCopy.*`,
+      `scheduledTaskMarkLabel()` and `ungroupedTitle()` live in :core:model or
+      ui/search and are owned by those files;
+    * **format patterns and the brand** — `"HH:mm"`, `"d MMM"` and `"DSH"` are not
+      prose.
+
+  ## The one copy change
+
+  The section count used to concatenate (`"${matched.size} sessions"`), so the
+  English UI said "1 sessions". It is now a plural and says "1 session"; the test
+  that pinned the old sentence (`SessionsDrawerSearchTest`) has to pin the new
+  one.
+-->
+<resources>
+
+    <!-- The drawer's chrome: the brand row, the search stack, the count line. -->
+    <string name="drawer_refresh_sessions">Refresh sessions</string>
+    <string name="drawer_new_session">New Session</string>
+    <string name="drawer_no_matches">No matches</string>
+    <string name="drawer_loading">Loading…</string>
+
+    <!-- The count beside the view-options menu: how many sessions the query left. -->
+    <plurals name="drawer_session_count">
+        <item quantity="one">%1$d session</item>
+        <item quantity="other">%1$d sessions</item>
+    </plurals>
+
+    <!--
+      The "+ Workspace" row's label. It sits beside the view-options button and
+      reads as the verb "add a directory to the registry", which is what the "+"
+      glyph in front of it says; the noun alone is what the web's sidebar shows.
+    -->
+    <string name="drawer_add_workspace_row">Workspace</string>
+
+    <!--
+      The flat list's section title. It shares the word with the web's
+      `groupByWorkspace: false` header and is not the same string as the New
+      Session button above it.
+    -->
+    <string name="drawer_flat_title">Sessions</string>
+
+    <!-- Per-section paging: "Show 5 more sessions" / "Show less". -->
+    <string name="drawer_show_less">Show less</string>
+    <plurals name="drawer_show_more">
+        <item quantity="one">Show %1$d more session</item>
+        <item quantity="other">Show %1$d more sessions</item>
+    </plurals>
+
+    <!-- The footer's Automation tasks row and its "N active" badge. -->
+    <string name="drawer_automation_tasks">Automation tasks</string>
+    <plurals name="drawer_automation_active">
+        <item quantity="one">%1$d active</item>
+        <item quantity="other">%1$d active</item>
+    </plurals>
+
+    <!--
+      A Workspace header. The folder glyph *is* the disclosure on this row, so its
+      content description is a sentence rather than a pair of words; the row menu's
+      is named after the Workspace it acts on (%1$s is the title).
+    -->
+    <string name="drawer_workspace_expand">Expand workspace</string>
+    <string name="drawer_workspace_collapse">Collapse workspace</string>
+    <string name="drawer_workspace_actions">Workspace actions for %1$s</string>
+    <string name="drawer_workspace_move_up">Move up</string>
+    <string name="drawer_workspace_move_down">Move down</string>
+    <string name="drawer_workspace_new_session">New session</string>
+    <string name="drawer_add_workspace_menu">Add workspace…</string>
+
+    <!-- A session row's leading glyph, its subagent caret, and its overflow menu. -->
+    <string name="drawer_subagent_session">Subagent session</string>
+    <string name="drawer_subagents_show">Show subagents</string>
+    <string name="drawer_subagents_hide">Hide subagents</string>
+    <string name="drawer_session_actions">Session actions</string>
+    <string name="drawer_session_rename">Rename</string>
+    <string name="drawer_session_fork">Fork session</string>
+    <string name="drawer_session_copy_id">Copy session id</string>
+    <string name="drawer_session_id_copied">Session id copied</string>
+    <string name="drawer_session_archive">Archive</string>
+    <string name="drawer_session_restore">Restore</string>
+
+    <!-- The rename form: the only row verb that needs one. -->
+    <string name="drawer_rename_title">Rename session</string>
+    <string name="drawer_rename_placeholder">Session title</string>
+    <string name="drawer_cancel">Cancel</string>
+    <string name="drawer_save">Save</string>
+
+    <!--
+      The view-options menu: three labelled sections, exactly as the web's
+      `ViewOptionsMenu` splits them. "WorkSpace" keeps the web's own capitalisation
+      because the menu is the web's, ported.
+    -->
+    <string name="drawer_view_options">View options</string>
+    <string name="drawer_view_group_by">Group by</string>
+    <string name="drawer_view_group_workspace">WorkSpace</string>
+    <string name="drawer_view_group_tree">Workspace Tree</string>
+    <string name="drawer_view_group_flat">In one list</string>
+    <string name="drawer_view_order_by">Order by</string>
+    <string name="drawer_view_order_manual">Manual</string>
+    <string name="drawer_view_order_updated">Last updated</string>
+    <string name="drawer_view_filter">Filter sessions</string>
+    <string name="drawer_view_hide_archived">Hide archived</string>
+    <string name="drawer_view_show_archived">Show archived</string>
+
+    <!--
+      The relative timestamp in a session row. The two abbreviations are resources
+      rather than a bare "m"/"d" in Kotlin so a language that abbreviates
+      differently can say so; the absolute forms below are SimpleDateFormat
+      patterns and stay in code.
+    -->
+    <string name="drawer_time_now">now</string>
+    <string name="drawer_time_minutes">%1$dm</string>
+    <string name="drawer_time_days">%1$dd</string>
+</resources>

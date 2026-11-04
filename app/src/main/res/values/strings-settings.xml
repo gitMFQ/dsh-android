@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  Settings: the section list, the cards inside each section, and the Me page's
+  settings bodies.
+
+  ## Why this file and not res/values/strings.xml
+
+  `docs/I18N.md`'s rule is 「换哪个文件就抽哪个文件」, and the draw is already
+  crowded: several screens are being externalised at once, and one shared file
+  would turn every extraction into a merge conflict on the same 200 lines.
+  Android merges `res/values/*.xml` by resource *name*, so a second file is a
+  file-layout choice with no runtime cost.
+
+  ## Naming
+
+  `settings_<use>`, all lower snake case, and globally unique inside R.string.
+  The prefix is the guard: another extraction pass may not reuse a name.
+
+  ## What is deliberately not here
+
+  * the host's own prose — `SettingsChoice.label`, `PermissionOption.name`,
+    `AgentPresetOption.name`/`description`, a provider's display name and a
+    model's name. Those arrive from `settings/describe` at runtime; a translation
+    table over them would translate the deployment's data and stop matching the
+    web.
+  * a session's title, a workspace's path and its title, and the host's refusal
+    message. Same rule: somebody else's words, drawn as received.
+  * numbers and units (`API 34`, `12 sp`). Those are formatting, and
+    `docs/I18N.md` §4.4 puts them on the number format and the sp value, not on a
+    translated sentence.
+
+  ## Where the app's own voice *is* here
+
+  Every other literal in these three files is the app talking: a row label, a
+  summary, a section title, an empty state, a failure note this client wrote
+  itself. Those are the ones a translator can reach.
+  ============================================================================
+-->
+<resources>
+
+    <!-- ===================================================================== -->
+    <!-- The section list (SettingsDestination.kt)                             -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
+
+    <!-- The eight sections, each a title and the one line under it. -->
+    <string name="settings_section_local_title">This device</string>
+    <string name="settings_section_local_subtitle">Appearance, language, and what this build remembers</string>
+    <string name="settings_section_general_title">General</string>
+    <string name="settings_section_general_subtitle">Permissions, transcript display, and what Enter does</string>
+    <string name="settings_section_appearance_title">Appearance</string>
+    <string name="settings_section_appearance_subtitle">The host\'s theme preference and font size</string>
+    <string name="settings_section_model_title">Model</string>
+    <string name="settings_section_model_subtitle">Which route answers, and the catalogs behind it</string>
+    <string name="settings_section_agent_title">Agent</string>
+    <string name="settings_section_agent_subtitle">The preset a new session starts in</string>
+    <string name="settings_section_terminal_title">Terminal</string>
+    <string name="settings_section_terminal_subtitle">The Shell tab\'s cell size</string>
+    <string name="settings_section_plugins_title">Plugins</string>
+    <string name="settings_section_plugins_subtitle">What this deployment has loaded</string>
+    <string name="settings_section_crashes_title">Diagnostics</string>
+    <string name="settings_section_crashes_subtitle">Crash logs this build has written</string>
+
+    <!-- The tenth door on the list: not a setting, a document about the host. -->
+    <string name="settings_about_row_title">About</string>
+    <string name="settings_about_row_subtitle">The host, its version, and this build\'s credits</string>
+
+    <!-- ===================================================================== -->
+    <!-- This device (the client-owned switches)                               -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_local_title">This device</string>
+    <string name="settings_local_chat_views_title">Trajectory and Shell tabs</string>
+    <string name="settings_local_chat_views_summary">Show the Trajectory and Shell readings beside Chat. Turn them off for a conversation that is only answers.</string>
+
+    <!-- ===================================================================== -->
+    <!-- Appearance                                                            -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_theme_title">Theme</string>
+    <string name="settings_theme_summary">Light and dark follow the system; Monet follows the wallpaper.</string>
+    <string name="settings_amoled_title">AMOLED black</string>
+    <string name="settings_amoled_summary_dark">Every dark surface is drawn pure black.</string>
+    <string name="settings_amoled_summary_light">Applies when the appearance is dark; nothing changes while it is light.</string>
+
+    <!--
+      The six shapes the theme picker offers. `Monet` is the vendor's own name
+      for the wallpaper palette, and Android's translation memory leaves it
+      untranslated in every language this app ships.
+    -->
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_monet_light">Monet light</string>
+    <string name="settings_theme_monet_dark">Monet dark</string>
+    <string name="settings_theme_monet_system">Monet</string>
+
+    <!-- ===================================================================== -->
+    <!-- The host document's notes                                             -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_reading">Reading settings…</string>
+    <string name="settings_readonly_document">The settings document is read-only in this deployment.</string>
+
+    <!-- ===================================================================== -->
+    <!-- Permission                                                            -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_permission_title">Permission</string>
+    <string name="settings_permission_default_title">Default mode</string>
+    <string name="settings_permission_default_summary">What new sessions start at. The open session\'s own mode is on About.</string>
+
+    <!-- ===================================================================== -->
+    <!-- Conversation display                                                 -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_conversation_title">Conversation display</string>
+    <string name="settings_transcript_title">Completed turns</string>
+    <string name="settings_transcript_summary">Compact folds a finished turn behind one summary line; normal keeps every row.</string>
+
+    <!-- The client's fallback roster, drawn only when the host advertises none. -->
+    <string name="settings_transcript_compact">Compact</string>
+    <string name="settings_transcript_normal">Normal</string>
+
+    <!-- ===================================================================== -->
+    <!-- Send behaviour while busy                                             -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_busy_enter_title">Send behavior while busy</string>
+    <string name="settings_busy_enter_row_title">While the agent is running</string>
+    <!--
+      Cmd/Ctrl+Enter is a keyboard chord a phone does not have, but the sentence
+      describes the setting rather than the control, and a translation that
+      dropped it would describe a different setting.
+    -->
+    <string name="settings_busy_enter_summary">What Enter and Send do mid-turn; Cmd/Ctrl+Enter uses the other.</string>
+    <string name="settings_busy_enter_queue">Queue</string>
+    <string name="settings_busy_enter_steer">Steer</string>
+
+    <!-- ===================================================================== -->
+    <!-- Models                                                                -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_models_note_keys">Enter your API keys to use models from the following providers.</string>
+    <string name="settings_models_empty">The host has not reported any model providers for this session.</string>
+    <!-- The pill on the route that is answering. -->
+    <string name="settings_models_current">Current</string>
+
+    <!-- ===================================================================== -->
+    <!-- Agent                                                                 -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_agent_intro">A preset is the plugin composition one session\'s agent runs — its tools, prompt, and capabilities. Duplicate an existing one and make it yours, or let the agent draft one for you in Creator mode.</string>
+    <string name="settings_agent_picker_title">Allow switching Agent modes</string>
+    <string name="settings_agent_picker_summary">When enabled, new tasks can choose Standard, PTC, Creator, Minimal, and custom modes. Only affects new tasks.</string>
+    <string name="settings_agent_presets_failed">Could not load agent presets.</string>
+    <string name="settings_agent_built_in">Built-in</string>
+    <string name="settings_agent_custom">Custom</string>
+    <string name="settings_agent_no_description">No description.</string>
+
+    <!--
+      The two prefixes a preset row may carry. A prefix rather than a sentence
+      because the row appends the preset's own description, which arrives from
+      the host and is never translated — see the file header.
+    -->
+    <string name="settings_agent_prefix_failed">Failed to load. %1$s</string>
+    <string name="settings_agent_prefix_default">Default. %1$s</string>
+    <string name="settings_agent_prefix_new_task_default">New task default. %1$s</string>
+
+    <!-- ===================================================================== -->
+    <!-- Terminal                                                              -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_terminal_note">The Shell page\'s text size — the same value the shell\'s own A- / A+ buttons and a pinch inside a shell change.</string>
+    <string name="settings_terminal_cell_size">Cell size</string>
+    <string name="settings_terminal_text_size">Text size</string>
+    <!-- "12 sp · line 18 sp": the two sp readings are numbers, not prose. -->
+    <string name="settings_terminal_sp_pair">%1$s sp · line %2$s sp</string>
+    <string name="settings_terminal_increase">Increase text size</string>
+    <string name="settings_terminal_decrease">Decrease text size</string>
+
+    <!-- ===================================================================== -->
+    <!-- Plugins (the Me page's plugin card's own two notes)                   -->
+    <!-- ===================================================================== -->
+    <string name="settings_plugins_note">Configure and inspect the plugins installed in this deployment.</string>
+    <string name="settings_plugins_note_readonly">This deployment stores settings read-only.</string>
+
+    <!-- ===================================================================== -->
+    <!-- Archived sessions                                                     -->
+    <!-- ===================================================================== -->
+
+    <string name="settings_archived_search_placeholder">Search archived sessions</string>
+    <string name="settings_archived_reading">Reading sessions…</string>
+    <string name="settings_archived_empty">No archived sessions.</string>
+    <string name="settings_archived_no_match">No matching sessions.</string>
+    <!-- The synthetic bucket the web also uses for a session with no workspace. -->
+    <string name="settings_archived_ungrouped">Ungrouped</string>
+    <string name="settings_archived_untitled">Untitled</string>
+    <string name="settings_archived_unarchive">Unarchive</string>
+    <string name="settings_archived_show_less">Show less</string>
+
+    <!-- "Show 5 more sessions". The drawer's own wording; the count is a number. -->
+    <plurals name="settings_archived_show_more">
+        <item quantity="one">Show %1$d more session</item>
+        <item quantity="other">Show %1$d more sessions</item>
+    </plurals>
+
+    <!--
+      The archived row's time, the web's own coarse units: now, 5min, 3h, 2d,
+      4mo, 1y. A unit is not a sentence, but it is the app speaking, so it is a
+      resource — the forms differ (French "5 min" one word, Chinese 5 分钟).
+    -->
+    <string name="settings_time_now">now</string>
+    <string name="settings_time_minutes">%1$dmin</string>
+    <string name="settings_time_hours">%1$dh</string>
+    <string name="settings_time_days">%1$dd</string>
+    <string name="settings_time_months">%1$dmo</string>
+    <string name="settings_time_years">%1$dy</string>
+
+
+    <!-- ===================================================================== -->
+    <!-- About (AboutScreen.kt)                                                -->
+    <!-- ===================================================================== -->
+    <!--
+      The About page is the app describing itself and the host it is pointed at.
+      Every label and every *state* word here is the app's own voice and is
+      translated. Three kinds of text on that page are not, and are deliberately
+      absent from this file: a base URL, a package id and a session title (data
+      received, drawn as received), and "API" in the Android release line (the
+      platform's own abbreviation, drawn the same in every locale).
+    -->
+
+    <string name="about_title">About</string>
+    <string name="about_close">Close</string>
+    <string name="about_intro">A native Android client for the DSH host. It speaks the host\'s own HTTP + WebSocket protocol: there is no WebView, and nothing is installed on the host to serve it.</string>
+
+    <!-- The four sections, in the order the page reads them. -->
+    <string name="about_section_app">App</string>
+    <string name="about_section_connection">Connection</string>
+    <string name="about_section_certificate">Certificate</string>
+    <string name="about_section_session">Session</string>
+    <string name="about_section_support">Support</string>
+
+    <!-- The row labels. One resource per label even where two rows share a word:
+         "Model" on this page and "Model" in the Settings list are different rows
+         and a translator may reasonably want to say them differently. -->
+    <string name="about_row_version">Version</string>
+    <string name="about_row_android">Android</string>
+    <string name="about_row_package">Package</string>
+    <string name="about_row_device">Device</string>
+    <string name="about_row_host">Host</string>
+    <string name="about_row_route">Route</string>
+    <string name="about_row_active_url">Active URL</string>
+    <string name="about_row_lan_address">LAN address</string>
+    <string name="about_row_account">Account</string>
+    <string name="about_row_sign_in">Sign-in</string>
+    <string name="about_row_session_cookie">Session cookie</string>
+    <string name="about_row_status">Status</string>
+    <string name="about_row_dsh_version">DSH version</string>
+    <string name="about_row_title">Title</string>
+    <string name="about_row_directory">Directory</string>
+    <string name="about_row_model">Model</string>
+    <string name="about_row_access_mode">Access mode</string>
+    <string name="about_row_agent_preset">Agent preset</string>
+
+    <!-- The state words a value column may print. None of them is a dash on
+         purpose: a dash cannot be told from a value (see the page's own note). -->
+    <string name="about_value_unknown">Unknown</string>
+    <string name="about_value_not_configured">Not configured</string>
+    <string name="about_value_not_connected">Not connected</string>
+    <string name="about_value_not_reported">Not reported</string>
+    <string name="about_value_none">None</string>
+    <string name="about_value_present">Present</string>
+    <string name="about_value_untitled">Untitled</string>
+    <string name="about_value_connected">Connected</string>
+    <string name="about_value_disconnected">Disconnected</string>
+    <!-- Which of the two doors answered. "LAN" is an initialism and stays as-is in
+         a translation; it is a resource anyway so a language that spells it out can. -->
+    <string name="about_value_route_lan">LAN</string>
+    <string name="about_value_route_public">Public</string>
+
+    <!-- The Android release line's second half: "API 34". The number is data; the
+         abbreviation is the app's own shorthand and is translatable. -->
+    <string name="about_android_api">API %1$d</string>
+
+    <!-- The LAN door's editor. -->
+    <string name="about_lan_note">Optional, for the same host: reachable only on your own network, and tried first when it answers.</string>
+    <string name="about_lan_save">Save LAN address</string>
+
+    <!-- Why the LAN door is not the route in use, one sentence per fault. -->
+    <string name="about_lan_door_transport">The LAN door failed a real call, so it is set aside for now. It is tried again after a pause that grows each time it fails.</string>
+    <string name="about_lan_door_wrong_answer">The LAN door answered a real call with something that was not DSH, so it is set aside until the network changes.</string>
+    <string name="about_lan_door_unconfigured">No LAN address is set, so only the public door is tried. If this phone is usually on the same network as the host, set one below.</string>
+    <string name="about_lan_door_retry">Try the LAN door again</string>
+
+    <string name="about_support_note">This client is a personal project and stays free. The host it talks to is your own machine, so there is nothing to pay for here — but if it has been useful, coffee is welcome.</string>
+    <string name="about_support_kofi">Buy me a coffee on Ko-fi</string>
+    <string name="about_sign_out">Sign out and forget credentials</string>
+
+    <!-- Shown only if no browser can be handed the URL. -->
+    <string name="about_kofi_no_app">No app can open %1$s</string>
+
+    <!-- The language row. Two languages, not the host's eight: this build carries
+         resources for these two only, and a menu that offered six more would be
+         promising translations that do not exist. -->
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_row_title">App language</string>
+    <string name="settings_language_row_summary">Which language this app draws in. Following the device is the default.</string>
+</resources>

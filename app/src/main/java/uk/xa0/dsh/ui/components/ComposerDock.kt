@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -117,6 +116,10 @@ fun ComposerDock(
     showAttach: Boolean = true,
     /** Asked by the selection toolbar's "Full screen" row. */
     onFullscreen: () -> Unit = {},
+    /** The selection menu's "Quote text" row; null leaves it out. */
+    onQuote: ((String) -> Unit)? = null,
+    /** The selection menu's "Translate" row; null leaves it out. */
+    onTranslate: ((String) -> Unit)? = null,
     /** False on a wide window, where the rail owns navigation and the bar would duplicate it. */
     showNavigation: Boolean = true,
     /** False while a read-only subagent's frame claims the composer's seat. */
@@ -211,6 +214,8 @@ fun ComposerDock(
                     onToggleCommands = onToggleCommands,
                     showAttach = showAttach,
                     onFullscreen = onFullscreen,
+                    onQuote = onQuote,
+                    onTranslate = onTranslate,
                     backdrop = backdrop,
                     verticalNudge = inputNudge,
                 )
@@ -356,6 +361,8 @@ private fun InputPane(
     onToggleCommands: () -> Unit,
     showAttach: Boolean,
     onFullscreen: () -> Unit,
+    onQuote: ((String) -> Unit)?,
+    onTranslate: ((String) -> Unit)?,
     backdrop: GlassBarBackdrop?,
     verticalNudge: Dp,
 ) {
@@ -418,6 +425,8 @@ private fun InputPane(
                 onToggleCommands = onToggleCommands,
                 showAttach = showAttach,
                 onFullscreen = onFullscreen,
+                onQuote = onQuote,
+                onTranslate = onTranslate,
             )
         }
     }
@@ -471,7 +480,7 @@ private fun CollapsedComposer(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = Icons.Rounded.Edit,
+            imageVector = DshIconVectors.EditOutline,
             contentDescription = null,
             tint = colors.labelPrimary,
             modifier = Modifier.size(22.dp),

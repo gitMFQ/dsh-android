@@ -14,15 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,14 +42,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uk.xa0.dsh.diag.DiagLazyList
-import uk.xa0.dsh.diag.diagOffset
 import uk.xa0.dsh.diag.diagDrag
+import uk.xa0.dsh.diag.diagOffset
 import uk.xa0.dsh.model.TrajectoryKind
 import uk.xa0.dsh.model.TrajectoryModel
 import uk.xa0.dsh.model.TrajectoryRow
 import uk.xa0.dsh.model.TrajectorySpan
 import uk.xa0.dsh.model.TrajectoryTimeline
 import uk.xa0.dsh.model.TrajectoryTimelineSpan
+import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.theme.DshColors
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -153,7 +150,7 @@ private fun TrajectoryHeader(title: String, onClose: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Rounded.ArrowBack,
+                DshIconVectors.ChevronLeftOutline,
                 contentDescription = "Back to chat",
                 tint = colors.labelPrimary,
                 modifier = Modifier
@@ -398,7 +395,7 @@ private fun TurnHeaderRow(row: TrajectoryRow.Header, onToggle: () -> Unit) {
         if (row.expandable) {
             Spacer(Modifier.width(DshSpacing.sm))
             Icon(
-                imageVector = if (row.collapsed) Icons.Rounded.ChevronRight else Icons.Rounded.ExpandMore,
+                imageVector = if (row.collapsed) DshIconVectors.ChevronRightOutline else DshIconVectors.ChevronDownOutline,
                 contentDescription = if (row.collapsed) "Expand turn" else "Collapse turn",
                 tint = colors.labelTertiary,
                 modifier = Modifier.size(14.dp),
@@ -511,7 +508,7 @@ private fun TrajectorySpanRow(span: TrajectorySpan, modifier: Modifier = Modifie
             if (hasDetail) {
                 Spacer(Modifier.width(DshSpacing.sm))
                 Icon(
-                    imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                    imageVector = if (expanded) DshIconVectors.ChevronUpOutline else DshIconVectors.ChevronDownOutline,
                     contentDescription = if (expanded) "Hide details" else "Show details",
                     tint = colors.labelTertiary,
                     modifier = Modifier

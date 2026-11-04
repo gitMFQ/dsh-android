@@ -76,14 +76,49 @@ class MainActivity : ComponentActivity() {
             // Cheap and rare: it runs when the two inputs change, not per frame.
             val systemDark = isSystemInDarkTheme()
             LaunchedEffect(ui.themeMode, systemDark) {
-                WindowBackground.apply(this@MainActivity, ui.themeMode, systemDark)
+                WindowBackground.apply(this@MainActivity, ui.themeMode, systemDark, ui.amoled)
                 // The bars' icon appearance is decided by the same palette, so it moves
                 // with the appearance for the same reason and at the same moment. Left
                 // to `enableEdgeToEdge()` it follows the *system's* night setting
                 // instead — see `SystemBars` for the four appearances that gets wrong.
-                SystemBars.apply(this@MainActivity, ui.themeMode, systemDark)
+                SystemBars.apply(this@MainActivity, ui.themeMode, systemDark, ui.amoled)
             }
 
+            // The in-app language.
+            //
+            // Applied by recreating the activity with an overridden configuration, which
+            // is the one mechanism that works on every API this app supports without
+            // pulling in appcompat: `AppCompatDelegate.setApplicationLocales` is the
+            // usual answer, but this app is pure Compose and has no appcompat, and the
+            // backport is a dependency for one setting.
+            //
+            // `recreate()` is the cost, and it is the honest one: a language change
+            // replaces every string in the process, so every composable that cached one
+            // would otherwise keep drawing the old language until something else forced
+            // a recomposition. Blank means "follow the device", which is the absence of
+            // an override rather than an override to the system locale — the difference
+            // matters when the user later changes the system language.
+            LaunchedEffect(ui.appLanguage) {
+                val current = applicationContext.resources.configuration.locales[0]
+                val wanted = if (ui.appLanguage.isBlank()) {
+                    android.content.res.Resources.getSystem().configuration.locales[0]
+                } else {
+                    java.util.Locale.forLanguageTag(ui.appLanguage)
+                }
+                if (current.language != wanted.language ||
+                    current.country != wanted.country
+                ) {
+                    val config = android.content.res.Configuration(
+                        applicationContext.resources.configuration,
+                    )
+                    config.setLocale(wanted)
+                    applicationContext.resources.updateConfiguration(
+                        config,
+                        applicationContext.resources.displayMetrics,
+                    )
+                    recreate()
+                }
+            }
             LaunchedEffect(provisioning.value) {
                 provisioning.value?.let { request ->
                     provisioning.value = null
@@ -135,7 +170,7 @@ class MainActivity : ComponentActivity() {
             // trajectory. `vm::markdownImageBytes` is stable, so this is not a new
             // fetcher per recomposition.
             CompositionLocalProvider(LocalImageBytes provides vm::markdownImageBytes) {
-            DshTheme(themeMode = ui.themeMode) {
+            DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // Composed before the screen so the screen's own Back handlers — the
                 // drawer, the sheets, the Files panel, a non-Chat view — are asked
                 // first; what reaches the gate is the press with nothing to dismiss.
@@ -192,7 +227,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun paintWindowForStoredAppearance() {
         val store = (application as? DshApplication)?.configStore ?: return
-        WindowBackground.apply(this, store.themeMode)
+        WindowBackground.apply(this, store.themeMode, amoled = store.amoled)
     }
 
     /**
@@ -206,7 +241,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun paintSystemBarsForStoredAppearance() {
         val store = (application as? DshApplication)?.configStore ?: return
-        SystemBars.apply(this, store.themeMode)
+        SystemBars.apply(this, store.themeMode, amoled = store.amoled)
     }
 
     /**

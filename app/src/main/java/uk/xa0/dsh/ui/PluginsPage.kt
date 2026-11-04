@@ -1,6 +1,7 @@
 package uk.xa0.dsh.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,21 +17,28 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import uk.xa0.dsh.R
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.PluginInventoryState
+import uk.xa0.dsh.R
 import uk.xa0.dsh.model.PluginEntry
 import uk.xa0.dsh.model.PluginInventoryWire
 import uk.xa0.dsh.model.PluginState
+import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.list.SegmentedColumn
 import uk.xa0.dsh.ui.list.SegmentedListItem
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -39,28 +47,43 @@ import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
 
 /**
- * The Plugins destination: what this deployment has loaded.
+ * The Plugins destination: what this deployment has loaded, grouped the way the web
+ * groups it.
  *
- * ## What replaced the placeholder
+ * ## What changed, and why
  *
- * The page used to say the panel protocol existed and that this was where it would
- * land. That was honest while nothing consumed the inventory — but the host has been
- * answering `pluginInventory/list` the whole time, so "we cannot list them" was a fact
- * about this client rather than about the deployment. This is the read-only half:
- * **list what is loaded**, not install, enable or remove anything.
+ * The page used to be one flat "Loaded" card in state order. That is a true list and a
+ * poor page: the web's plugin surfaces lead with **trouble** and then answer "what is
+ * running?", so a reader opening this page when something is wrong has to be able to
+ * see the broken entry without scrolling past twenty healthy ones. This page now says
+ * the same thing in the same order — failed, running, enabled-but-not-mounted, off —
+ * and each group is named, because a heading is what turns a sorted list into an
+ * answer.
  *
- * The write surface is a different feature with a different risk, and leaving it out
- * is a decision rather than an omission: `docs/BLOCK-SCHEMA.md` puts `pluginManager`
- * on the permanent blocklist for the panel protocol, and the same judgement applies to
- * a page that a remote phone can reach.
+ * The row keeps the web's information ladder rather than inventing one:
  *
- * ## Why the rows are `SegmentedColumn`
+ *  * **name** (the package's own display name, or its specifier when it published
+ *    none) with the state dot, because the dot is a claim about the thing named;
+ *  * **module** — the exact specifier, which is what a `dsh` command names, always
+ *    shown rather than only as a fallback, so the name above can be a display name
+ *    without hiding the address;
+ *  * **description**, when the package published one;
+ *  * **the host's own failure wording**, verbatim: a paraphrased failure is one the
+ *    reader cannot search for.
  *
- * The same vocabulary the Me page's settings tabs use, so a reader who has seen one
- * settings page recognises this one. It also means the two surfaces cannot drift on
- * what a card looks like — including the `codeBlock` fill, which is not `bgLayer1`:
- * in this app's light palette every layer token is pure white, and a card filled with
- * one of them is invisible against the page.
+ * Tapping a row opens the same three facts the web's detail view carries — Source,
+ * Status and, when there is one, the Reason — because the collapsed row has no space
+ * for the host's six Fiber phases, and "Loading" is not the same answer as "Not
+ * running".
+ *
+ * ## Still read-only, and deliberately
+ *
+ * `docs/BLOCK-SCHEMA.md` puts `pluginManager` on the permanent blocklist for the panel
+ * protocol, and the same judgement applies to a page a remote phone can reach. So there
+ * is no enable switch, no uninstall and no install: the page says what is loaded, and
+ * the sentence at the bottom says in words that the writing half stays on the host —
+ * a page that simply offers no controls leaves the reader guessing whether this app
+ * cannot do it or the deployment cannot.
  */
 @Composable
 internal fun PluginsPage(
@@ -90,26 +113,49 @@ internal fun PluginsPage(
                 color = colors.labelPrimary,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = stringResource(R.string.plugins_refresh),
-                style = DshType.bodySmall,
-                color = colors.link,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(DshRadius.sm))
-                    .clickableNoRipple(onClick = onRefresh)
-                    .padding(DshSpacing.sm),
-            )
+            // A control with an edge rather than a bare word: the page is long, and a
+            // link that scrolls out of the reader's mental model is not a control.
+            RefreshPill(onRefresh = onRefresh)
         }
         Spacer(Modifier.height(DshSpacing.md))
         when (state) {
             PluginInventoryState.Idle, PluginInventoryState.Loading ->
                 PluginNote(stringResource(R.string.plugins_reading))
 
-            is PluginInventoryState.Failed ->
-                PluginNote(state.message, tint = colors.error)
+            is PluginInventoryState.Failed -> PluginFailure(state.message, onRefresh)
 
             is PluginInventoryState.Ready -> PluginRows(state)
         }
+    }
+}
+
+/** The one write-ish control on the page, and the only one that talks to the host. */
+@Composable
+private fun RefreshPill(onRefresh: () -> Unit) {
+    val colors = DshTheme.colors
+    Row(
+        Modifier
+            .height(30.dp)
+            .clip(RoundedCornerShape(DshRadius.pill))
+            .background(colors.codeBlock)
+            .border(0.5.dp, colors.borderL1, RoundedCornerShape(DshRadius.pill))
+            .clickableNoRipple(onClick = onRefresh)
+            .padding(horizontal = DshSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(DshSpacing.xs),
+    ) {
+        Icon(
+            imageVector = DshIconVectors.RefreshOutline,
+            contentDescription = null,
+            tint = colors.labelSecondary,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = stringResource(R.string.plugins_refresh),
+            style = DshType.bodySmall,
+            color = colors.labelSecondary,
+            maxLines = 1,
+        )
     }
 }
 
@@ -148,11 +194,29 @@ private fun PluginRows(state: PluginInventoryState.Ready) {
         color = if (failed > 0) colors.error else colors.labelTertiary,
         modifier = Modifier.padding(bottom = DshSpacing.lg),
     )
-    SegmentedColumn(
-        title = stringResource(R.string.plugins_loaded),
-        content = rows.map { entry -> { PluginRow(entry) } },
+
+    // The groups, in the order a reader needs them. Trouble leads — that is the web's
+    // own ordering and the reason the sort key is `PluginState.ordinal` — and the two
+    // "not doing anything" groups are separated rather than merged: *enabled but not
+    // mounted* is a fact about this profile, and *switched off* is a fact about the
+    // configuration. Collapsing them would tell the reader the second when the first
+    // is true.
+    val groups = listOf(
+        PluginState.FAILED to "Needs attention",
+        PluginState.ACTIVE to "Running",
+        PluginState.IDLE to "Enabled, not running",
+        PluginState.DISABLED to "Off",
     )
-    Spacer(Modifier.height(DshSpacing.lg))
+    groups.forEach { (groupState, title) ->
+        val members = rows.filter { it.state == groupState }
+        if (members.isEmpty()) return@forEach
+        SegmentedColumn(
+            title = title,
+            content = members.map { entry -> { PluginRow(entry) } },
+        )
+        Spacer(Modifier.height(DshSpacing.lg))
+    }
+
     // The read-only statement, in words rather than by absence. A page that simply
     // offers no controls leaves the reader guessing whether the app cannot do it or
     // the host cannot, and those are different answers.
@@ -169,7 +233,14 @@ private fun PluginRows(state: PluginInventoryState.Ready) {
     )
 }
 
-/** One plugin: what it is called, what it is, and whether it is alive. */
+/**
+ * One plugin: what it is called, what it is, whether it is alive, and — on a tap — the
+ * three facts the collapsed row has no room for.
+ *
+ * The expansion is local state keyed by the entry's id, so it survives a refresh that
+ * returns the same deployment and is dropped when the row leaves the list. It is a
+ * *reading* affordance rather than an action: nothing here writes to the host.
+ */
 @Composable
 private fun PluginRow(entry: PluginEntry) {
     val colors = DshTheme.colors
@@ -179,12 +250,13 @@ private fun PluginRow(entry: PluginEntry) {
         PluginState.DISABLED -> colors.labelCaption
         PluginState.FAILED -> colors.error
     }
+    var open by rememberSaveable(entry.entryId) { mutableStateOf(false) }
     SegmentedListItem(
-        // A plugin row has no action: this page is an inventory, and the operations a
-        // row might offer (enable, remove) are the write surface this step deliberately
-        // leaves out. `onClick = null` is what makes that structural rather than a
-        // disabled-looking button.
-        onClick = null,
+        // A plugin row has no action in the web's sense: this page is an inventory, and
+        // the operations a row might offer (enable, remove) are the write surface this
+        // step deliberately leaves out. What the row does answer is "show me more",
+        // which is why `onClick` is the expansion rather than `null`.
+        onClick = { open = !open },
         headline = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -193,11 +265,19 @@ private fun PluginRow(entry: PluginEntry) {
                     color = colors.labelPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 Spacer(Modifier.width(DshSpacing.sm))
                 // The state dot, small and still: nothing on this page is animating,
                 // and a pulse on a settings list would be noise rather than liveness.
                 Box(Modifier.size(6.dp).clip(CircleShape).background(tint))
+                Spacer(Modifier.width(DshSpacing.xs))
+                Icon(
+                    imageVector = if (open) DshIconVectors.ChevronUpOutline else DshIconVectors.ChevronDownOutline,
+                    contentDescription = if (open) "Hide details" else "Show details",
+                    tint = colors.labelCaption,
+                    modifier = Modifier.size(16.dp),
+                )
             }
         },
         supporting = {
@@ -217,7 +297,7 @@ private fun PluginRow(entry: PluginEntry) {
                         text = description,
                         style = DshType.micro,
                         color = colors.labelSecondary,
-                        maxLines = 2,
+                        maxLines = if (open) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -228,10 +308,11 @@ private fun PluginRow(entry: PluginEntry) {
                         text = message,
                         style = DshType.micro,
                         color = colors.error,
-                        maxLines = 3,
+                        maxLines = if (open) Int.MAX_VALUE else 3,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                if (open) PluginDetail(entry)
             }
         },
         trailing = {
@@ -250,6 +331,65 @@ private fun PluginRow(entry: PluginEntry) {
     )
 }
 
+/**
+ * The expanded half of a row: Source, Status, and the Reason when there is one.
+ *
+ * The three are the web's detail view, minus everything that would need a write channel.
+ * They are drawn as label/value pairs rather than a sentence so the two answers can be
+ * compared down the column, and Status is the host's own Fiber phase rather than this
+ * page's four-state summary: the summary is a reading, and this is the fact behind it.
+ */
+@Composable
+private fun PluginDetail(entry: PluginEntry) {
+    val colors = DshTheme.colors
+    Column(Modifier.padding(top = DshSpacing.sm)) {
+        DetailLine(label = "Source", value = entry.moduleName)
+        DetailLine(label = "Status", value = phaseLabel(entry))
+        entry.diagnostic?.let { DetailLine(label = "Reason", value = it, tint = colors.error) }
+    }
+}
+
+@Composable
+private fun DetailLine(
+    label: String,
+    value: String,
+    tint: androidx.compose.ui.graphics.Color? = null,
+) {
+    val colors = DshTheme.colors
+    Row(Modifier.padding(vertical = DshSpacing.xxs)) {
+        Text(
+            text = label,
+            style = DshType.micro,
+            color = colors.labelTertiary,
+            modifier = Modifier.width(56.dp),
+        )
+        Text(
+            text = value,
+            style = DshType.micro,
+            color = tint ?: colors.labelSecondary,
+        )
+    }
+}
+
+/**
+ * The host's Fiber phase, in the web's own words.
+ *
+ * The web names all six (`rowPhasePending`, `rowPhaseLoading`, `rowPhaseActive`,
+ * `rowPhaseFailed`, `rowPhaseUnloading`, `rowStateIdle`) and this is the same list,
+ * because a reader comparing a phone against the web console has to be able to line the
+ * two up. An unknown phase is drawn as itself rather than as "Unknown": a host newer
+ * than this app should be able to say something this app has not learned yet.
+ */
+private fun phaseLabel(entry: PluginEntry): String = when (entry.fiberPhase) {
+    "pending" -> "Waiting for dependencies"
+    "loading" -> "Loading"
+    "active" -> "Running"
+    "failed" -> "Failed to start"
+    "unloading" -> "Unloading"
+    null -> if (entry.enabled) "Not running" else "Disabled"
+    else -> entry.fiberPhase.orEmpty()
+}
+
 /** One sentence on an otherwise empty page, centred the way the old placeholder was. */
 @Composable
 private fun PluginNote(text: String, tint: androidx.compose.ui.graphics.Color? = null) {
@@ -263,6 +403,33 @@ private fun PluginNote(text: String, tint: androidx.compose.ui.graphics.Color? =
             style = DshType.bodySmall,
             color = tint ?: colors.labelTertiary,
             modifier = Modifier.padding(horizontal = DshSpacing.lg),
+        )
+    }
+}
+
+/** A failed read: the host's own wording, plus the one way out of it. */
+@Composable
+private fun PluginFailure(message: String, onRetry: () -> Unit) {
+    val colors = DshTheme.colors
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = DshSpacing.xxl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(DshSpacing.sm),
+    ) {
+        Text(
+            text = message,
+            style = DshType.bodySmall,
+            color = colors.error,
+            modifier = Modifier.padding(horizontal = DshSpacing.lg),
+        )
+        Text(
+            text = "Retry",
+            style = DshType.bodySmall,
+            color = colors.link,
+            modifier = Modifier
+                .clip(RoundedCornerShape(DshRadius.sm))
+                .clickableNoRipple(onClick = onRetry)
+                .padding(DshSpacing.xs),
         )
     }
 }

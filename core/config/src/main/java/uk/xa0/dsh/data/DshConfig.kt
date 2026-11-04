@@ -38,6 +38,22 @@ data class DshConfig(
      */
     val themeMode: String = ThemeMode.SYSTEM,
     /**
+     * Whether a dark appearance should be drawn in AMOLED black.
+     *
+     * **An overlay, not an appearance.** It used to be the fourth of seven entries in
+     * the appearance list, which made AMOLED something you switched *to* rather than
+     * something you turned on: choosing it replaced Light or Dark instead of modifying
+     * it, so a reader who wanted black in the evening and light at their desk had to
+     * make two changes each time, and the palette it drew was a frozen copy of Dark
+     * rather than whatever dark appearance was selected.
+     *
+     * Now it is a switch that only *applies* to a dark appearance. Turning it on while
+     * a light appearance is selected changes nothing on screen and keeps the intent for
+     * when the reader switches to a dark one, which is what a switch that outlives its
+     * present effect is for.
+     */
+    val amoled: Boolean = false,
+    /**
      * The host's own `ui-theme.preference`, mirrored so the next session and the web
      * UI see the same choice.
      *
@@ -79,6 +95,30 @@ data class DshConfig(
      * user reported for Order ("on app restart the drawer's order should persist").
      */
     val drawerShowArchived: Boolean = false,
+    /**
+     * Whether the conversation offers its Trajectory and Shell readings.
+     *
+     * A setting rather than a constant because the two views are the parts of this app a
+     * reader either relies on or never touches: the trajectory is a derived view of the
+     * whole session and the shell is a PTY, and both are big surfaces to keep a pill for
+     * on the strip of someone who only reads answers. Off means the pill strip shows Chat
+     * alone, which is also what a narrow screen wants.
+     *
+     * Client-local, like every other drawer flag: the host has no schema for what a tablet
+     * or a phone chooses to display.
+     */
+    val chatViewsEnabled: Boolean = true,
+    /**
+     * The language this app draws in, as a BCP-47 tag, or blank for "follow the device".
+     *
+     * Client-local, and deliberately so: the host has a locale of its own for the web
+     * client, but what language a *phone* shows is the phone's business, and the two can
+     * legitimately differ (a Chinese device driven by an English-speaking operator).
+     *
+     * Blank is the default and means "no override" — the app then uses whatever the
+     * system already resolved, which is also what every screenshot baseline records.
+     */
+    val appLanguage: String = "",
     /**
      * The Workspace sections the user has collapsed, by section key (a Workspace's
      * host id, or the `__flat__`/`__ungrouped__` sentinels). Persisted for the same
