@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.lerp
 import top.yukonga.miuix.kmp.blur.Backdrop
-import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.highlight.BloomStroke
 import top.yukonga.miuix.kmp.blur.highlight.Highlight
@@ -48,10 +47,10 @@ import top.yukonga.miuix.kmp.blur.sensor.rememberDeviceTilt
 import uk.xa0.dsh.ui.glass.InnerShadow
 import uk.xa0.dsh.ui.glass.LocalGlassShaderEnabled
 import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.liquidGlassEffects
 import uk.xa0.dsh.ui.glass.innerShadow
 import uk.xa0.dsh.ui.glass.lens
 import uk.xa0.dsh.ui.glass.rememberCombinedBackdrop
-import uk.xa0.dsh.ui.glass.vibrancy
 import uk.xa0.dsh.ui.theme.DshTheme
 import kotlin.math.PI
 import kotlin.math.abs
@@ -226,21 +225,8 @@ internal fun LiquidBottomBar(
                 .drawBackdrop(
                     backdrop = backdrop,
                     shape = { pillShape },
-                    effects = {
-                        // Gated like the lens: miuix's colorControls builds a RenderEffect
-                        // around an AGSL shader whenever saturation is not 1, so leaving it
-                        // on would keep a runtime shader alive at the BLUR level. See
-                        // uk.xa0.dsh.ui.glass.vibrancy.
-                        vibrancy(enabled = shaderEnabled)
-                        // Vanilla Gaussian blur; the lens below is what makes the edge read as
-                        // refraction rather than as a frosted rectangle.
-                        blur(4.dp.toPx(), 4.dp.toPx())
-                        lens(
-                            refractionHeight = 24.dp.toPx(),
-                            refractionAmount = 24.dp.toPx(),
-                            enabled = shaderEnabled,
-                        )
-                    },
+                    // The same recipe the header seats use — see LiquidBarPane.kt.
+                    effects = { liquidGlassEffects(shaderEnabled) },
                     highlight = {
                         if (shaderEnabled) baseHighlight.copy(alpha = 0.75f) else noHighlight
                     },
@@ -278,15 +264,7 @@ internal fun LiquidBottomBar(
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { pillShape },
-                        effects = {
-                            vibrancy(enabled = shaderEnabled)
-                            blur(4.dp.toPx(), 4.dp.toPx())
-                            lens(
-                                refractionHeight = 24.dp.toPx(),
-                                refractionAmount = 24.dp.toPx(),
-                                enabled = shaderEnabled,
-                            )
-                        },
+                        effects = { liquidGlassEffects(shaderEnabled) },
                         onDrawSurface = { drawRect(containerColor) },
                     )
                     .then(interactiveHighlight.modifier)

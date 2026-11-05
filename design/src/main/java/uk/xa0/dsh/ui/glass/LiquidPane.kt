@@ -50,8 +50,10 @@ fun Modifier.liquidPane(
     // screenshot baselines already prove looks like this app rather than like a fallback.
     // The bar keeps the liquid material, where it has never crashed.
     //
-    // [backdrop] is still accepted so every call site keeps its signature, and so a future
-    // fix that makes a *stable-geometry* pane safe again does not have to re-thread it.
+    // [backdrop] is still accepted so every call site keeps its signature. A
+    // *stable-geometry* surface can now opt into the real material with `liquidBarPane`
+    // (see LiquidBarPane.kt); the panes here stay flat because they appear and disappear
+    // with the transcript, which is the measured crash.
     //
     // [flatFill] is honoured exactly as before: a surface that was flush with the page
     // paints its old fill and no hairline, so a capture recorded before the adoption is
@@ -69,11 +71,11 @@ fun Modifier.liquidPane(
 }
 
 /**
- * The default container tint of a liquid pane.
+ * The default container tint of the liquid material, shared with `liquidBarPane`.
  *
  * 0.4 over the *blur*, not over the wallpaper: the blur has already mixed the content
  * behind the pane, so this only nudges it towards `bgLayer1`. Measured against the
  * transcript, the same way the bar's container was: denser and the text behind it stops
  * registering as motion.
  */
-private const val LiquidContainerAlpha = 0.4f
+internal const val LiquidContainerAlpha = 0.4f
