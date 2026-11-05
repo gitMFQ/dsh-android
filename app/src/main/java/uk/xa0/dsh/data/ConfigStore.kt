@@ -76,19 +76,28 @@ class ConfigStore(context: Context) {
         themeMode = prefs.getString(KEY_THEME, ThemeMode.SYSTEM) ?: ThemeMode.SYSTEM,
         amoled = prefs.getBoolean(KEY_AMOLED, false),
         chatViewsEnabled = prefs.getBoolean(KEY_CHAT_VIEWS, true),
-        // The level is the decision; the boolean is what the older call sites ask for, so
-        // it is derived rather than stored a second time.
+        // The level the reader chose is stored here; a level the **guard or the external
+        // file** imposed is stored in the guard's own preferences and wins over it.
         //
-        // **One source of truth, deliberately.** The guard's earlier version kept its own
-        // "degraded" flag *and* an override branch here, and the two disagreed often enough
-        // that the app could report a level it had not applied. The guard now writes the
-        // level into this same file — see LaunchGuard.degradeTo — so a stepped-down launch
-        // reads it here like any other preference.
+        // ## Why the fallback is read from a different file
+        //
+        // This store is an `EncryptedSharedPreferences`. The guard used to write into it
+        // with a plain `getSharedPreferences("dsh_config")` call — the same file, read as
+        // plaintext — which adds a plaintext entry to an encrypted store. The next encrypted
+        // read then fails to decrypt a value that was never encrypted, and this method is
+        // called from `DshApplication.onCreate`, from the view model's init and from every
+        // settings write, so the failure surfaces as a crash after start-up.
+        //
+        // So the override is read from the guard's own file and merged here, which is the
+        // one place that knows how to combine "what the reader asked for" with "what the
+        // app had to do to stay alive".
         liquidGlassLevel = LiquidGlassLevel.parse(
-            prefs.getString(KEY_LIQUID_GLASS_LEVEL, null),
+            LaunchGuard.forcedLevel(appContext) ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, null),
         ),
         liquidGlassEnabled = LiquidGlassLevel.paintsMaterial(
-            LiquidGlassLevel.parse(prefs.getString(KEY_LIQUID_GLASS_LEVEL, null)),
+            LiquidGlassLevel.parse(
+                LaunchGuard.forcedLevel(appContext) ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, null),
+            ),
         ),
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),

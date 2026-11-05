@@ -58,8 +58,26 @@ object LaunchGuard {
     /** The level key, likewise; see [uk.xa0.dsh.data.ConfigStore]. */
     private const val KEY_LIQUID_GLASS_LEVEL = "liquidGlassLevel"
 
-    /** The store the UI reads — the same file [uk.xa0.dsh.data.ConfigStore] uses. */
-    private const val CONFIG_PREFS = "dsh_config"
+    /**
+     * The guard's own copy of the glass level — **not** [uk.xa0.dsh.data.ConfigStore]'s file.
+     *
+     * ## The corruption this avoids
+     *
+     * `ConfigStore` builds its preferences with `EncryptedSharedPreferences.create(context,
+     * "dsh_config", …)`. An earlier version of this guard wrote to
+     * `getSharedPreferences("dsh_config", MODE_PRIVATE)` — **the same file**, read as
+     * plaintext. Reads happened to return null (the keys are encrypted, so a lookup misses),
+     * but every write added a plaintext entry to an encrypted store. The next
+     * `EncryptedSharedPreferences` read then tried to decrypt a value that was never
+     * encrypted, which throws, and `ConfigStore.load()` is called from
+     * `DshApplication.onCreate`, from the view model's `init`, and from every settings
+     * write — so the failure would surface as a crash *after* the app had started using its
+     * configuration, which is exactly the shape of the report.
+     *
+     * The guard therefore keeps its level in its own file, and [uk.xa0.dsh.data.ConfigStore]
+     * reads it back through [degradedLevel] rather than having it written underneath.
+     */
+    private const val PREFS_LEVEL = "dsh_launch_guard"
 
     /** What the guard last chose, so the Diagnostics page can say which step it took. */
     private const val KEY_DEGRADED_LEVEL = "degradedLevel"
@@ -201,6 +219,23 @@ object LaunchGuard {
     }.getOrNull().orEmpty()
 
     /**
+     * The level the app must run at, from anything **outside** the encrypted store.
+     *
+     * Two sources, in this order: the reader's own file (an explicit instruction) and then
+     * the guard's last decision. Null means "nothing has overridden the stored choice",
+     * which is the normal case.
+     *
+     * This is the only accessor [uk.xa0.dsh.data.ConfigStore] uses, and it is deliberately
+     * read-only: the guard never writes into the encrypted store, because doing so corrupts
+     * it (see PREFS_LEVEL).
+     */
+    fun forcedLevel(context: Context): String? = runCatching {
+        levelOverride(context) ?: context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_DEGRADED_LEVEL, null)
+            ?.takeIf { it in uk.xa0.dsh.data.LiquidGlassLevel.all }
+    }.getOrNull()
+
+    /**
      * Undo the guard, and put the material back where it started.
      *
      * Both halves matter. Clearing the flag alone would leave the *level* at whatever the
@@ -215,7 +250,7 @@ object LaunchGuard {
                 .remove(KEY_DEGRADED_AT)
                 .remove(KEY_DEGRADED_LEVEL)
                 .commit()
-            context.getSharedPreferences(CONFIG_PREFS, Context.MODE_PRIVATE)
+            context.getSharedPreferences(PREFS_LEVEL, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_LIQUID_GLASS_LEVEL, uk.xa0.dsh.data.LiquidGlassLevel.LIQUID)
                 .commit()
@@ -239,6 +274,12 @@ object LaunchGuard {
                 .putLong(KEY_DEGRADED_AT, System.currentTimeMillis())
                 .putString(KEY_DEGRADED_LEVEL, level)
                 .commit()
+            // The level itself lives in this file, never in ConfigStore's encrypted one —
+            // see PREFS_LEVEL. ConfigStore reads it back through degradedLevel().
+            context.getSharedPreferences(PREFS_LEVEL, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_LIQUID_GLASS_LEVEL, level)
+                .commit()
             Log.e(TAG, "two starts died before their first frame; glass is now " + level)
         }
     }
@@ -251,7 +292,7 @@ object LaunchGuard {
      */
     private fun currentLevel(context: Context): String {
         val stored = runCatching {
-            context.getSharedPreferences(CONFIG_PREFS, Context.MODE_PRIVATE)
+            context.getSharedPreferences(PREFS_LEVEL, Context.MODE_PRIVATE)
                 .getString(KEY_LIQUID_GLASS_LEVEL, null)
         }.getOrNull()
         return uk.xa0.dsh.data.LiquidGlassLevel.parse(stored)
