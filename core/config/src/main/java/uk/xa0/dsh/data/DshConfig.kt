@@ -268,12 +268,24 @@ object LiquidGlassLevel {
     const val LIQUID = "liquid"
 
     /**
-     * Backdrop and blur, no runtime shader.
+     * Backdrop and blur, no *lens* and no *specular rim*.
      *
-     * The lens is the most exotic request this app makes of a driver — a fragment shader
-     * that resamples the recorded layer with a refraction offset — and the specular rim is
-     * the second. Both are AGSL. If a device survives this level and dies on [LIQUID], the
-     * runtime shader is the answer and the blur was never the problem.
+     * ## What this level is not
+     *
+     * It is **not** "no runtime shader", which is what it was documented as and what made
+     * two rounds of bisection inconclusive. Measured in miuix-blur 0.9.4's own bytecode,
+     * `blur()` begins with `isRuntimeShaderSupported()` and then builds a compiled AGSL
+     * blur; `colorControls` (vibrancy) does the same. So at this level a runtime shader is
+     * still running — two of them — and a device that dies here has not thereby exonerated
+     * the shader path.
+     *
+     * What it *does* remove is the lens (a shader that resamples the recorded layer with a
+     * refraction offset) and the specular rim. Those are the expensive, exotic ones; the
+     * blur shader is the one miuix ships for every blur on every device.
+     *
+     * The honest conclusion from a device that works at [OFF] and dies here: **the backdrop
+     * pipeline is at fault** — the layer recording, the AGSL blur, or the colour controls —
+     * and not the lens or the rim.
      */
     const val BLUR = "blur"
 

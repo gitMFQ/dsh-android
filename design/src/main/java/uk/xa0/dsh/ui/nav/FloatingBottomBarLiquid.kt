@@ -191,6 +191,11 @@ internal fun LiquidBottomBar(
         )
     }
 
+    // Keep the press glow's shader in step with the level. Set here, in composition, and
+    // read in the draw lambda — see InteractiveHighlight.shaderEnabled for why it is a
+    // field rather than a composition-local read.
+    interactiveHighlight.shaderEnabled = shaderEnabled
+
     val baseHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = -45f)
     val pillHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = 90f)
     // The "no rim" value, built once. `Highlight()` is width 0 and alpha 0 by
