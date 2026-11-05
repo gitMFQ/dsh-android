@@ -289,17 +289,42 @@ object LiquidGlassLevel {
      */
     const val BLUR = "blur"
 
+    /**
+     * The **bar only**: every pane falls back to the flat fill and hairline.
+     *
+     * ## Why this level exists
+     *
+     * The report from the device is not "the material crashes" but "**the to-dos card
+     * started crashing when it was given the material**" — a claim about a *component*, not
+     * about a GPU feature. The three feature-based levels cannot test it, because the bar
+     * and the panes share every one of them.
+     *
+     * This level keeps the bar exactly as it is (backdrop, blur, lens, rim, lift) and takes
+     * the panes back to the flat tier they wore before 3.5. If the app survives here and
+     * dies one step up, the panes are the answer; if it dies here too, the bar is, and that
+     * is a different investigation.
+     */
+    const val BAR = "bar"
+
     /** No material at all: the flat tier. Same layout, same motion, no GPU pipeline. */
     const val OFF = "off"
 
     /** Every level, most capable first — the order the settings row lists them in. */
-    val all = listOf(LIQUID, BLUR, OFF)
+    val all = listOf(LIQUID, BLUR, BAR, OFF)
 
     /** Total, like [ThemeMode.parse]: an unreadable value is the full material. */
     fun parse(value: String?): String = if (value in all) value!! else LIQUID
 
     /** Whether the backdrop and the blur may be drawn at all. */
     fun paintsMaterial(level: String): Boolean = level != OFF
+
+    /**
+     * Whether the *panes* may draw the material.
+     *
+     * True at every level except [BAR]: that level is precisely "the bar keeps it, the
+     * panes do not".
+     */
+    fun paintsPanes(level: String): Boolean = level != OFF && level != BAR
 
     /**
      * Whether the AGSL runtime shaders may be drawn.

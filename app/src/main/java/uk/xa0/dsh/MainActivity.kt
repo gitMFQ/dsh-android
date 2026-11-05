@@ -30,6 +30,7 @@ import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassLiftEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassPaneEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassShaderEnabled
 import uk.xa0.dsh.ui.markdown.LocalImageBytes
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -233,6 +234,9 @@ class MainActivity : ComponentActivity() {
                 LocalGlassEnabled provides LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel),
                 LocalGlassShaderEnabled provides LiquidGlassLevel.paintsShader(ui.liquidGlassLevel),
                 LocalGlassLiftEnabled provides LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel),
+                // The panes as a group, so the device's own hypothesis — "the to-dos card
+                // started this" — can be tested without taking the bar's material away too.
+                LocalGlassPaneEnabled provides LiquidGlassLevel.paintsPanes(ui.liquidGlassLevel),
             ) {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // Composed before the screen so the screen's own Back handlers — the

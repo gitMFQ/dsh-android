@@ -81,7 +81,7 @@ fun Modifier.liquidPane(
      */
     flatFill: Color? = null,
 ): Modifier {
-    if (backdrop == null || !LocalGlassEnabled.current) {
+    if (backdrop == null || !LocalGlassEnabled.current || !LocalGlassPaneEnabled.current) {
         if (flatFill != null) {
             // Exactly what the surface had before it had a material, and nothing else:
             // no fill unless it was given one, no hairline. See the parameter's note.

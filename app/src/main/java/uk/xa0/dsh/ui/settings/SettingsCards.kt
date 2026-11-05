@@ -955,7 +955,8 @@ private fun writerFor(
 /** The material's three levels, in the order the row lists them. */
 internal val LIQUID_GLASS_CHOICES: List<SettingsChoice> = listOf(
     SettingsChoice(LiquidGlassLevel.LIQUID, "Liquid glass"),
-    SettingsChoice(LiquidGlassLevel.BLUR, "Blur only"),
+    SettingsChoice(LiquidGlassLevel.BLUR, "Backdrop and blur"),
+    SettingsChoice(LiquidGlassLevel.BAR, "Bar only"),
     SettingsChoice(LiquidGlassLevel.OFF, "Off"),
 )
 
@@ -973,6 +974,7 @@ internal fun liquidGlassLevelChoices(): List<SettingsChoice> = LIQUID_GLASS_CHOI
 @StringRes
 private fun liquidGlassLevelLabel(level: String): Int = when (level) {
     LiquidGlassLevel.BLUR -> R.string.settings_liquid_glass_blur
+    LiquidGlassLevel.BAR -> R.string.settings_liquid_glass_bar
     LiquidGlassLevel.OFF -> R.string.settings_liquid_glass_off
     else -> R.string.settings_liquid_glass_liquid
 }

@@ -153,6 +153,27 @@ val LocalGlassLiftEnabled = compositionLocalOf { true }
  */
 val LocalGlassShaderEnabled = compositionLocalOf { true }
 
+/**
+ * Whether the **panes** may draw the material — the to-dos card, the goal bar, the
+ * composer's accessories, the queue dock, the file previews.
+ *
+ * ## Why the panes are separable from the bar
+ *
+ * Because they are different code paths with different history. The bar has worn the
+ * material since 3.2 and has never crashed; `liquidPane` was adopted by the transcript's
+ * cards later, and the report from the device is specific: *adding the material to the
+ * to-dos card is what started the crashes*. That is a hypothesis about a component, and
+ * the only way to test it is to keep the bar and take the panes away.
+ *
+ * With this local off, the bar keeps its blur, its lens and its rim, and every pane falls
+ * back to [glassSurface] — the flat fill and hairline it wore before it had a material. A
+ * device that survives this and dies with the panes on has named the culprit; one that
+ * dies either way has exonerated it.
+ *
+ * Defaults to on. Only [uk.xa0.dsh.data.LiquidGlassLevel.BAR] turns it off.
+ */
+val LocalGlassPaneEnabled = compositionLocalOf { true }
+
 @Composable
 fun rememberGlassBarBackdrop(enabled: Boolean = true): GlassBarBackdrop? {
     if (!enabled || !LocalGlassEnabled.current || !glassBarSupported()) return null

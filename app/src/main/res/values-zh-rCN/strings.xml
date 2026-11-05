@@ -216,6 +216,7 @@
     <string name="settings_local_liquid_glass_summary">悬浮控件背后的模糊与折射材质。由于它会让本机的应用闪退，默认关闭；想要的话可以逐级往上试。每一级的布局与动效完全相同。</string>
     <string name="settings_liquid_glass_liquid">液态玻璃</string>
     <string name="settings_liquid_glass_blur">背景与模糊</string>
+    <string name="settings_liquid_glass_bar">仅底栏</string>
     <string name="settings_liquid_glass_off">关闭</string>
     <string name="settings_appearance_title">外观</string>
     <string name="settings_theme_title">主题</string>

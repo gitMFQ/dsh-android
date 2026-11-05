@@ -79,6 +79,7 @@
     <string name="settings_local_liquid_glass_summary">The blurred, refracting material behind the floating chrome. It ships off because it closes this app on this device; step it up one level at a time if you want to try it. The layout and the motion are identical at every level.</string>
     <string name="settings_liquid_glass_liquid">Liquid glass</string>
     <string name="settings_liquid_glass_blur">Backdrop and blur</string>
+    <string name="settings_liquid_glass_bar">Bar only</string>
     <string name="settings_liquid_glass_off">Off</string>
 
     <!-- ===================================================================== -->

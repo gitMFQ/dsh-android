@@ -308,7 +308,8 @@ object LaunchGuard {
      */
     private fun nextLevelDown(level: String): String? = when (level) {
         uk.xa0.dsh.data.LiquidGlassLevel.LIQUID -> uk.xa0.dsh.data.LiquidGlassLevel.BLUR
-        uk.xa0.dsh.data.LiquidGlassLevel.BLUR -> uk.xa0.dsh.data.LiquidGlassLevel.OFF
+        uk.xa0.dsh.data.LiquidGlassLevel.BLUR -> uk.xa0.dsh.data.LiquidGlassLevel.BAR
+        uk.xa0.dsh.data.LiquidGlassLevel.BAR -> uk.xa0.dsh.data.LiquidGlassLevel.OFF
         else -> null
     }
 
