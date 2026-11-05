@@ -174,6 +174,65 @@ val LocalGlassShaderEnabled = compositionLocalOf { true }
  */
 val LocalGlassPaneEnabled = compositionLocalOf { true }
 
+/**
+ * A backdrop for a **pane**, or null when panes may not paint the material.
+ *
+ * ## Why panes get their own backdrop instead of the bar's
+ *
+ * The bar's backdrop is *recorded from* the pager — `glassBarLayer(glassBackdrop)` on the
+ * pager's modifier — and *sampled by* the bar. A pane that shares that same handle is
+ * therefore sampling a layer that is still being recorded, from inside the subtree being
+ * recorded. On the test handset that is a `SIGSEGV (SEGV_MAPERR)` on the RenderThread a few
+ * seconds after the transcript renders, which no Java diagnostic can see.
+ *
+ * The evidence is the level split, measured: with the bar keeping the full material and the
+ * panes on the flat tier the app runs; put the panes back on the bar's backdrop and it dies.
+ *
+ * So a pane samples its **own** recorded layer, exactly as the bar's own tab strip already
+ * does (`tabsBackdrop` in `FloatingBottomBarLiquid`). That is a second recording per pane
+ * group, which costs some GPU work — but it is a correct graph: nothing samples a layer it
+ * is inside.
+ *
+ * The layer is remembered per appearance and per level, like the bar's, so it is rebuilt
+ * when the palette changes and never survives a level change.
+ */
+@Composable
+fun rememberGlassPaneBackdrop(): GlassBarBackdrop? {
+    if (!LocalGlassEnabled.current || !LocalGlassPaneEnabled.current) return null
+    if (!glassBarSupported()) return null
+    val surfaceColor = DshTheme.colors.bgBase
+    val layer = rememberLayerBackdrop {
+        drawRect(surfaceColor)
+        drawContent()
+    }
+    return remember(layer) { GlassBarBackdrop(layer) }
+}
+
+/**
+ * Marks the subtree the **panes** sample.
+ *
+ * ## Why the panes need their own recording, and why sharing the bar's was wrong
+ *
+ * The bar's layer is recorded from the pager. A pane that samples it is sampling a layer
+ * whose recording subtree it is *not* part of — which is fine in principle, and was the
+ * shape before, but it means the pane's own background (the transcript rows behind it) is
+ * the only thing it can ever refract. That is what the bar wants: it sits over the page.
+ *
+ * A pane sits *in* the composer stack, over the transcript's last rows. Sampling the bar's
+ * pager layer gives it the transcript, which is right; but the pager's layer is recorded
+ * once and shared by every pane plus the bar, and miuix's `DrawBackdropNode` keeps its own
+ * GraphicsLayers per node. Several nodes sampling one recorded layer while the layer is
+ * being re-recorded is the crash this whole investigation is about.
+ *
+ * So a pane records from its **own** sibling subtree — the same trick the bar's tab strip
+ * uses (`tabsBackdrop`), and the shape `8ee8983` arrived at from the other direction when
+ * it moved the To-dos card out of the pager.
+ *
+ * A no-op when [backdrop] is null, so the caller writes one line on every device.
+ */
+fun Modifier.glassPaneLayer(backdrop: GlassBarBackdrop?): Modifier =
+    if (backdrop == null) this else this.layerBackdrop(backdrop.layer)
+
 @Composable
 fun rememberGlassBarBackdrop(enabled: Boolean = true): GlassBarBackdrop? {
     if (!enabled || !LocalGlassEnabled.current || !glassBarSupported()) return null

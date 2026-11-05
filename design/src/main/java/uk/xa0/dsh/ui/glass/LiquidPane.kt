@@ -6,6 +6,7 @@ package uk.xa0.dsh.ui.glass
 
 import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -102,7 +103,9 @@ fun Modifier.liquidPane(
     // whatever is behind, so this only has to push the result towards the app's surface.
     // Denser and the transcript stops reading as motion behind the chrome; thinner and
     // labels lose contrast on a light appearance. Same value as the bar's own container.
-    val highlight = rememberDiagonalHighlight()
+    // Kept for the lens and the blur; the rim is gone — see the note on the
+    // `highlight` argument below for why the panes lost it and the bar kept it.
+    val noHighlight = remember { top.yukonga.miuix.kmp.blur.highlight.Highlight() }
     // Read once per composition, not per frame: the effects lambda runs on every draw and
     // a composition local read inside it would be a snapshot read per frame for a value
     // that only changes when a setting does.
@@ -122,10 +125,33 @@ fun Modifier.liquidPane(
                     enabled = shaderEnabled,
                 )
             },
-            // The diagonal specular, i.e. the same one the bottom bar wears. Without it
-            // every pane but the bar read as a frosted rectangle; see
-            // [rememberDiagonalHighlight] for what makes the edge diagonal.
-            highlight = { highlight },
+            // No specular rim on a pane.
+            //
+            // ## Why the bar keeps its rim and the panes do not
+            //
+            // Measured on the device, level by level: with the bar keeping the full
+            // material (backdrop, AGSL blur, lens, rim, lift) the app runs; give the
+            // *panes* the same material and it dies on the RenderThread a few seconds
+            // after the transcript renders. The one thing a pane has that the bar does
+            // not is this highlight — it was added to `liquidPane` in 255662e, and the
+            // first SIGSEGV on the device was 33 minutes after that build.
+            //
+            // The mechanism fits too. A `Highlight` carries a `BloomStroke` whose lights
+            // are positioned in a normalised space and rendered through a runtime shader
+            // against the *pane's own* recorded layer. The bar's rim is drawn on a
+            // fixed-size capsule whose geometry never changes; a pane is created,
+            // resized and destroyed with the transcript, so its rim is re-bound while
+            // the layer underneath is being re-recorded — which is the same class of
+            // defect as the To-dos crash in 8ee8983, one layer down.
+            //
+            // What the pane loses is the lit edge; it keeps the blur, the lens and the
+            // lift, so it still reads as glass rather than as a frosted rectangle. The
+            // bar keeps the rim, because it has never crashed and it is the one surface
+            // the reference design puts a specular on.
+            // `Highlight()` is width 0 and alpha 0 by construction, and miuix's own
+            // `drawHighlight` returns before touching a shader when either is
+            // non-positive — so this is "no rim" without a nullable parameter.
+            highlight = { noHighlight },
             onDrawSurface = {
                 drawRect(colors.bgLayer1.copy(alpha = LiquidContainerAlpha))
                 if (tint != null) drawRect(tint)
