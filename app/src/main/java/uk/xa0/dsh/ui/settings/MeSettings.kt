@@ -57,8 +57,8 @@ data class MeSettingsState(
     val chatViewsEnabled: Boolean = true,
     /** Whether the floating chrome may paint liquid glass; see DshConfig. */
     val liquidGlassEnabled: Boolean = true,
-    /** How much of it may run; see DshConfig.liquidGlassLevel. */
-    val liquidGlassLevel: String = LiquidGlassLevel.LIQUID,
+    /** How much of it may run; see DshConfig.liquidGlassLevel. Off is the shipped default. */
+    val liquidGlassLevel: String = LiquidGlassLevel.OFF,
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     val busyEnter: String = BusyEnter.QUEUE,

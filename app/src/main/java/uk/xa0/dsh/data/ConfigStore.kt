@@ -91,12 +91,28 @@ class ConfigStore(context: Context) {
         // So the override is read from the guard's own file and merged here, which is the
         // one place that knows how to combine "what the reader asked for" with "what the
         // app had to do to stay alive".
+        // Default OFF, not LIQUID.
+        //
+        // ## Why the default is the working value and not the pretty one
+        //
+        // Measured on the device: with the material off the app runs; with it on the
+        // process dies a few seconds after the transcript renders, on the RenderThread,
+        // with no Java trace and no tombstone. Thirteen rounds of diagnostics went into
+        // *finding* that; none of it changes the fact that a shipped default which crashes
+        // is not a default.
+        //
+        // So the floor is the default until the cause is fixed, and the reader can step
+        // *up* from the settings page or from glass-level.txt. This is deliberately the
+        // reverse of the usual "on unless asked otherwise": the cost of the flat material
+        // is a less striking app, and the cost of the wrong default is an app that closes.
         liquidGlassLevel = LiquidGlassLevel.parse(
-            LaunchGuard.forcedLevel(appContext) ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, null),
+            LaunchGuard.forcedLevel(appContext)
+                ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, LiquidGlassLevel.OFF),
         ),
         liquidGlassEnabled = LiquidGlassLevel.paintsMaterial(
             LiquidGlassLevel.parse(
-                LaunchGuard.forcedLevel(appContext) ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, null),
+                LaunchGuard.forcedLevel(appContext)
+                    ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, LiquidGlassLevel.OFF),
             ),
         ),
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),

@@ -102,7 +102,10 @@ class DshApplication : Application() {
         client = DshClient(this)
         BootBeacon.mark("client: ready")
         val config = configStore.load()
-        BootBeacon.mark("config: loaded")
+        // The effective level, said out loud. The guard's own log line says whether it
+        // *acted*; this says what the app will actually paint, which is the fact a reader
+        // comparing two builds needs and neither line gave on its own.
+        BootBeacon.mark("config: loaded, glass=" + config.liquidGlassLevel)
         // The accepted certificates are the app's trust anchors, and the client is
         // what accepts one — so it is also what has to say when the set changed. The
         // store is the only thing that knows where that state lives, hence the hook.
