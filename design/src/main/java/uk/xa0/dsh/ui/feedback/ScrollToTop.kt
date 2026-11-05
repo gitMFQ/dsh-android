@@ -210,8 +210,9 @@ fun ScrollToTopButton(
                 }
             },
             containerColor = colors.bgLayer2,
-            // Best-effort glass overlay: the FAB paints its own opaque fill internally, so this only
-            // shows at LIQUID. Color.Transparent makes the flat branch return this unchanged.
+            // The FAB paints its own opaque fill internally, so this overlay only ever mattered
+            // on the liquid tier; panes stay flat now. Color.Transparent makes the flat branch
+            // return this unchanged.
             modifier = Modifier
                 .liquidPane(backdrop, CircleShape, flatFill = Color.Transparent)
                 .semantics { this.contentDescription = contentDescription },

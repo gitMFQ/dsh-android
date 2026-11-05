@@ -682,13 +682,13 @@ internal fun ChatPanel(
     //
     // The handle is opaque on purpose: this file must not name a miuix-blur type, or the
     // rule in NOTICE.md that keeps those names inside `:design` would be broken by the
-    // one caller that is hardest to audit. It is read from the ambient rather than made
-    // here: MainActivity owns the single recorded layer (inside DshTheme), so every pane
-    // below samples the same handle the pager records — including the ones in their own
-    // window. Null means "the flat material", and both ends of the wiring below turn that
-    // into a no-op — so the same lines run on every device and the platform decides how
-    // much of them means anything. Screenshot fixtures never provide the ambient, so they
-    // get null here too and stay byte-identical to the old baselines. See
+    // one caller that is hardest to audit. MainActivity owns the one recorded layer
+    // (inside DshTheme) and publishes it in the ambient; only the bar tab strip and the
+    // three header seats actually sample it (see LiquidBarPane.kt). The panes below take
+    // the handle for signature compatibility but stay on the flat material — a pane that
+    // samples the layer recording the pager it lives in is the RenderThread SIGSEGV this
+    // build is recovering from. Null (as in the screenshot fixtures, which never provide
+    // the ambient) means the flat tier; either way the flat-tier pixels are unchanged. See
     // `ui/glass/GlassBarBackdrop.kt` for the capability test.
     val glassBackdrop = LocalGlassBarBackdrop.current
     // A session switch returns to the conversation *and* to its transcript view, which is
@@ -1973,11 +1973,11 @@ internal fun ChatPanel(
                         ExpandedProcessCollapseBar(
                             label = openLabel,
                             onCollapse = expandedProcess::collapseAll,
-                            // Deliberately no backdrop: the reader left this bar out of the
-                            // liquid-glass rollout (the in-transcript collapse bar was an
-                            // explicit exclusion). A null backdrop keeps it on the flat
-                            // branch of liquidPane, which is what it wore before, while every
-                            // other pane lights up. Flat-tier pixels are unchanged either way.
+                            // Deliberately no backdrop: the in-transcript collapse bar was an
+                            // explicit exclusion from the rollout, and every pane now stays on
+                            // the flat material anyway. A null backdrop keeps this bar on the
+                            // flat branch of liquidPane, which is what it wore before;
+                            // flat-tier pixels are unchanged either way.
                             backdrop = null,
                             // Below the chrome, not at the top of the window: this bar has
                             // to be reachable, and a bar under the header is the one thing
@@ -3459,11 +3459,14 @@ private fun FilesSurface(
      */
     onSaveFile: ((path: String, text: String) -> Unit)? = null,
     /**
-     * The backdrop the page's own header samples, or null on the flat tier.
+     * The recorded backdrop handed to the page's own header pills, or null on the flat
+     * tier.
      *
      * The page header belongs to *this* page now rather than to the shell: the top bar
-     * is the conversation's, and Files draws its own. It is the same material as the
-     * rest of the chrome, so it takes the same handle.
+     * is the conversation's, and Files draws its own. The pills take the same handle as
+     * the rest of the chrome, but they are panes: `liquidPane` keeps them on the flat
+     * material (a pane sampling the pager's own recorded layer is the measured crash),
+     * so the handle is threaded for signature compatibility rather than painted with.
      */
     backdrop: GlassBarBackdrop? = null,
 ) {
@@ -4118,8 +4121,9 @@ private fun AgentPresetChip(label: String, onClick: () -> Unit) {
         Modifier
             .height(28.dp)
             .clip(RoundedCornerShape(DshRadius.thumb))
-            // Transparent in the flat tier (the flat branch returns `this`), a liquid
-            // pane at LIQUID: the chip sits in the pill strip over the transcript.
+            // Transparent in the flat tier (the flat branch returns `this`); the panes no
+            // longer sample a backdrop, so the chip stays flat on every tier. It sits in
+            // the pill strip over the transcript.
             .liquidPane(backdrop, RoundedCornerShape(DshRadius.thumb), flatFill = Color.Transparent)
             .clickableNoRipple(onClick = onClick)
             .padding(horizontal = DshSpacing.md),

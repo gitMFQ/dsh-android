@@ -73,8 +73,9 @@ fun WarningCard(
     val colors = DshTheme.colors
     val backdrop = LocalGlassBarBackdrop.current
     Card(
-        // Best-effort glass overlay: the Card paints its own opaque fill internally, so this only
-        // shows at LIQUID. Color.Transparent makes the flat branch return this unchanged.
+        // The Card paints its own opaque fill internally, so this overlay only ever mattered
+        // on the liquid tier; panes stay flat now. Color.Transparent makes the flat branch
+        // return this unchanged.
         modifier = modifier.liquidPane(
             backdrop,
             RoundedCornerShape(DshRadius.card),
