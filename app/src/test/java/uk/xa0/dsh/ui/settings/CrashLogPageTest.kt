@@ -20,6 +20,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.diag.CrashLog
+import uk.xa0.dsh.diag.NativeCrashLog
 import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -46,7 +47,12 @@ class CrashLogPageTest {
     val folder = TemporaryFolder()
 
     @After
-    fun clearReports() = CrashLog.clear()
+    fun clearReports() {
+        CrashLog.clear()
+        // The native reader points at the same directory, so one fixture's reports must
+        // not leak into the next test's "an empty log" assertion.
+        NativeCrashLog.clear()
+    }
 
     private fun page() {
         rule.setContent {
@@ -82,7 +88,9 @@ class CrashLogPageTest {
         rule.onNodeWithText("No crashes recorded on this device.").assertIsDisplayed()
         rule.onNodeWithText(
             "Reports are written only in debug builds. Reproduce the crash, reopen the " +
-                "app, and the report appears here.",
+                "app, and the report appears here. Native crashes (a SIGSEGV on the " +
+                "render thread, for instance) are read back from the system on the next " +
+                "launch, so they appear one start later than a Java crash.",
         ).assertIsDisplayed()
     }
 

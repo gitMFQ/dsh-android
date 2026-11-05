@@ -227,6 +227,8 @@ data class ChatActions(
 
     /** Turns the Trajectory and Shell readings on or off. */
     val setChatViewsEnabled: (Boolean) -> Unit = {},
+    val setLiquidGlassEnabled: (Boolean) -> Unit = {},
+    val setLiquidGlassLevel: (String) -> Unit = {},
 
     /** Sets the in-app language, or clears it back to the device’s own. */
     val setAppLanguage: (String) -> Unit = {},

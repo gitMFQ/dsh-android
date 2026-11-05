@@ -34,7 +34,9 @@ import org.json.JSONObject
 import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.data.DraftStore
 import uk.xa0.dsh.data.DshConfig
+import uk.xa0.dsh.data.LiquidGlassLevel
 import uk.xa0.dsh.data.ThemeMode
+import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.model.AccountBalance
 import uk.xa0.dsh.model.ApprovalAnswer
@@ -836,6 +838,21 @@ data class UiState(
     val amoled: Boolean = false,
     /** Whether the Trajectory and Shell readings are offered; see DshConfig. */
     val chatViewsEnabled: Boolean = true,
+    /**
+     * Whether the floating chrome may paint liquid glass — see [DshConfig.liquidGlassEnabled].
+     *
+     * Read at the root of the composition, where it becomes `LocalGlassEnabled`: one
+     * value, one place, and every glass surface below follows it without knowing it exists.
+     */
+    val liquidGlassEnabled: Boolean = true,
+    /**
+     * How much of the material may run — see [DshConfig.liquidGlassLevel].
+     *
+     * The boolean above is kept because it is what the launch guard and the older switch
+     * speak; this is the value the composition actually reads, and it is the one that can
+     * express "blur yes, runtime shader no".
+     */
+    val liquidGlassLevel: String = LiquidGlassLevel.LIQUID,
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     /**
@@ -3192,6 +3209,8 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             themeMode = ThemeMode.parse(config.themeMode),
             amoled = config.amoled,
             chatViewsEnabled = config.chatViewsEnabled,
+            liquidGlassEnabled = config.liquidGlassEnabled,
+            liquidGlassLevel = config.liquidGlassLevel,
             appLanguage = config.appLanguage,
             hostThemeMode = config.hostThemeMode,
             agentPreset = config.agentPreset,
@@ -3660,6 +3679,57 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         val config = configStore.load().copy(chatViewsEnabled = on)
         configStore.save(config)
         _ui.value = _ui.value.copy(chatViewsEnabled = on)
+    }
+
+    /**
+     * Turns the liquid glass material on or off.
+     *
+     * Off is the **flat tier**, not "no chrome": every pane keeps its fill, its hairline
+     * stroke and its layout, and the bottom bar keeps its slide and its squeeze — see
+     * `GlassTier.FLAT` in `ui/glass/LiquidGlass.kt`. What stops is the GPU work: the
+     * recorded backdrop layer, the blur, the refraction shader, the specular rim and the
+     * stacked shadow.
+     *
+     * The switch exists because the alternative was a build that died on the RenderThread
+     * with nothing to bisect on. A reader who reports "it still crashes with glass off"
+     * has excluded an entire class of causes; one who reports "it only crashes with glass
+     * on" has named the cause.
+     */
+    /**
+     * Sets how much of the liquid material may run.
+     *
+     * Three levels rather than a switch, because "the glass crashes" is not actionable and
+     * "the *runtime shader* crashes" is. See [LiquidGlassLevel]: LIQUID is everything,
+     * BLUR keeps the backdrop and the blur and drops both AGSL shaders, OFF is the flat
+     * tier. Each step down is a strictly smaller set of GPU features, so a reader stepping
+     * down one level at a time reports which mechanism their driver dislikes.
+     *
+     * Writing the level also clears the launch guard's fallback: choosing a level by hand
+     * is the reader saying they want to try again.
+     */
+    fun setLiquidGlassLevel(level: String) {
+        val parsed = LiquidGlassLevel.parse(level)
+        LaunchGuard.reset(app)
+        val config = configStore.load().copy(
+            liquidGlassLevel = parsed,
+            liquidGlassEnabled = LiquidGlassLevel.paintsMaterial(parsed),
+        )
+        configStore.save(config)
+        _ui.value = _ui.value.copy(
+            liquidGlassLevel = parsed,
+            liquidGlassEnabled = LiquidGlassLevel.paintsMaterial(parsed),
+        )
+    }
+
+    fun setLiquidGlassEnabled(on: Boolean) {
+        // Turning it back on is also the answer to the launch guard: the guard's whole
+        // effect is to force this off, so a reader who turns it on has said the fallback
+        // is no longer wanted. Without this line the switch would appear to do nothing —
+        // the value would be saved and then overridden on the next read.
+        if (on) LaunchGuard.reset(app)
+        val config = configStore.load().copy(liquidGlassEnabled = on)
+        configStore.save(config)
+        _ui.value = _ui.value.copy(liquidGlassEnabled = on)
     }
 
     /**

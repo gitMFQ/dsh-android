@@ -3,7 +3,10 @@ package uk.xa0.dsh
 import android.app.Application
 import android.os.Process
 import uk.xa0.dsh.data.ConfigStore
+import uk.xa0.dsh.diag.BootBeacon
 import uk.xa0.dsh.diag.CrashLog
+import uk.xa0.dsh.diag.LaunchGuard
+import uk.xa0.dsh.diag.NativeCrashLog
 import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.model.runForceQuit
 import uk.xa0.dsh.net.DshClient
@@ -48,15 +51,61 @@ class DshApplication : Application() {
     @Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
     override fun onCreate() {
         super.onCreate()
+        // The boot beacon first, before anything that can fail.
+        //
+        // The crash this project has been chasing for a day is a SIGSEGV on the render
+        // thread: no Java exception, no tombstone on this ROM, and it lands before the UI
+        // exists — so every report-based diagnostic came back empty. The beacon records
+        // what *succeeded* instead, so the last line on disk names the step that killed
+        // the process. See uk.xa0.dsh.diag.BootBeacon.
+        BootBeacon.begin(this)
+        // The crash record, installed **first**.
+        //
+        // It used to be the last statement in this method, and that made it blind to
+        // exactly the crashes it was written for: a process that dies in ConfigStore's
+        // keystore work, in DshClient's construction or in the theme read never reached
+        // the install, so the handler that would have written the report was not there
+        // yet. "It closes as soon as it opens" is that window. Two cheap file operations
+        // before anything else is the price of observing the whole of onCreate.
+        //
+        // See uk.xa0.dsh.diag.CrashLog for why the write is synchronous, and
+        // ui/settings/CrashLogCards.kt for the page that hands the report back.
+        // The external copy is where a report goes when the app will not stay open long
+        // enough to be read: Android/data/<pkg>/files/diag, reachable by a file manager
+        // or a shell with no permission and no adb.
+        val external = getExternalFilesDir(null)
+        if (BuildConfig.DEBUG) CrashLog.install(filesDir, external)
+        // The launch guard runs *before* the config is read, because what it decides is
+        // part of that config. Two starts that died before their first frame turn the
+        // liquid glass off, which is the only way a reader who cannot reach the settings
+        // page can still get a usable app. See uk.xa0.dsh.diag.LaunchGuard.
+        // Check first, then write this launch's marker. The order is the mechanism: the
+        // marker found by check() is the *previous* launch's, and it is still there only
+        // if that launch died before its first frame.
+        val degraded = LaunchGuard.check(this)
+        LaunchGuard.markLaunching(this)
+        BootBeacon.mark("launch guard: " + if (degraded) "stepped down" else "no change")
+        // The native half, which an uncaught-exception handler can never see: a
+        // RenderThread SIGSEGV kills the process below the JVM. The platform keeps those
+        // tombstones and hands them back through ApplicationExitInfo, so they are read on
+        // the *next* launch — hence a background thread and no ordering requirement.
+        if (BuildConfig.DEBUG) NativeCrashLog.install(filesDir, external)
         // The composer's selection menu is a custom `LocalTextToolbar` (it carries the
         // full-screen row); Compose's newer context menu is a different surface that
         // bypasses that seam. Pinned to the legacy path process-wide, before any text
         // field is composed. The flag is a public static in foundation's internal flags
         // object, hence the suppression.
         androidx.compose.foundation.ComposeFoundationFlags.isNewContextMenuEnabled = false
+        BootBeacon.mark("config store: begin")
         configStore = ConfigStore(this)
+        BootBeacon.mark("config store: ready")
         client = DshClient(this)
+        BootBeacon.mark("client: ready")
         val config = configStore.load()
+        // The effective level, said out loud. The guard's own log line says whether it
+        // *acted*; this says what the app will actually paint, which is the fact a reader
+        // comparing two builds needs and neither line gave on its own.
+        BootBeacon.mark("config: loaded, glass=" + config.liquidGlassLevel)
         // The accepted certificates are the app's trust anchors, and the client is
         // what accepts one — so it is also what has to say when the set changed. The
         // store is the only thing that knows where that state lives, hence the hook.
@@ -65,19 +114,21 @@ class DshApplication : Application() {
         }
         client.setAcceptedCerts(config.acceptedCerts)
         client.applyConfig(config)
+        BootBeacon.mark("config: applied")
         Attention.ensureChannel(this)
+        BootBeacon.mark("notification channel: ready")
         registerActivityLifecycleCallbacks(foreground)
         // Latent scroll diagnostics: invisible, additive, and off the main
         // thread. See uk.xa0.dsh.diag.ScrollDiag for how to read them back.
         ScrollDiag.attach(filesDir)
-        // The crash record. Debug only, and deliberately so: it observes an uncaught
-        // exception and writes it where the Me page can hand it back, which is the only
-        // way a stack trace reaches a development box with no adb. A release build never
-        // installs it, so a shipped app writes nothing.
-        //
-        // See uk.xa0.dsh.diag.CrashLog for why it is synchronous, and
-        // ui/settings/SettingsCards.kt for the page that reads it.
-        if (BuildConfig.DEBUG) CrashLog.install(filesDir)
+        // Reading the platform's death records is a binder round trip and a file read, so
+        // it never runs on the thread that is drawing the first frame.
+        if (BuildConfig.DEBUG) {
+            Thread({
+                runCatching { NativeCrashLog.capture(this) }
+            }, "dsh-native-crash-read").start()
+        }
+        BootBeacon.mark("application.onCreate: done")
     }
 
     /**

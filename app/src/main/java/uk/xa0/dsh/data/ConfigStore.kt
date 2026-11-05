@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.model.DrawerGrouping
 import uk.xa0.dsh.net.AcceptedCert
 import uk.xa0.dsh.net.decodeAcceptedCerts
@@ -19,6 +20,13 @@ import uk.xa0.dsh.term.encodeHostShellSessions
  * is 24h).
  */
 class ConfigStore(context: Context) {
+
+    /**
+     * Kept because [load] has to ask the launch guard a question, and the guard's answer
+     * lives outside these encrypted preferences — see the comment on liquidGlassEnabled.
+     * The application context, not the caller's: this store outlives every activity.
+     */
+    private val appContext: Context = context.applicationContext
 
     private val prefs: SharedPreferences = run {
         val masterKey = MasterKey.Builder(context)
@@ -68,6 +76,45 @@ class ConfigStore(context: Context) {
         themeMode = prefs.getString(KEY_THEME, ThemeMode.SYSTEM) ?: ThemeMode.SYSTEM,
         amoled = prefs.getBoolean(KEY_AMOLED, false),
         chatViewsEnabled = prefs.getBoolean(KEY_CHAT_VIEWS, true),
+        // The level the reader chose is stored here; a level the **guard or the external
+        // file** imposed is stored in the guard's own preferences and wins over it.
+        //
+        // ## Why the fallback is read from a different file
+        //
+        // This store is an `EncryptedSharedPreferences`. The guard used to write into it
+        // with a plain `getSharedPreferences("dsh_config")` call — the same file, read as
+        // plaintext — which adds a plaintext entry to an encrypted store. The next encrypted
+        // read then fails to decrypt a value that was never encrypted, and this method is
+        // called from `DshApplication.onCreate`, from the view model's init and from every
+        // settings write, so the failure surfaces as a crash after start-up.
+        //
+        // So the override is read from the guard's own file and merged here, which is the
+        // one place that knows how to combine "what the reader asked for" with "what the
+        // app had to do to stay alive".
+        // Default OFF, not LIQUID.
+        //
+        // ## Why the default is the working value and not the pretty one
+        //
+        // Measured on the device: with the material off the app runs; with it on the
+        // process dies a few seconds after the transcript renders, on the RenderThread,
+        // with no Java trace and no tombstone. Thirteen rounds of diagnostics went into
+        // *finding* that; none of it changes the fact that a shipped default which crashes
+        // is not a default.
+        //
+        // So the floor is the default until the cause is fixed, and the reader can step
+        // *up* from the settings page or from glass-level.txt. This is deliberately the
+        // reverse of the usual "on unless asked otherwise": the cost of the flat material
+        // is a less striking app, and the cost of the wrong default is an app that closes.
+        liquidGlassLevel = LiquidGlassLevel.parse(
+            LaunchGuard.forcedLevel(appContext)
+                ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, LiquidGlassLevel.OFF),
+        ),
+        liquidGlassEnabled = LiquidGlassLevel.paintsMaterial(
+            LiquidGlassLevel.parse(
+                LaunchGuard.forcedLevel(appContext)
+                    ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, LiquidGlassLevel.OFF),
+            ),
+        ),
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),
@@ -110,6 +157,7 @@ class ConfigStore(context: Context) {
             .putString(KEY_THEME, config.themeMode)
             .putBoolean(KEY_AMOLED, config.amoled)
             .putBoolean(KEY_CHAT_VIEWS, config.chatViewsEnabled)
+            .putString(KEY_LIQUID_GLASS_LEVEL, config.liquidGlassLevel)
             .putString(KEY_LANGUAGE, config.appLanguage)
             .putString(KEY_HOST_THEME, config.hostThemeMode)
             .putString(KEY_PRESET, config.agentPreset)
@@ -152,6 +200,12 @@ class ConfigStore(context: Context) {
 
         /** Whether the Trajectory and Shell readings are offered; see DshConfig. */
         const val KEY_CHAT_VIEWS = "chatViews"
+
+        /** Whether the floating chrome may paint liquid glass; see DshConfig. */
+        const val KEY_LIQUID_GLASS = "liquidGlass"
+
+        /** How much of it may run; see DshConfig.liquidGlassLevel. */
+        const val KEY_LIQUID_GLASS_LEVEL = "liquidGlassLevel"
 
         /** The in-app language override; blank follows the device. */
         const val KEY_LANGUAGE = "appLanguage"

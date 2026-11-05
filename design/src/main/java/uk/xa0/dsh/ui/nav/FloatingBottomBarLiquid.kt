@@ -46,6 +46,7 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.sensor.rememberDeviceTilt
 import uk.xa0.dsh.ui.glass.InnerShadow
+import uk.xa0.dsh.ui.glass.LocalGlassShaderEnabled
 import uk.xa0.dsh.ui.glass.glassLift
 import uk.xa0.dsh.ui.glass.innerShadow
 import uk.xa0.dsh.ui.glass.lens
@@ -159,6 +160,10 @@ internal fun LiquidBottomBar(
 ) {
     val colors = DshTheme.colors
     val isInDark = colors.isDark
+    // One read for the whole bar: the effects lambdas below run per frame, and this is the
+    // flag that keeps every AGSL shader in this file off at the BLUR level. See
+    // LocalGlassShaderEnabled for why the shader is its own layer of the material.
+    val shaderEnabled = LocalGlassShaderEnabled.current
     val pillShape = remember { CircleShape }
     val accentColor = colors.accent
     // 0.4 over the blur, not over the wallpaper: the blur already carries the colour of what is
@@ -186,8 +191,18 @@ internal fun LiquidBottomBar(
         )
     }
 
+    // Keep the press glow's shader in step with the level. Set here, in composition, and
+    // read in the draw lambda — see InteractiveHighlight.shaderEnabled for why it is a
+    // field rather than a composition-local read.
+    interactiveHighlight.shaderEnabled = shaderEnabled
+
     val baseHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = -45f)
     val pillHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = 90f)
+    // The "no rim" value, built once. `Highlight()` is width 0 and alpha 0 by
+    // construction, and miuix's own `drawHighlight` returns before touching a shader when
+    // either is non-positive — so this keeps the call site and guarantees no RuntimeShader
+    // is created for it. That is what makes the BLUR level an honest bisect.
+    val noHighlight = remember { Highlight() }
 
     val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
 
@@ -212,16 +227,23 @@ internal fun LiquidBottomBar(
                     backdrop = backdrop,
                     shape = { pillShape },
                     effects = {
-                        vibrancy()
+                        // Gated like the lens: miuix's colorControls builds a RenderEffect
+                        // around an AGSL shader whenever saturation is not 1, so leaving it
+                        // on would keep a runtime shader alive at the BLUR level. See
+                        // uk.xa0.dsh.ui.glass.vibrancy.
+                        vibrancy(enabled = shaderEnabled)
                         // Vanilla Gaussian blur; the lens below is what makes the edge read as
                         // refraction rather than as a frosted rectangle.
                         blur(4.dp.toPx(), 4.dp.toPx())
                         lens(
                             refractionHeight = 24.dp.toPx(),
                             refractionAmount = 24.dp.toPx(),
+                            enabled = shaderEnabled,
                         )
                     },
-                    highlight = { baseHighlight.copy(alpha = 0.75f) },
+                    highlight = {
+                        if (shaderEnabled) baseHighlight.copy(alpha = 0.75f) else noHighlight
+                    },
                     layerBlock = {
                         // The whole panel swells slightly while a tab is held. Scaled by the
                         // panel's own width so a wide tablet does not get a bigger bulge than a
@@ -257,11 +279,12 @@ internal fun LiquidBottomBar(
                         backdrop = backdrop,
                         shape = { pillShape },
                         effects = {
-                            vibrancy()
+                            vibrancy(enabled = shaderEnabled)
                             blur(4.dp.toPx(), 4.dp.toPx())
                             lens(
                                 refractionHeight = 24.dp.toPx(),
                                 refractionAmount = 24.dp.toPx(),
+                                enabled = shaderEnabled,
                             )
                         },
                         onDrawSurface = { drawRect(containerColor) },
@@ -303,9 +326,16 @@ internal fun LiquidBottomBar(
                                 refractionAmount = 14.dp.toPx() * progress,
                                 depthEffect = true,
                                 chromaticAberration = 0.5f,
+                                enabled = shaderEnabled,
                             )
                         },
-                        highlight = { pillHighlight.copy(alpha = state.damped.pressProgress) },
+                        highlight = {
+                            if (shaderEnabled) {
+                                pillHighlight.copy(alpha = state.damped.pressProgress)
+                            } else {
+                                noHighlight
+                            }
+                        },
                         layerBlock = {
                             scaleX = state.damped.scaleX
                             scaleY = state.damped.scaleY

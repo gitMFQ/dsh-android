@@ -86,10 +86,27 @@ class TerminalInputView(
     /** DECCKM as it is *now*: the input connection reads it per key event. */
     internal fun cursorKeys(): Boolean = applicationCursorKeys()
 
-    /** Put the cursor and the keyboard back: what a tap on the grid does. */
+    /**
+     * Put the cursor and the keyboard back: what a tap on the grid does.
+     *
+     * ## Why this checks the window first
+     *
+     * `requestFocus()` on a view that is not attached throws nothing and does nothing —
+     * but the *call site* that made it is usually a composable that has just been
+     * composed, and on a pager page that can be a page which is about to be disposed
+     * again (a fast swipe, a destination restored on the wrong page). Asking the window
+     * is the cheap way to make the no-op explicit rather than incidental.
+     *
+     * Both halves go through `post`: the focus request has to happen after the view is
+     * laid out, and the IME's own `showSoftInput` after the window has focus. Doing the
+     * first half synchronously was how a still-detaching page ended up owning the focus,
+     * which is the crash `TerminalSurface`'s dispose hook now also guards against.
+     */
     fun showKeyboard() {
-        requestFocus()
+        if (!isAttachedToWindow) return
         post {
+            if (!isAttachedToWindow) return@post
+            requestFocus()
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             imm?.showSoftInput(this, 0)
         }

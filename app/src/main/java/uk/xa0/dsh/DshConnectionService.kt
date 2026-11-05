@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,20 @@ class DshConnectionService : Service() {
         super.onCreate()
         val app = application as DshApplication
         Attention.ensureChannel(this)
-        startForeground(ONGOING_ID, ongoingNotification())
+        // The type has to be passed explicitly: from API 29 the platform checks it against
+        // the manifest declaration, and on API 34+ a mismatch is a `SecurityException` at
+        // start. `remoteMessaging` rather than `dataSync` because dataSync is one of the
+        // types Android 15 puts a *time limit* on — see the manifest's note, and the
+        // ForegroundServiceDidNotStopInTimeException it caused on this device.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                ONGOING_ID,
+                ongoingNotification(),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING,
+            )
+        } else {
+            startForeground(ONGOING_ID, ongoingNotification())
+        }
         app.attention.start(app.client)
         // The centre's stream loop reconnects on its own; this only makes sure the
         // socket is actually open even if no other component ever asks for it.
@@ -71,9 +85,70 @@ class DshConnectionService : Service() {
      * `START_STICKY` because a service the system killed for memory should come
      * back: the whole point is to be reachable when the user is not looking.
      */
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    /**
+     * The platform's "you are over budget" callback.
+     *
+     * Only time-limited types get this, and `remoteMessaging` is not one of them — but the
+     * callback is the contract for *any* type that acquires a limit in a future release, and
+     * ignoring it is what turns a warning into a crash. The right answer is always the same:
+     * stop now, so the app keeps its process.
+     *
+     * API 35+ only; declared without an override annotation so this compiles against the
+     * same source on every level (the method simply never runs below 35).
+     */
+    override fun onTimeout(startId: Int) {
+        Log.w(TAG, "foreground service timed out; stopping instead of being killed")
+        stopSelf(startId)
+    }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A stop request that raced the start: honour it here rather than in the caller,
+        // because by the time the caller's stopService arrived this service may not have
+        // been created yet — and a service that starts after being asked to stop would sit
+        // in the shade with a notification nobody wants.
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        return START_STICKY
+    }
+
+    /**
+     * Stop being a foreground service **first**, then clean up.
+     *
+     * ## The crash this prevents
+     *
+     * Recorded on the device, on the main thread, at a cold start:
+     *
+     *   android.app.RemoteServiceException$ForegroundServiceDidNotStopInTimeException:
+     *     A foreground service of type dataSync did not stop within its timeout:
+     *     ComponentInfo{uk.xa0.dsh.debug/uk.xa0.dsh.DshConnectionService}
+     *
+     * That exception is thrown by `ActivityThread` when a service was stopped while it
+     * still held a foreground-service state of type `dataSync` and did not leave it within
+     * the platform's deadline. The platform requires the app to say "I am done being
+     * foreground" explicitly — `stopForeground` — and it must be said *before* the
+     * teardown, because `super.onDestroy()` is what removes the service record and the
+     * deadline is measured against that.
+     *
+     * The previous code never called it at all. It got away with it most of the time
+     * because the process was usually killed or the service restarted; a start that stops
+     * the service promptly — which is exactly what [uk.xa0.dsh.model.runForceQuit] does —
+     * made the deadline miss reachable.
+     *
+     * `STOP_FOREGROUND_REMOVE` rather than `DETACH`: the ongoing notification is the
+     * price of the mechanism and has no meaning once the mechanism is stopping. Leaving a
+     * stale "DSH connected" in the shade would be a lie about the connection.
+     */
     override fun onDestroy() {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+        }
         keepAlive?.cancel()
         super.onDestroy()
     }
@@ -98,6 +173,9 @@ class DshConnectionService : Service() {
     }
 
     companion object {
+        /** For the timeout callback and the start/stop trace. */
+        private const val TAG = "DshConnService"
+
         private const val ONGOING_ID = 1000
         private const val CONNECT_INTERVAL_MS = 15_000L
 
@@ -113,9 +191,29 @@ class DshConnectionService : Service() {
             }
         }
 
+        /**
+         * Stops the standing connection.
+         *
+         * [stopForeground] is not redundant with the service's own `onDestroy`: the
+         * platform's foreground-service deadline starts when the stop is *requested*, and
+         * a service that is busy in a coroutine may not reach `onDestroy` in time. Asking
+         * the platform to drop the state here — from the caller's thread, immediately —
+         * is what makes the deadline comfortably met instead of marginally met.
+         *
+         * The intent carries `ACTION_STOP` so a service that is somehow still starting
+         * can see why it was asked to go, rather than being torn down mid-`onCreate`.
+         */
         fun stop(context: Context) {
-            runCatching { context.stopService(Intent(context, DshConnectionService::class.java)) }
+            runCatching {
+                context.stopService(
+                    Intent(context, DshConnectionService::class.java)
+                        .setAction(ACTION_STOP),
+                )
+            }
         }
+
+        /** The action [stop] sends; see its note. */
+        const val ACTION_STOP = "uk.xa0.dsh.action.STOP_CONNECTION"
     }
 }
 

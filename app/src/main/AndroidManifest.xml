@@ -21,7 +21,36 @@
          event stream open with no Activity, which is what makes an agent's
          approval or question reach a pocketed phone. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!--
+      remoteMessaging, not dataSync.
+
+      ## The crash this fixes
+
+      Recorded on the device, at a cold start, on the main thread:
+
+        RemoteServiceException$ForegroundServiceDidNotStopInTimeException:
+          A foreground service of type dataSync did not stop within its timeout
+
+      That is Android 15's foreground-service *time limit* landing on this app, not a
+      rendering fault. AOSP states it plainly (ActiveServices.java):
+
+        @EnabledSince(targetSdkVersion = VERSION_CODES.VANILLA_ICE_CREAM)
+        static final long FGS_INTRODUCE_TIME_LIMITS = 317799821L;
+        // "Mapping of uid to {fgs_type, fgs_info} for time limited fgs types such as
+        //  dataSync and mediaProcessing."
+
+      dataSync is one of the limited types: after its accumulated budget the system calls
+      Service#onTimeout and then, if the service is still up a few seconds later, *kills
+      the app*. With targetSdk 37 the gate is on, so this build was on a countdown from
+      the first launch — which is why it died "at start-up" and why nothing about the UI
+      changed the outcome.
+
+      The app is not syncing data. It is holding an event stream open so an agent's
+      approval or question reaches the phone — which is exactly what remoteMessaging is
+      for, and remoteMessaging is **not** a time-limited type. The permission below is
+      what that type requires.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
@@ -67,7 +96,7 @@
         <service
             android:name=".DshConnectionService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="remoteMessaging" />
 
         <!--
           The homescreen widget. `exported="true"` because the platform requires the

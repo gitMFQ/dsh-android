@@ -107,6 +107,132 @@ fun glassBarSupported(): Boolean =
  */
 val LocalGlassEnabled = compositionLocalOf { true }
 
+/**
+ * Whether the floating panes may draw their **lift** — the `dropShadow` stack.
+ *
+ * ## Why this is not the same switch as [LocalGlassEnabled]
+ *
+ * The two answer different questions, and the difference was measured rather than
+ * reasoned about: folding the shadow into [LocalGlassEnabled] changed **twelve** recorded
+ * baselines, because every screenshot fixture passes `LocalGlassEnabled = false` to mean
+ * "no GPU pipeline here" — and the shadow is drawn by Compose in software, so it had
+ * always survived that flag. The baselines were right; the flag was being asked a
+ * question it does not answer.
+ *
+ * So: [LocalGlassEnabled] is the *material* (backdrop, blur, lens, specular rim), and
+ * this is the *lift*. A device that cannot sample a backdrop still gets its shadows —
+ * that is the flat and translucent tiers, and they have always looked that way. A reader
+ * who turns the material off to find a render crash gets both off, because a bisect that
+ * left half the RenderNodes in place would exclude nothing.
+ *
+ * Defaults to on, and the only caller that ever says otherwise is the app's own setting.
+ */
+val LocalGlassLiftEnabled = compositionLocalOf { true }
+
+/**
+ * Whether the panes may draw their **AGSL runtime shaders** — the lens and the specular rim.
+ *
+ * ## Why this is a third flag
+ *
+ * Because the two shader call sites are the only place this app hands a driver a compiled
+ * fragment shader to run against a recorded layer, and that is a different class of request
+ * from "blur this". A device can blur happily and still die the moment a `RuntimeShader`
+ * is bound — the crash on the test handset was a SIGSEGV on the RenderThread with nothing
+ * in the Java stack, which is what a driver fault looks like from up here.
+ *
+ * So the material has three independently switchable layers, and the settings page exposes
+ * them as one ordered choice:
+ *
+ *  - backdrop + blur            → [LocalGlassEnabled]
+ *  - AGSL lens and rim          → this local
+ *  - the `dropShadow` lift      → [LocalGlassLiftEnabled]
+ *
+ * A reader whose app dies on the full material can step down one layer at a time and the
+ * answer says which layer to fix. Defaults to on: a device that has never crashed should
+ * never see the difference.
+ */
+val LocalGlassShaderEnabled = compositionLocalOf { true }
+
+/**
+ * Whether the **panes** may draw the material — the to-dos card, the goal bar, the
+ * composer's accessories, the queue dock, the file previews.
+ *
+ * ## Why the panes are separable from the bar
+ *
+ * Because they are different code paths with different history. The bar has worn the
+ * material since 3.2 and has never crashed; `liquidPane` was adopted by the transcript's
+ * cards later, and the report from the device is specific: *adding the material to the
+ * to-dos card is what started the crashes*. That is a hypothesis about a component, and
+ * the only way to test it is to keep the bar and take the panes away.
+ *
+ * With this local off, the bar keeps its blur, its lens and its rim, and every pane falls
+ * back to [glassSurface] — the flat fill and hairline it wore before it had a material. A
+ * device that survives this and dies with the panes on has named the culprit; one that
+ * dies either way has exonerated it.
+ *
+ * Defaults to on. Only [uk.xa0.dsh.data.LiquidGlassLevel.BAR] turns it off.
+ */
+val LocalGlassPaneEnabled = compositionLocalOf { true }
+
+/**
+ * A backdrop for a **pane**, or null when panes may not paint the material.
+ *
+ * ## Why panes get their own backdrop instead of the bar's
+ *
+ * The bar's backdrop is *recorded from* the pager — `glassBarLayer(glassBackdrop)` on the
+ * pager's modifier — and *sampled by* the bar. A pane that shares that same handle is
+ * therefore sampling a layer that is still being recorded, from inside the subtree being
+ * recorded. On the test handset that is a `SIGSEGV (SEGV_MAPERR)` on the RenderThread a few
+ * seconds after the transcript renders, which no Java diagnostic can see.
+ *
+ * The evidence is the level split, measured: with the bar keeping the full material and the
+ * panes on the flat tier the app runs; put the panes back on the bar's backdrop and it dies.
+ *
+ * So a pane samples its **own** recorded layer, exactly as the bar's own tab strip already
+ * does (`tabsBackdrop` in `FloatingBottomBarLiquid`). That is a second recording per pane
+ * group, which costs some GPU work — but it is a correct graph: nothing samples a layer it
+ * is inside.
+ *
+ * The layer is remembered per appearance and per level, like the bar's, so it is rebuilt
+ * when the palette changes and never survives a level change.
+ */
+@Composable
+fun rememberGlassPaneBackdrop(): GlassBarBackdrop? {
+    if (!LocalGlassEnabled.current || !LocalGlassPaneEnabled.current) return null
+    if (!glassBarSupported()) return null
+    val surfaceColor = DshTheme.colors.bgBase
+    val layer = rememberLayerBackdrop {
+        drawRect(surfaceColor)
+        drawContent()
+    }
+    return remember(layer) { GlassBarBackdrop(layer) }
+}
+
+/**
+ * Marks the subtree the **panes** sample.
+ *
+ * ## Why the panes need their own recording, and why sharing the bar's was wrong
+ *
+ * The bar's layer is recorded from the pager. A pane that samples it is sampling a layer
+ * whose recording subtree it is *not* part of — which is fine in principle, and was the
+ * shape before, but it means the pane's own background (the transcript rows behind it) is
+ * the only thing it can ever refract. That is what the bar wants: it sits over the page.
+ *
+ * A pane sits *in* the composer stack, over the transcript's last rows. Sampling the bar's
+ * pager layer gives it the transcript, which is right; but the pager's layer is recorded
+ * once and shared by every pane plus the bar, and miuix's `DrawBackdropNode` keeps its own
+ * GraphicsLayers per node. Several nodes sampling one recorded layer while the layer is
+ * being re-recorded is the crash this whole investigation is about.
+ *
+ * So a pane records from its **own** sibling subtree — the same trick the bar's tab strip
+ * uses (`tabsBackdrop`), and the shape `8ee8983` arrived at from the other direction when
+ * it moved the To-dos card out of the pager.
+ *
+ * A no-op when [backdrop] is null, so the caller writes one line on every device.
+ */
+fun Modifier.glassPaneLayer(backdrop: GlassBarBackdrop?): Modifier =
+    if (backdrop == null) this else this.layerBackdrop(backdrop.layer)
+
 @Composable
 fun rememberGlassBarBackdrop(enabled: Boolean = true): GlassBarBackdrop? {
     if (!enabled || !LocalGlassEnabled.current || !glassBarSupported()) return null

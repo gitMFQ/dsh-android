@@ -499,6 +499,47 @@ private fun TerminalSurface(
     // focused through the View API instead.
     LaunchedEffect(editor) { editor?.showKeyboard() }
 
+    // Give the focus up *before* this page is torn down.
+    //
+    // ## The crash this prevents
+    //
+    // Measured on the device, twice, with a full Java stack:
+    //
+    //   ViewGroup.removeViewInternal -> View.rootViewRequestFocus
+    //     -> AndroidComposeView.requestFocus -> FocusOwnerImpl.focusSearch
+    //     -> searchBeyondBounds -> LazyLayoutBeyondBoundsProviderModifierNode.layout
+    //     -> remeasureSync -> MeasurePassDelegate.remeasure -> requireOwner
+    //     -> IllegalStateException: LayoutNode should be attached to an owner
+    //
+    // Read in order, that is: the pager removes the Shell page, the 1dp editor inside
+    // its `AndroidView` is the focused view, so the platform tries to hand the focus to
+    // somebody else; Compose's two-dimensional focus search runs *past the viewport*
+    // because the nearest candidate is on another page; and that forced a synchronous
+    // remeasure of pager children that were already detaching. The exception is the
+    // symptom — the cause is that a dying page was still holding the focus.
+    //
+    // `clearFocus` on the way out makes the platform find no focused view to replace, so
+    // the whole chain above never starts. The IME is dismissed explicitly too: a hidden
+    // 1dp view that goes away while its keyboard is up leaves the keyboard attached to a
+    // window with no editor, which is the "keyboard stays after leaving Shell" defect
+    // waiting to be reported.
+    //
+    // `DisposableEffect` and not `LaunchedEffect`: disposal is the moment that matters,
+    // and a coroutine would be cancelled by it rather than run.
+    androidx.compose.runtime.DisposableEffect(editor) {
+        val view = editor
+        onDispose {
+            view?.let { dying ->
+                runCatching { dying.clearFocus() }
+                runCatching {
+                    val imm = dying.context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                        as? android.view.inputmethod.InputMethodManager
+                    imm?.hideSoftInputFromWindow(dying.windowToken, 0)
+                }
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         BoxWithConstraints(
             Modifier

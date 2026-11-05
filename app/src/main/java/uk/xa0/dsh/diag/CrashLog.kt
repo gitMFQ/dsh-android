@@ -72,6 +72,10 @@ object CrashLog {
     @Volatile
     private var dir: File? = null
 
+    /** A second, externally readable copy; see [install]. Null when there is none. */
+    @Volatile
+    private var mirrorDir: File? = null
+
     /**
      * Install the handler, and point it at [base].
      *
@@ -89,10 +93,19 @@ object CrashLog {
      * A no-op without a usable directory: a process that cannot write a report should not
      * pretend it can.
      */
-    fun install(base: File) {
+    fun install(base: File, mirror: File? = null) {
         val d = File(base, DIR)
         if (!d.exists() && !d.mkdirs()) return
         dir = d
+        // Where a copy goes so the report can be read **without the app running**.
+        //
+        // This is the answer to "it closes before I can open the Diagnostics page": the
+        // file lands in external app-specific storage, which a file manager or a shell can
+        // reach, and which needs no permission on any API this app supports. Null is the
+        // honest "no readable place", and then the app-side page is the only route.
+        mirrorDir = mirror?.let { target ->
+            File(target, DIR).also { if (!it.exists()) it.mkdirs() }
+        }
         if (!installed.compareAndSet(false, true)) return
 
         val previous = Thread.getDefaultUncaughtExceptionHandler()
@@ -168,6 +181,10 @@ object CrashLog {
             if (text.length > MAX_BYTES) text.take(MAX_BYTES) + "\n… truncated\n" else text
         }
         File(dir, name).writeText(body)
+        // The copy is written inside the same runCatching the caller already wraps this
+        // in, so a mirror that cannot be written (storage full, a scoped-storage OEM)
+        // cannot cost the primary report. Order matters: primary first, always.
+        mirrorDir?.let { target -> runCatching { File(target, name).writeText(body) } }
         Log.e(TAG, "recorded " + name + ": " + error.javaClass.name + ": " + (error.message ?: ""))
         prune(dir)
     }

@@ -20,11 +20,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import uk.xa0.dsh.data.LiquidGlassLevel
+import uk.xa0.dsh.diag.BootBeacon
+import uk.xa0.dsh.diag.LaunchGuard
 import uk.xa0.dsh.model.StartupStep
 import uk.xa0.dsh.ui.BackGate
 import uk.xa0.dsh.ui.ChatScreen
 import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
+import uk.xa0.dsh.ui.glass.LocalGlassEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassLiftEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassPaneEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassShaderEnabled
 import uk.xa0.dsh.ui.markdown.LocalImageBytes
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.SystemBars
@@ -59,16 +66,53 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // "This process got as far as a first frame."
+        //
+        // The launch guard needs exactly one fact it cannot get from the platform: whether
+        // a death happened *before* the app ever became usable, or after. An exit newer
+        // than this marker is the first kind, and two of those in a row is what turns the
+        // liquid glass off. See uk.xa0.dsh.diag.LaunchGuard.
+        //
+        // Here rather than in composition: the marker must be written once per process,
+        // and it must be written before the first frame can crash, not after it.
+        BootBeacon.mark("activity.onCreate: begin")
+        // "This launch became usable" is **not** onCreate.
+        //
+        // It used to be deleted here, and that is why the guard never counted anything: the
+        // crash happens during the first rasterisation of the chat screen, which is *after*
+        // onCreate has returned and after composition has finished — so the marker was
+        // always already gone by the time the process died. The guard kept seeing clean
+        // starts, and its log said "no change" on every launch.
+        //
+        // The honest moment is the first *drawn* frame. `reportFullyDrawn` is too late
+        // (it waits for everything), so this hooks the view's first pre-draw instead: it
+        // fires when the frame is about to be rendered, which is exactly the boundary the
+        // crash sits on.
+        window.decorView.viewTreeObserver.addOnPreDrawListener(
+            object : android.view.ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
+                    LaunchGuard.markStarted(this@MainActivity)
+                    BootBeacon.mark("first frame: drawn")
+                    return true
+                }
+            },
+        )
         enableEdgeToEdge()
+        BootBeacon.mark("activity: edge to edge")
         consume(intent)
         maybeAskForNotifications()
         reserveLeftEdgeForDrawer()
         paintWindowForStoredAppearance()
         paintSystemBarsForStoredAppearance()
 
+        BootBeacon.mark("activity: setContent")
         setContent {
+            BootBeacon.mark("composition: begin")
             val vm: DshViewModel = viewModel()
+            BootBeacon.mark("composition: view model")
             val ui by vm.ui.collectAsStateWithLifecycle()
+            BootBeacon.mark("composition: state collected")
 
             // The window behind Compose is painted once above and again here, so an
             // appearance change — or the system flipping light/dark under "follow the
@@ -169,7 +213,31 @@ class MainActivity : ComponentActivity() {
             // that can render one — the transcript, reasoning, tool output, the
             // trajectory. `vm::markdownImageBytes` is stable, so this is not a new
             // fetcher per recomposition.
-            CompositionLocalProvider(LocalImageBytes provides vm::markdownImageBytes) {
+            //
+            // Two providers, and the glass one is alongside it on purpose.
+            //
+            // `LocalGlassEnabled` is the app-wide answer to "may this device paint the
+            // liquid material", and it is provided *once*, above every screen, so no
+            // surface has to be told individually and none can be missed. It is also
+            // what the screenshot baselines already pass `false` to — see
+            // `ScreenBaselineTest` — which is why turning it off here is known to draw a
+            // complete, correct app rather than a broken one.
+            CompositionLocalProvider(
+                LocalImageBytes provides vm::markdownImageBytes,
+                // The material's three layers, from the one stored level.
+                //
+                // They are separate locals because they are separate GPU mechanisms and
+                // the crash on the test handset was a driver fault: "the glass crashes"
+                // can only be turned into "the *shader* crashes" by switching them
+                // independently. See LiquidGlassLevel for the bisect, and each local for
+                // why it is not folded into its neighbour.
+                LocalGlassEnabled provides LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel),
+                LocalGlassShaderEnabled provides LiquidGlassLevel.paintsShader(ui.liquidGlassLevel),
+                LocalGlassLiftEnabled provides LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel),
+                // The panes as a group, so the device's own hypothesis — "the to-dos card
+                // started this" — can be tested without taking the bar's material away too.
+                LocalGlassPaneEnabled provides LiquidGlassLevel.paintsPanes(ui.liquidGlassLevel),
+            ) {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // Composed before the screen so the screen's own Back handlers — the
                 // drawer, the sheets, the Files panel, a non-Chat view — are asked
@@ -182,6 +250,10 @@ class MainActivity : ComponentActivity() {
                         .fillMaxSize()
                         .background(DshTheme.colors.bgBase),
                 ) {
+                    // The phase is the single most useful fact: a process that dies
+                    // before this line is a start-up fault, and one that dies after it
+                    // is a screen. Recorded once per phase change, not per frame.
+                    BootBeacon.mark("composition: phase=" + ui.phase)
                     when (ui.phase) {
                         AppPhase.LOADING -> StartupScreen(
                             step = ui.startupStep ?: StartupStep.FINDING_HOST,
@@ -206,7 +278,11 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        AppPhase.READY -> ChatScreen(vm)
+                        AppPhase.READY -> {
+                            BootBeacon.mark("composition: chat screen")
+                            ChatScreen(vm)
+                            BootBeacon.mark("composition: chat screen returned")
+                        }
                     }
                 }
             }

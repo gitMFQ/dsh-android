@@ -26,8 +26,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import uk.xa0.dsh.diag.BootBeacon
 import uk.xa0.dsh.diag.CrashLog
 import uk.xa0.dsh.diag.CrashReport
+import uk.xa0.dsh.diag.LaunchGuard
+import uk.xa0.dsh.diag.NativeCrashLog
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.list.SegmentedColumn
@@ -66,23 +69,109 @@ import uk.xa0.dsh.ui.theme.DshType
 internal fun CrashLogSettingCards() {
     // Re-read on every composition rather than caching in a view model: the list only
     // changes when the process died and restarted, which is exactly a fresh composition.
-    var reports by remember { mutableStateOf(CrashLog.reports()) }
+    //
+    // Both kinds in one list, newest first. They are two files in one directory because
+    // they answer one question — "what killed the process" — and a reader who has to know
+    // which of the two halves to open first has been given a filing system instead of an
+    // answer. The names sort together because both prefixes are followed by a timestamp.
+    var reports by remember { mutableStateOf(allCrashReports()) }
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    val colors = DshTheme.colors
+
+    // The boot record first: it is the one thing that survives a crash with no report.
+    //
+    // A native SIGSEGV on the render thread writes no exception, leaves no tombstone on
+    // this ROM, and lands before the UI exists — so this list can be empty while the app
+    // is dying every launch. The beacon's last line is what turns "it closes" into "it
+    // closes at step N", and it is also on disk at
+    // Android/data/<pkg>/files/diag/boot.log for a reader whose app will not stay open.
+    val boot = remember { BootBeacon.read() }
+    if (boot.isNotEmpty()) {
+        SettingNote(
+            "Last launch, step by step. The last line is the last thing that succeeded — " +
+                "if the app closed, the step after it is the one that killed it.",
+        )
+        SegmentedColumn(
+            content = listOf(
+                {
+                    SegmentedListItem(
+                        headline = {
+                            Text(
+                                text = boot.trimEnd(),
+                                style = DshType.micro.copy(fontFamily = FontFamily.Monospace),
+                                color = colors.labelSecondary,
+                            )
+                        },
+                    )
+                },
+            ),
+        )
+    }
 
     if (reports.isEmpty()) {
         SettingNote("No crashes recorded on this device.")
         SettingNote(
             "Reports are written only in debug builds. Reproduce the crash, reopen the " +
-                "app, and the report appears here.",
+                "app, and the report appears here. Native crashes (a SIGSEGV on the " +
+                "render thread, for instance) are read back from the system on the next " +
+                "launch, so they appear one start later than a Java crash.",
         )
         return
     }
 
+    // The guard's own decision, said out loud.
+    //
+    // A reader whose material disappeared would otherwise be looking at an app that got
+    // worse for no stated reason. This is the sentence that turns it into a fact they can
+    // act on — and the row below is how they undo it once the cause is gone.
+    val degradedAt = LaunchGuard.degradedAt(context)
+    if (degradedAt > 0L) {
+        val forced = LaunchGuard.degradedLevel(context)
+        SettingNote(
+            "The material was stepped down automatically to [" + forced + "]: two " +
+                "launches in a row ended in a crash before the app finished starting. " +
+                "Each such streak drops it one level, so if this build still crashes the " +
+                "next launch will drop it again. Pick a level in This device to stop the " +
+                "stepping down.",
+        )
+        SegmentedColumn(
+            content = listOf(
+                {
+                    SegmentedListItem(
+                        onClick = {
+                            LaunchGuard.reset(context)
+                            reports = allCrashReports()
+                        },
+                        leading = {
+                            Icon(
+                                DshIconVectors.RefreshOutline,
+                                contentDescription = null,
+                                tint = colors.accent,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        headline = {
+                            Text("Try the full material again", style = DshType.rowTitle)
+                        },
+                        supporting = {
+                            Text(
+                                text = "Clears the automatic fallback and returns to liquid " +
+                                    "glass on the next launch.",
+                                style = DshType.rowSummary,
+                                color = colors.labelTertiary,
+                            )
+                        },
+                    )
+                },
+            ),
+        )
+    }
+
     SettingNote(
-        "Crashes recorded since this install. Tap one to read it; Share sends the whole " +
-            "report to another app, Copy puts it on the clipboard.",
+        "Crashes recorded since this install, newest first. Tap one to read it; Share " +
+            "sends the whole report to another app, Copy puts it on the clipboard.",
     )
 
     val rows: List<@Composable () -> Unit> = reports.map { report ->
@@ -108,9 +197,9 @@ internal fun CrashLogSettingCards() {
                     )
                 },
                 onDelete = {
-                    CrashLog.delete(report)
+                    deleteCrashReport(report)
                     if (open == report.file.name) open = null
-                    reports = CrashLog.reports()
+                    reports = allCrashReports()
                 },
             )
         }
@@ -119,8 +208,34 @@ internal fun CrashLogSettingCards() {
 
     ClearRow {
         CrashLog.clear()
+        NativeCrashLog.clear()
         open = null
-        reports = CrashLog.reports()
+        reports = allCrashReports()
+    }
+}
+
+/**
+ * Both kinds of report, in one list.
+ *
+ * Sorted by file name rather than by the header's time, because both prefixes lead with a
+ * sortable timestamp and the name is what the two writers already guarantee; re-parsing a
+ * header to sort would be a second, weaker implementation of the same fact.
+ */
+private fun allCrashReports(): List<CrashReport> =
+    (CrashLog.reports() + NativeCrashLog.reports()).sortedByDescending { it.file.name }
+
+/**
+ * Delete one report, wherever it came from.
+ *
+ * The file's own prefix says which writer owns it, and neither delete needs the other, so
+ * this is a dispatch rather than a guess: a name that starts with "native-" belongs to
+ * [NativeCrashLog] and everything else to [CrashLog].
+ */
+private fun deleteCrashReport(report: CrashReport) {
+    if (report.file.name.startsWith("native-")) {
+        NativeCrashLog.delete(report)
+    } else {
+        CrashLog.delete(report)
     }
 }
 

@@ -80,13 +80,29 @@ class InteractiveHighlight(
      * suppression to the class is the only shape that is both honest and legal.
      */
     private val shader: RuntimeShader? by lazy(LazyThreadSafetyMode.NONE) {
-        if (!canRunShader()) null else RuntimeShader(shaderSource)
+        if (!canRunShader()) null else runCatching { RuntimeShader(shaderSource) }.getOrNull()
     }
+
+    /**
+     * Whether the radial shader may run.
+     *
+     * The last shader that was not gated, and easy to miss because it only runs while a tab
+     * is *pressed* — but it is a `RuntimeShader` compiled from AGSL and bound on the render
+     * thread, which is exactly the class of call the levels exist to eliminate. With it
+     * still live, "works at off, crashes at blur" could not distinguish the backdrop from
+     * the shader, and that ambiguity is what made two rounds of bisection inconclusive.
+     *
+     * A plain `var` set from composition rather than a read inside the draw lambda:
+     * `drawWithContent` is not a composable scope, so a `compositionLocalOf.current` there
+     * is a compile error — and a static local would be worse, since the level can change
+     * under a running composition.
+     */
+    var shaderEnabled: Boolean = true
 
     val modifier: Modifier =
         Modifier.drawWithContent {
             val progress = pressProgressAnimation.value
-            if (progress > 0f) {
+            if (progress > 0f && shaderEnabled) {
                 // The wash is always drawn: it is what makes the glow read as *press* even
                 // where the radial falloff is unavailable.
                 drawRect(

@@ -109,6 +109,51 @@ data class DshConfig(
      */
     val chatViewsEnabled: Boolean = true,
     /**
+     * Whether the floating chrome may paint its liquid glass — the backdrop blur, the
+     * lens refraction, the AGSL specular rim and the two-layer shadow.
+     *
+     * ## Why this is a setting and not a constant
+     *
+     * Because the alternative is what happened: a build that died on launch with
+     * `Fatal signal 11 (SIGSEGV)` on the RenderThread, no tombstone in dropbox, and no way
+     * to tell whether the fault was the driver or the material this app feeds it. One
+     * switch turns the whole GPU-heavy path into the flat tier — the same design, the same
+     * layout, the same motion — so a reader can answer "does it still crash with the glass
+     * off" in ten seconds instead of a debugger session.
+     *
+     * It is also a real preference for a real person: a phone whose GPU dislikes
+     * `RenderEffect` should be able to keep a working app rather than a beautiful one that
+     * closes. That is why it is on by default and stored, rather than a debug-only flag.
+     *
+     * Default `true`: turning a material off by default would be a silent redesign.
+     */
+    val liquidGlassEnabled: Boolean = true,
+    /**
+     * How much of the liquid material may run, when [liquidGlassEnabled] allows any.
+     *
+     * ## Why a level and not a switch
+     *
+     * Because "the glass crashes" was as far as one bit could get. The material is four
+     * separate GPU mechanisms stacked on one pane — a recorded backdrop layer, a Gaussian
+     * blur, an AGSL runtime shader that refracts, and an AGSL specular rim — and a driver
+     * can be fine with the first two and die on the third. Turning the whole thing off
+     * proves the material is at fault; it does not say which half, and the half is what a
+     * fix has to change.
+     *
+     * So the levels are a *bisect*, not a taste menu. Each one is a strictly smaller set of
+     * GPU features than the one before:
+     *
+     *  - [LIQUID]: everything. The intended look.
+     *  - [BLUR]: backdrop + blur, **no runtime shader** — no lens, no specular rim. The
+     *    lens is the single most exotic thing this app asks a driver to do, so a device
+     *    that survives BLUR and dies on LIQUID has named its culprit.
+     *  - [OFF]: no backdrop recording, no blur, no shader. The flat tier.
+     *
+     * A device that dies on [BLUR] too is not a shader problem, and one that dies with the
+     * material [OFF] is not this material's problem at all.
+     */
+    val liquidGlassLevel: String = LiquidGlassLevel.LIQUID,
+    /**
      * The language this app draws in, as a BCP-47 tag, or blank for "follow the device".
      *
      * Client-local, and deliberately so: the host has a locale of its own for the web
@@ -207,6 +252,89 @@ data class DshConfig(
  * unknown id falls back to [SYSTEM] rather than throwing, because a stored value
  * this build cannot read must not be able to stop the app from starting.
  */
+/**
+ * How much of the liquid material may run — see [DshConfig.liquidGlassLevel].
+ *
+ * Stored as strings for the same reason [ThemeMode] is: a value written by a build this
+ * one does not know must degrade to something that draws, not throw. [parse] is total.
+ *
+ * The three levels are a bisect of the GPU work, ordered by how much of it they allow:
+ * backdrop recording, Gaussian blur, then the AGSL runtime shaders (lens and specular
+ * rim). Each level is a strict subset of the one above it, which is what makes a report
+ * of "it works on BLUR" mean something specific.
+ */
+object LiquidGlassLevel {
+    /** Everything: backdrop, blur, lens refraction, specular rim. */
+    const val LIQUID = "liquid"
+
+    /**
+     * Backdrop and blur, no *lens* and no *specular rim*.
+     *
+     * ## What this level is not
+     *
+     * It is **not** "no runtime shader", which is what it was documented as and what made
+     * two rounds of bisection inconclusive. Measured in miuix-blur 0.9.4's own bytecode,
+     * `blur()` begins with `isRuntimeShaderSupported()` and then builds a compiled AGSL
+     * blur; `colorControls` (vibrancy) does the same. So at this level a runtime shader is
+     * still running — two of them — and a device that dies here has not thereby exonerated
+     * the shader path.
+     *
+     * What it *does* remove is the lens (a shader that resamples the recorded layer with a
+     * refraction offset) and the specular rim. Those are the expensive, exotic ones; the
+     * blur shader is the one miuix ships for every blur on every device.
+     *
+     * The honest conclusion from a device that works at [OFF] and dies here: **the backdrop
+     * pipeline is at fault** — the layer recording, the AGSL blur, or the colour controls —
+     * and not the lens or the rim.
+     */
+    const val BLUR = "blur"
+
+    /**
+     * The **bar only**: every pane falls back to the flat fill and hairline.
+     *
+     * ## Why this level exists
+     *
+     * The report from the device is not "the material crashes" but "**the to-dos card
+     * started crashing when it was given the material**" — a claim about a *component*, not
+     * about a GPU feature. The three feature-based levels cannot test it, because the bar
+     * and the panes share every one of them.
+     *
+     * This level keeps the bar exactly as it is (backdrop, blur, lens, rim, lift) and takes
+     * the panes back to the flat tier they wore before 3.5. If the app survives here and
+     * dies one step up, the panes are the answer; if it dies here too, the bar is, and that
+     * is a different investigation.
+     */
+    const val BAR = "bar"
+
+    /** No material at all: the flat tier. Same layout, same motion, no GPU pipeline. */
+    const val OFF = "off"
+
+    /** Every level, most capable first — the order the settings row lists them in. */
+    val all = listOf(LIQUID, BLUR, BAR, OFF)
+
+    /** Total, like [ThemeMode.parse]: an unreadable value is the full material. */
+    fun parse(value: String?): String = if (value in all) value!! else LIQUID
+
+    /** Whether the backdrop and the blur may be drawn at all. */
+    fun paintsMaterial(level: String): Boolean = level != OFF
+
+    /**
+     * Whether the *panes* may draw the material.
+     *
+     * True at every level except [BAR]: that level is precisely "the bar keeps it, the
+     * panes do not".
+     */
+    fun paintsPanes(level: String): Boolean = level != OFF && level != BAR
+
+    /**
+     * Whether the AGSL runtime shaders may be drawn.
+     *
+     * False for [BLUR] and [OFF]: the lens and the specular rim are the two call sites that
+     * build a `RuntimeShader`, and they are gated on this rather than on the material.
+     */
+    fun paintsShader(level: String): Boolean = level == LIQUID
+}
+
 object ThemeMode {
     const val SYSTEM = "system"
     const val DARK = "dark"

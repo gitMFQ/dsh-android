@@ -37,6 +37,7 @@ import uk.xa0.dsh.AgentPresetOption
 import uk.xa0.dsh.ModelOption
 import uk.xa0.dsh.R
 import uk.xa0.dsh.data.BusyEnter
+import uk.xa0.dsh.data.LiquidGlassLevel
 import uk.xa0.dsh.data.ThemeMode
 import uk.xa0.dsh.model.GeneralSettings
 import uk.xa0.dsh.model.SessionItem
@@ -150,6 +151,12 @@ internal fun LanguageSettingCard(state: MeSettingsState, actions: MeSettingsActi
 }
 @Composable
 internal fun LocalSettingCard(state: MeSettingsState, actions: MeSettingsActions) {
+    // Resolved here, not inside the row lambda: content is a List of composable lambdas,
+    // so a stringResource called while building an *argument* to the row would be outside
+    // any composable scope. The appearance card gets away with the same shape because it
+    // calls appearanceChoices() before the list is built — this follows it.
+    val levelChoices = liquidGlassLevelChoices()
+    val levelIndex = LiquidGlassLevel.all.indexOf(state.liquidGlassLevel).coerceAtLeast(0)
     SegmentedColumn(
         title = stringResource(R.string.settings_local_title),
         content = listOf(
@@ -160,6 +167,26 @@ internal fun LocalSettingCard(state: MeSettingsState, actions: MeSettingsActions
                     onCheckedChange = actions.onChatViews,
                     icon = DshIconVectors.PlanOutline,
                     summary = stringResource(R.string.settings_local_chat_views_summary),
+                )
+            },
+            {
+                // The material's own row, and the reason it is a *setting* rather than a
+                // build flag: on a phone whose GPU dislikes RenderEffect the choice is
+                // between a beautiful app that closes and a plain one that works, and
+                // that is the reader's call to make, not ours.
+                //
+                // Three levels and not a switch, because "the glass crashes" cannot be
+                // acted on and "the runtime shader crashes" can. Blur keeps the look and
+                // drops the two AGSL shaders — see LiquidGlassLevel.
+                SegmentedDropdownItem(
+                    title = stringResource(R.string.settings_local_liquid_glass_title),
+                    summary = stringResource(R.string.settings_local_liquid_glass_summary),
+                    icon = DshIconVectors.PluginPinwheelOutline,
+                    items = levelChoices.map { it.label },
+                    selectedIndex = levelIndex,
+                    onItemSelected = { picked ->
+                        actions.onLiquidGlassLevel(levelChoices[picked].value)
+                    },
                 )
             },
         ),
@@ -925,6 +952,33 @@ private fun writerFor(
  * is kept because `MeSettingsPageTest` reads the names off this list, and a name is the
  * one thing that list still has to carry for that test to mean anything.
  */
+/** The material's three levels, in the order the row lists them. */
+internal val LIQUID_GLASS_CHOICES: List<SettingsChoice> = listOf(
+    SettingsChoice(LiquidGlassLevel.LIQUID, "Liquid glass"),
+    SettingsChoice(LiquidGlassLevel.BLUR, "Backdrop and blur"),
+    SettingsChoice(LiquidGlassLevel.BAR, "Bar only"),
+    SettingsChoice(LiquidGlassLevel.OFF, "Off"),
+)
+
+/**
+ * The level row's labels, resolved through resources.
+ *
+ * Same two-step as [appearanceChoices]: the value lookup is a pure list (so a test can
+ * assert an index without a context) and only the drawn text needs resources.
+ */
+@Composable
+internal fun liquidGlassLevelChoices(): List<SettingsChoice> = LIQUID_GLASS_CHOICES.map { choice ->
+    SettingsChoice(choice.value, stringResource(liquidGlassLevelLabel(choice.value)))
+}
+
+@StringRes
+private fun liquidGlassLevelLabel(level: String): Int = when (level) {
+    LiquidGlassLevel.BLUR -> R.string.settings_liquid_glass_blur
+    LiquidGlassLevel.BAR -> R.string.settings_liquid_glass_bar
+    LiquidGlassLevel.OFF -> R.string.settings_liquid_glass_off
+    else -> R.string.settings_liquid_glass_liquid
+}
+
 internal val APPEARANCE_CHOICES: List<SettingsChoice> = listOf(
     SettingsChoice(ThemeMode.LIGHT, "Light"),
     SettingsChoice(ThemeMode.DARK, "Dark"),
