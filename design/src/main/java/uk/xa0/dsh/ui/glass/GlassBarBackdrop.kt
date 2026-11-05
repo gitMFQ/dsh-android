@@ -175,6 +175,29 @@ val LocalGlassShaderEnabled = compositionLocalOf { true }
 val LocalGlassPaneEnabled = compositionLocalOf { true }
 
 /**
+ * The one recorded backdrop the whole window shares, or `null` when the flat material is
+ * in play.
+ *
+ * ## Why an ambient instead of re-threading the handle
+ *
+ * [rememberGlassBarBackdrop] is called **once**, at the composition root inside `DshTheme`,
+ * and published here. Every surface that wants the material — a pane in the transcript, a
+ * chip in the pill strip, a sheet in its own window — reads [current][androidx.compose.runtime.CompositionLocal.current]
+ * instead of growing a `backdrop:` parameter through every caller between it and the root.
+ *
+ * Sharing one handle is also the stable choice: the [glassBarLayer] that records it wraps
+ * the pager at the root, so a pane that samples this backdrop samples the *same* layer the
+ * bar does rather than a second one that would be re-recorded underneath it.
+ *
+ * Defaults to `null`. The screenshot fixtures do not provide it (they pin
+ * [LocalGlassEnabled] to `false` and never go through `MainActivity`), so every surface
+ * falls back to the flat branch and the recorded baselines stay byte-identical. That is the
+ * same `null` the old `rememberGlassBarBackdrop()` returned under that flag — nothing about
+ * the flat tier changed, only who owns the handle.
+ */
+val LocalGlassBarBackdrop = compositionLocalOf<GlassBarBackdrop?> { null }
+
+/**
  * A backdrop for a **pane**, or null when panes may not paint the material.
  *
  * ## Why panes get their own backdrop instead of the bar's

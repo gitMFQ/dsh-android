@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,7 +19,10 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshColors
+import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
 
@@ -67,8 +71,15 @@ fun WarningCard(
     action: (@Composable () -> Unit)? = null,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     Card(
-        modifier = modifier,
+        // Best-effort glass overlay: the Card paints its own opaque fill internally, so this only
+        // shows at LIQUID. Color.Transparent makes the flat branch return this unchanged.
+        modifier = modifier.liquidPane(
+            backdrop,
+            RoundedCornerShape(DshRadius.card),
+            flatFill = Color.Transparent,
+        ),
         onClick = onClick,
         showIndication = onClick != null,
         // Tilt is a "this is a thing you can do" gesture and reads as an invitation; a sink reads as

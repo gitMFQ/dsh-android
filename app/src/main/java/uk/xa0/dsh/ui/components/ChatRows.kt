@@ -101,6 +101,7 @@ import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.shortenToolPath
 import uk.xa0.dsh.ui.markdown.MarkdownText
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassLift
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -1755,13 +1756,13 @@ fun ApprovalCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val shape = RoundedCornerShape(20.dp)
     val tappable = answer is ApprovalAnswer.Waiting || answer is ApprovalAnswer.Unsent
     Column(
         modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(colors.inputMajor)
+            .liquidPane(backdrop, shape, flatFill = colors.inputMajor)
             .border(1.dp, colors.warn, shape),
     ) {
         Row(

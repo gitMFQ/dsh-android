@@ -4,9 +4,13 @@
 package uk.xa0.dsh.ui.overlay
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import top.yukonga.miuix.kmp.window.WindowBottomSheet
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -57,10 +61,15 @@ fun DshSheet(
     content: @Composable () -> Unit,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     WindowBottomSheet(
         show = true,
         onDismissRequest = onDismissRequest,
-        modifier = modifier.fillMaxWidth(),
+        // Best-effort glass overlay on the content root. The window is a separate composition, so
+        // the ambient is null there in practice; Color.Transparent keeps the flat branch unchanged.
+        modifier = modifier
+            .fillMaxWidth()
+            .liquidPane(backdrop, RoundedCornerShape(DshRadius.panel), flatFill = Color.Transparent),
         title = title,
         backgroundColor = colors.bgBase,
         // The shell's own panel radius, so a sheet and a card are the same family.

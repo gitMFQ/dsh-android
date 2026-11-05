@@ -100,6 +100,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -210,11 +211,11 @@ import uk.xa0.dsh.ui.composer.composerTriggers
 import uk.xa0.dsh.ui.composer.consumeTrigger
 import uk.xa0.dsh.ui.composer.replaceTrigger
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassBarLayer
 import uk.xa0.dsh.ui.glass.glassLift
 import uk.xa0.dsh.ui.glass.liquidBarPane
 import uk.xa0.dsh.ui.glass.liquidPane
-import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
 import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
@@ -681,11 +682,15 @@ internal fun ChatPanel(
     //
     // The handle is opaque on purpose: this file must not name a miuix-blur type, or the
     // rule in NOTICE.md that keeps those names inside `:design` would be broken by the
-    // one caller that is hardest to audit. Null means "this platform paints the flat
-    // material", and both ends of the wiring below turn that into a no-op — so the same
-    // two lines run on every device and the platform decides how much of them means
-    // anything. See `ui/glass/GlassBarBackdrop.kt` for the capability test.
-    val glassBackdrop = rememberGlassBarBackdrop()
+    // one caller that is hardest to audit. It is read from the ambient rather than made
+    // here: MainActivity owns the single recorded layer (inside DshTheme), so every pane
+    // below samples the same handle the pager records — including the ones in their own
+    // window. Null means "the flat material", and both ends of the wiring below turn that
+    // into a no-op — so the same lines run on every device and the platform decides how
+    // much of them means anything. Screenshot fixtures never provide the ambient, so they
+    // get null here too and stay byte-identical to the old baselines. See
+    // `ui/glass/GlassBarBackdrop.kt` for the capability test.
+    val glassBackdrop = LocalGlassBarBackdrop.current
     // A session switch returns to the conversation *and* to its transcript view, which is
     // what re-creating the old `rememberSaveable(ui.currentSessionId)` on the pager used
     // to do at both levels.
@@ -1968,7 +1973,12 @@ internal fun ChatPanel(
                         ExpandedProcessCollapseBar(
                             label = openLabel,
                             onCollapse = expandedProcess::collapseAll,
-                            backdrop = glassBackdrop,
+                            // Deliberately no backdrop: the reader left this bar out of the
+                            // liquid-glass rollout (the in-transcript collapse bar was an
+                            // explicit exclusion). A null backdrop keeps it on the flat
+                            // branch of liquidPane, which is what it wore before, while every
+                            // other pane lights up. Flat-tier pixels are unchanged either way.
+                            backdrop = null,
                             // Below the chrome, not at the top of the window: this bar has
                             // to be reachable, and a bar under the header is the one thing
                             // "收起栏应该一直在屏幕可操作区域内" rules out.
@@ -4103,10 +4113,14 @@ private fun HeroBody(
 @Composable
 private fun AgentPresetChip(label: String, onClick: () -> Unit) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     Row(
         Modifier
             .height(28.dp)
             .clip(RoundedCornerShape(DshRadius.thumb))
+            // Transparent in the flat tier (the flat branch returns `this`), a liquid
+            // pane at LIQUID: the chip sits in the pill strip over the transcript.
+            .liquidPane(backdrop, RoundedCornerShape(DshRadius.thumb), flatFill = Color.Transparent)
             .clickableNoRipple(onClick = onClick)
             .padding(horizontal = DshSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -4239,6 +4253,7 @@ private fun StatusCapsuleChip(
     onClick: (() -> Unit)? = null,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val tint = when (capsule.state) {
         CapsuleState.WAITING -> colors.warn
         CapsuleState.OFFLINE -> colors.error
@@ -4251,8 +4266,7 @@ private fun StatusCapsuleChip(
     }
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(DshRadius.pill))
-            .background(colors.bgLayer1)
+            .liquidPane(backdrop, RoundedCornerShape(DshRadius.pill), flatFill = colors.bgLayer1)
             .then(if (onClick != null) Modifier.clickableNoRipple(onClick = onClick) else Modifier)
             .semantics { contentDescription = capsule.label }
             .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xxs),
@@ -4310,6 +4324,7 @@ private fun StatusCapsuleChip(
 @Composable
 private fun ConnectionPill(label: String, modifier: Modifier = Modifier) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     Row(
         // The side inset lives here rather than at the three call sites: the pill is
         // centred, so without it a longer label ("Reconnecting to the host…") runs
@@ -4317,8 +4332,7 @@ private fun ConnectionPill(label: String, modifier: Modifier = Modifier) {
         // the clip insets the whole pill; after it, it would only shrink the fill.
         modifier
             .padding(horizontal = DshSpacing.xl)
-            .clip(RoundedCornerShape(DshRadius.pill))
-            .background(colors.tip)
+            .liquidPane(backdrop, RoundedCornerShape(DshRadius.pill), flatFill = colors.tip)
             .padding(horizontal = DshSpacing.md, vertical = DshSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {

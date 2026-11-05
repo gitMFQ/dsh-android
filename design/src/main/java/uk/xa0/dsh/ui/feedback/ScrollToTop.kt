@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -26,6 +27,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -38,6 +40,8 @@ import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 
@@ -184,6 +188,7 @@ fun ScrollToTopButton(
     contentDescription: String = "Scroll to top",
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val coroutineScope = rememberCoroutineScope()
     // derivedStateOf, not a plain read: firstVisibleItemIndex changes on every scroll frame, and a
     // direct read would recompose this composable — and anything it is next to — for the whole
@@ -205,7 +210,11 @@ fun ScrollToTopButton(
                 }
             },
             containerColor = colors.bgLayer2,
-            modifier = Modifier.semantics { this.contentDescription = contentDescription },
+            // Best-effort glass overlay: the FAB paints its own opaque fill internally, so this only
+            // shows at LIQUID. Color.Transparent makes the flat branch return this unchanged.
+            modifier = Modifier
+                .liquidPane(backdrop, CircleShape, flatFill = Color.Transparent)
+                .semantics { this.contentDescription = contentDescription },
         ) {
             Row(
                 modifier = Modifier.padding(DshSpacing.lg),

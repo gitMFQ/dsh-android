@@ -33,6 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.ui.components.DshIconVectors
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -97,10 +99,10 @@ internal fun ViewPill(
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(DshRadius.pill))
-            .background(colors.bgLayer1)
+            .liquidPane(backdrop, RoundedCornerShape(DshRadius.pill), flatFill = colors.bgLayer1)
             .padding(DshSpacing.xxs),
         horizontalArrangement = Arrangement.spacedBy(DshSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,

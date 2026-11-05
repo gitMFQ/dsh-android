@@ -1,6 +1,5 @@
 package uk.xa0.dsh.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +29,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -150,14 +151,14 @@ fun CommandMenu(
 ) {
     if (entries.isEmpty()) return
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val shape = RoundedCornerShape(DshRadius.card)
 
     Column(
         modifier
             .fillMaxWidth()
             .shadow(6.dp, shape)
-            .clip(shape)
-            .background(colors.menu)
+            .liquidPane(backdrop, shape, flatFill = colors.menu)
             .border(0.5.dp, colors.borderL1, shape)
             .heightIn(max = 300.dp)
             .verticalScroll(rememberScrollState())
@@ -245,14 +246,14 @@ fun ReferenceMenu(
 ) {
     if (entries.isEmpty()) return
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val shape = RoundedCornerShape(DshRadius.card)
     val files = entries.filter { it.kind != "session" }
     val sessions = entries.filter { it.kind == "session" }
     Column(
         modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(colors.menu)
+            .liquidPane(backdrop, shape, flatFill = colors.menu)
             .border(0.5.dp, colors.borderL1, shape)
             .heightIn(max = 260.dp)
             .verticalScroll(rememberScrollState())

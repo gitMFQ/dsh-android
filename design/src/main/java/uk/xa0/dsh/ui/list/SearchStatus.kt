@@ -4,15 +4,17 @@
 
 package uk.xa0.dsh.ui.list
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshTheme
 
 /**
@@ -89,11 +91,14 @@ data class SearchStatus(
         backgroundColor: Color = DshTheme.colors.bgBase,
         content: @Composable () -> Unit,
     ) {
+        val backdrop = LocalGlassBarBackdrop.current
         Box(modifier = modifier) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(backgroundColor),
+                    // RectangleShape: the original panel was an unclipped full-size rect, so
+                    // any rounded shape would shave flat-tier corners and break the baseline.
+                    .liquidPane(backdrop, RectangleShape, flatFill = backgroundColor),
             )
             Box(modifier = Modifier.graphicsLayer { alpha = if (visible) 1f else 0f }) { content() }
         }

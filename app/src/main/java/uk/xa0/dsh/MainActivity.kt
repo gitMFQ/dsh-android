@@ -28,10 +28,12 @@ import uk.xa0.dsh.ui.BackGate
 import uk.xa0.dsh.ui.ChatScreen
 import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassLiftEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassPaneEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassShaderEnabled
+import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
 import uk.xa0.dsh.ui.markdown.LocalImageBytes
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.SystemBars
@@ -239,6 +241,16 @@ class MainActivity : ComponentActivity() {
                 LocalGlassPaneEnabled provides LiquidGlassLevel.paintsPanes(ui.liquidGlassLevel),
             ) {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
+                // The one recorded backdrop, owned by the composition root. Inside
+                // DshTheme because rememberGlassBarBackdrop() reads the theme's bgBase;
+                // publishing it here lets every pane, chip and sheet (including those in
+                // their own window) read the same handle through LocalGlassBarBackdrop
+                // instead of threading a parameter through every caller. Fixtures never
+                // go through this provider, so the ambient stays null and every surface
+                // falls back to the flat material — the screenshot contract is unchanged.
+                CompositionLocalProvider(
+                    LocalGlassBarBackdrop provides rememberGlassBarBackdrop(),
+                ) {
                 // Composed before the screen so the screen's own Back handlers — the
                 // drawer, the sheets, the Files panel, a non-Chat view — are asked
                 // first; what reaches the gate is the press with nothing to dismiss.
@@ -284,6 +296,7 @@ class MainActivity : ComponentActivity() {
                             BootBeacon.mark("composition: chat screen returned")
                         }
                     }
+                }
                 }
             }
             }

@@ -32,6 +32,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -57,6 +58,8 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.LocalDismissState
 import top.yukonga.miuix.kmp.window.WindowListPopup
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -107,6 +110,7 @@ fun SegmentedColumn(
 ) {
     if (content.isEmpty()) return
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     Column(modifier = modifier) {
         if (title.isNotEmpty()) {
             Text(
@@ -130,6 +134,9 @@ fun SegmentedColumn(
             // guess. Same 0.5dp/`borderL1` pair the old cards used.
             modifier = Modifier
                 .fillMaxWidth()
+                // The Card paints its own opaque fill internally, so the glass is a flat-safe
+                // best-effort overlay: flatFill = Transparent leaves the flat tier untouched.
+                .liquidPane(backdrop, RoundedCornerShape(DshRadius.card), flatFill = Color.Transparent)
                 .border(0.5.dp, colors.borderL1, RoundedCornerShape(DshRadius.card)),
             colors = CardDefaults.defaultColors(
                 color = colors.codeBlock,

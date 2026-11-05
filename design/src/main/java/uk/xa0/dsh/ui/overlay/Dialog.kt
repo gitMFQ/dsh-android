@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.MutableState
@@ -29,6 +30,7 @@ import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +47,9 @@ import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.window.WindowDialog
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
+import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import kotlin.coroutines.resume
@@ -381,13 +386,18 @@ fun DshDialog(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    val backdrop = LocalGlassBarBackdrop.current
     WindowDialog(
         show = show,
         // The dialog is a window-level surface, so the system bars are its business too: without
         // this a long body can slide under the status bar on a gesture-navigation phone.
-        modifier = modifier.windowInsetsPadding(
-            WindowInsets.systemBars.only(WindowInsetsSides.Top),
-        ),
+        // Best-effort glass overlay on the content root. The window is a separate composition, so
+        // the ambient is null there in practice; Color.Transparent keeps the flat branch unchanged.
+        modifier = modifier
+            .liquidPane(backdrop, RoundedCornerShape(DshRadius.panel), flatFill = Color.Transparent)
+            .windowInsetsPadding(
+                WindowInsets.systemBars.only(WindowInsetsSides.Top),
+            ),
         title = title?.takeIf { it.isNotEmpty() },
         onDismissRequest = onDismissRequest,
         content = content,
