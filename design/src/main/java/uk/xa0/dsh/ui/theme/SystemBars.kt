@@ -44,9 +44,8 @@ import androidx.core.view.WindowCompat
  * top edge so a row can scroll through the clock strip — so the bar shows the palette's
  * base surface with no extra drawing. What was missing was only the *icon* side,
  * which is why this class sets nothing but the two flags. On API 26–34 the same is
- * true of the status bar
- * (`enableEdgeToEdge` already makes it transparent); the navigation bar keeps a scrim
- * from `enableEdgeToEdge` itself.
+ * true of the status bar (`enableEdgeToEdge` already makes it transparent); the
+ * navigation bar keeps a scrim from `enableEdgeToEdge` itself.
  *
  * ## Why it lives beside [WindowBackground]
  *
