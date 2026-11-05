@@ -5,14 +5,19 @@
 
 package uk.xa0.dsh.ui.nav
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import top.yukonga.miuix.kmp.basic.NavigationRail
 import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.NavigationRailState
 import top.yukonga.miuix.kmp.basic.NavigationRailValue
 import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
+import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshTheme
 
 /**
@@ -36,6 +41,7 @@ fun SideRail(
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val state = rememberNavigationRailState(
         initialValue = if (expanded) NavigationRailValue.Expanded else NavigationRailValue.Collapsed,
     )
@@ -45,7 +51,11 @@ fun SideRail(
     ReportRailExpanded(state, onExpandedChange)
 
     NavigationRail(
-        modifier = modifier,
+        modifier = modifier.liquidPane(
+            backdrop,
+            RoundedCornerShape(DshRadius.card),
+            flatFill = Color.Transparent,
+        ),
         state = state,
         // The rail is a full-height column behind everything else, so it takes the first layer
         // rather than the floating-surface token: `menu` would make it read as a popover.

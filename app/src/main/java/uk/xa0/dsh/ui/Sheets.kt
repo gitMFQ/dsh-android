@@ -61,6 +61,8 @@ import uk.xa0.dsh.net.CertReadout
 import uk.xa0.dsh.net.DoorFault
 import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.components.DshTextField
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
 import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
 import uk.xa0.dsh.ui.overlay.ConfirmTone
@@ -577,11 +579,11 @@ fun WorkspaceSheet(
 @Composable
 private fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val shape = RoundedCornerShape(DshRadius.pill)
     Box(
         Modifier
-            .clip(shape)
-            .background(if (selected) colors.accentTertiary else colors.tip)
+            .liquidPane(backdrop, shape, flatFill = if (selected) colors.accentTertiary else colors.tip)
             .border(0.5.dp, if (selected) colors.accent else colors.borderL1, shape)
             .clickableNoRipple(onClick = onClick)
             .padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),

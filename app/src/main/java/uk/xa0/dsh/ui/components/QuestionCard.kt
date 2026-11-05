@@ -32,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.PendingQuestionSet
 import uk.xa0.dsh.ui.clickableNoRipple
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -72,6 +74,7 @@ fun QuestionCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val shape = RoundedCornerShape(20.dp)
     // questionId -> chosen labels; a single-select question keeps at most one.
     val selected = remember(set.eventId) {
@@ -85,14 +88,13 @@ fun QuestionCard(
     Column(
         modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(colors.inputMajor)
+            .liquidPane(backdrop, shape, flatFill = colors.inputMajor)
             .border(1.dp, colors.accent, shape),
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(colors.accentTertiary)
+                .liquidPane(backdrop, RoundedCornerShape(0.dp), flatFill = colors.accentTertiary)
                 .padding(horizontal = DshSpacing.xl, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

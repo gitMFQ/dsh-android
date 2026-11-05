@@ -43,7 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -69,6 +68,8 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.Search
 import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
+import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshSpacing
 import uk.xa0.dsh.ui.theme.DshTheme
 import uk.xa0.dsh.ui.theme.DshType
@@ -122,14 +123,14 @@ fun SuperSearchBar(
     content: (@Composable () -> Unit)? = null,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = DshSpacing.lg)
             .padding(top = topPadding, bottom = 6.dp)
             .heightIn(min = 45.dp)
-            .clip(CircleShape)
-            .background(colors.bgLayer1)
+            .liquidPane(backdrop, CircleShape, flatFill = colors.bgLayer1)
             .clickable(interactionSource = null, indication = null, onClick = onClick),
     ) {
         Row(
@@ -330,6 +331,7 @@ fun SearchBar(
     topPadding: Dp = 12.dp,
 ) {
     val colors = DshTheme.colors
+    val backdrop = LocalGlassBarBackdrop.current
     val focusRequester = remember { FocusRequester() }
     // The field keeps its own TextFieldValue so the selection survives a text change; the status is
     // the source of truth, and the effect below reconciles the two when it changes from outside
@@ -361,8 +363,7 @@ fun SearchBar(
             .padding(horizontal = DshSpacing.lg)
             .padding(top = topPadding, bottom = 6.dp)
             .heightIn(min = 45.dp)
-            .clip(CircleShape)
-            .background(colors.bgLayer1)
+            .liquidPane(backdrop, CircleShape, flatFill = colors.bgLayer1)
             .focusRequester(focusRequester),
         decorationBox = { innerTextField ->
             Row(
