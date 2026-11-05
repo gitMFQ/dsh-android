@@ -2037,17 +2037,16 @@ private fun SessionRow(
             .fillMaxWidth()
             .height(32.dp)
             .clip(shape)
-            // Opaque, not transparent. The drawer's pane is glass on the liquid tier,
-            // so a row that painted nothing let the transcript behind the sidebar
-            // show through the row itself — the title sat on a moving picture and
-            // read as if it were part of it. A row is a piece of the list, and the
-            // list is opaque: the idle fill is the drawer's own colour, and the
-            // selected fill is the one already used for a chosen row.
+            // Opaque, not transparent. A row that painted nothing let the transcript
+            // behind the sidebar show through the row itself — the title sat on a
+            // moving picture and read as if it were part of it. A row is a piece of
+            // the list, and the list is opaque: the idle fill is the drawer's own
+            // colour, and the selected fill is the one already used for a chosen row.
             //
-            // `sidebarFill` is the same value the pane's `flatFill` uses, so on the
-            // flat tier these rows are exactly what they were and no baseline moves;
-            // on the liquid tier they are the surface the glass sits *on* rather than
-            // holes punched through it.
+            // `sidebarFill` is the same value the pane's `flatFill` uses, so these rows
+            // are exactly what they were on the flat tier and no baseline moves. The
+            // panes stay flat on every tier now (see LiquidPane.kt), so there is no
+            // glass sitting on them either.
             .background(if (selected) colors.sidebarItemActive else colors.sidebarFill)
             .clickableNoRipple(onClick = onClick)
             // Subagents nest one step per level under their parent, and a Workspace's

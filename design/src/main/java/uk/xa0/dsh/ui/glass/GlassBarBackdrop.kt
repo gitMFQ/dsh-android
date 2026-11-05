@@ -181,13 +181,20 @@ val LocalGlassPaneEnabled = compositionLocalOf { true }
  * ## Why an ambient instead of re-threading the handle
  *
  * [rememberGlassBarBackdrop] is called **once**, at the composition root inside `DshTheme`,
- * and published here. Every surface that wants the material — a pane in the transcript, a
- * chip in the pill strip, a sheet in its own window — reads [current][androidx.compose.runtime.CompositionLocal.current]
+ * and published here. The surfaces that still paint the material — the bar tab strip and the
+ * three header seats — read [current][androidx.compose.runtime.CompositionLocal.current]
  * instead of growing a `backdrop:` parameter through every caller between it and the root.
  *
- * Sharing one handle is also the stable choice: the [glassBarLayer] that records it wraps
- * the pager at the root, so a pane that samples this backdrop samples the *same* layer the
- * bar does rather than a second one that would be re-recorded underneath it.
+ * ## Why the panes must NOT sample this handle
+ *
+ * The [glassBarLayer] that records it wraps the pager at the root. A pane *inside* that
+ * pager which also samples this same layer is a consumer in the subtree being recorded: the
+ * cards come and go with the transcript and re-bind the runtime shader against a layer that
+ * is still being re-recorded. On the test handset that is a SIGSEGV (SEGV_MAPERR) on the
+ * RenderThread a second or two after the chat screen rasterises. Sharing one handle is
+ * therefore safe only for siblings of the recorded subtree with stable geometry (the bar,
+ * the header seats) — see [rememberGlassPaneBackdrop] for the layer a pane would need.
+ * `liquidPane` ignores the backdrop and stays flat for exactly this reason.
  *
  * Defaults to `null`. The screenshot fixtures do not provide it (they pin
  * [LocalGlassEnabled] to `false` and never go through `MainActivity`), so every surface

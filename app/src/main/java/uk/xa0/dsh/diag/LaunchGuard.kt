@@ -1,6 +1,8 @@
 package uk.xa0.dsh.diag
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import java.io.File
 
@@ -15,9 +17,12 @@ import java.io.File
  * added for exactly this crash and was useless for it: a reader who cannot reach Settings
  * cannot turn anything off.
  *
- * So the decision has to be made by the app, from evidence it already has. The evidence is
- * the platform's own record of how this process ended last time —
- * [android.app.ApplicationExitInfo] — and the rule is deliberately blunt:
+ * So the decision has to be made by the app, from evidence it already has. The evidence
+ * is a marker this process writes at the very top of onCreate and deletes only once it has
+ * stayed up past its first frame — see [markLaunching] and [markStarted]. A marker still
+ * present at the next launch means the previous one died, with no platform death record,
+ * permission or OEM behaviour involved (see check() for why ApplicationExitInfo had to go).
+ * The rule is deliberately blunt:
  *
  * > **Two consecutive starts that ended in a crash, with no clean run in between, turn the
  * > expensive material off.**
@@ -30,18 +35,25 @@ import java.io.File
  *
  * ## Why "before it could finish starting"
  *
- * [markStarted] is called from [uk.xa0.dsh.MainActivity] once the first frame is up. An
- * exit recorded before that marker is a start that never got anywhere; an exit after it is
- * an ordinary crash in a working app, and the guard stays out of the way. Without the
+ * [markStarted] is called from [uk.xa0.dsh.MainActivity] once the first frame is up, but a
+ * first frame is not proof the app is usable: the chat screen is composed a second or two
+ * later, and the measured crash (a RenderThread SIGSEGV from panes sampling the recorded
+ * layer) lands *after* that first frame. Deleting the marker at the first frame therefore
+ * made every crash look like a clean start, and the guard never fired at all.
+ *
+ * So the confirmation is delayed by [CLEAN_START_DELAY_MS]: a process that is still alive
+ * once the chat screen has had time to rasterise is one that finished starting. A process
+ * killed before then leaves the marker for the next launch to count. Without the
  * distinction, an app that crashed once a day while a transcript was being read would
- * silently lose its material for no reason.
+ * silently lose its material for no reason; the delay is what keeps that from happening
+ * while still catching a crash that lands one frame later.
  *
  * ## What it does not do
  *
- * It does not clear data, does not restart itself, does not disable the app. It writes one
- * preference — liquidGlass = false — and records the decision so the Diagnostics page can
- * say it happened and offer to undo it. Everything else keeps working; the flat tier is a
- * complete design, not a broken one.
+ * It does not clear data, does not restart itself, does not disable the app. It steps one
+ * preference — the glass level — down a rung and records the decision so the Diagnostics
+ * page can say it happened and offer to undo it. Everything else keeps working; the flat
+ * tier is a complete design, not a broken one.
  *
  * Debug and release alike: this one is not a diagnostic, it is a recovery path.
  */
@@ -51,6 +63,15 @@ object LaunchGuard {
 
     /** How many crash-ends in a row are enough. Two, so a single fluke does not strip the UI. */
     private const val CRASHES_BEFORE_DEGRADING = 2
+
+    /**
+     * How long a process must stay alive after its first frame before that frame counts as
+     * "finished starting". The chat screen is composed ~1.5 s after the first frame and
+     * rasterises just after that, which is exactly where the glass crash lands; 4 s clears
+     * that window with room to spare. A false positive only steps the material down one
+     * level (BLUR still keeps the bar), and Diagnostics can undo it.
+     */
+    private const val CLEAN_START_DELAY_MS = 4_000L
 
     /** The preference key, the same string [uk.xa0.dsh.data.ConfigStore] uses. */
     private const val KEY_LIQUID_GLASS = "liquidGlass"
@@ -84,11 +105,11 @@ object LaunchGuard {
 
     /** The guard's own bookkeeping, in its own store so the two cannot corrupt each other. */
     private const val PREFS = "dsh_launch_guard"
-    /** Non-zero while a launch is in progress; deleted once a first frame exists. */
+    /** Non-zero while a launch is in progress; cleared once the clean-start confirmation runs. */
     private const val KEY_STARTED_AT = "startedAt"
     private const val KEY_DEGRADED_AT = "degradedAt"
 
-    /** How many launches in a row have died without reaching a first frame. */
+    /** How many launches in a row have died before their clean start was confirmed. */
     private const val KEY_CRASH_STREAK = "crashStreak"
 
     /**
@@ -97,7 +118,7 @@ object LaunchGuard {
      * Called from [uk.xa0.dsh.DshApplication.onCreate] **before** the UI reads its config,
      * so the value it writes is the value the first frame is painted with.
      *
-     * @return true when this launch turned the material off, so the caller can say so.
+     * @return true when this launch stepped the material down one rung, so the caller can say so.
      */
     fun check(context: Context): Boolean {
         // An explicit level from the reader wins over every inference below.
@@ -131,13 +152,13 @@ object LaunchGuard {
         // all with the crashes plainly happening.
         //
         // The platform is allowed to be silent; the app is not. So the evidence is now
-        // local and unconditional: **every launch writes a start marker and deletes it
-        // only after the first frame.** A marker still present at the next launch means the
-        // previous launch died — no exit record, no permission, no API level, no OEM
-        // behaviour involved.
+        // local and unconditional: **every launch writes a start marker and clears it only
+        // once the process has stayed up past its first frame** (see [markStarted]). A
+        // marker still present at the next launch means the previous one died before that
+        // — no exit record, no permission, no API level, no OEM behaviour involved.
         val pending = readLong(context, KEY_STARTED_AT)
         val streak = if (pending > 0L) {
-            // The previous launch never reached its first frame.
+            // The previous launch died before its clean start was confirmed.
             val next = readInt(context, KEY_CRASH_STREAK) + 1
             writeInt(context, KEY_CRASH_STREAK, next)
             next
@@ -160,7 +181,7 @@ object LaunchGuard {
         // meant.
         //
         // The material has three levels and a crash is evidence about *one* of them. So
-        // each qualifying streak drops exactly one step: LIQUID -> BLUR -> OFF. If the app
+        // each qualifying streak drops exactly one step: LIQUID -> BLUR -> BAR -> OFF. If the app
         // still dies after OFF, the material is not the cause and the guard stops trying,
         // which is the honest answer rather than an infinite loop.
         val current = currentLevel(context)
@@ -170,18 +191,33 @@ object LaunchGuard {
     }
 
     /**
-     * Record that this process reached its first frame.
+     * Arrange for this launch to be confirmed as a clean start, but only once the process
+     * has survived long enough past its first frame to have composed the chat screen.
      *
-     * Written with commit, not apply: the process is about to start doing work that may
-     * kill it, and a marker still queued in a background write is a marker that is not
-     * there when the next launch reads it.
+     * The confirmation is a delayed post on the main looper, not a synchronous write: a
+     * native RenderThread crash runs no lifecycle callback and kills the process before
+     * any handler could run, which is precisely the case the marker must stay alive for.
+     * Using [Context.getApplicationContext] keeps the callback from pinning the Activity.
+     *
+     * Called from [uk.xa0.dsh.MainActivity] at the first pre-draw. See [confirmStarted]
+     * for the write itself, and [CLEAN_START_DELAY_MS] for why the wait is not zero.
      */
     fun markStarted(context: Context) {
+        val app = context.applicationContext
+        Handler(Looper.getMainLooper()).postDelayed({ confirmStarted(app) }, CLEAN_START_DELAY_MS)
+    }
+
+    /**
+     * The actual "this launch finished starting" write, split out from [markStarted] so it
+     * can be tested without a live looper: delete the marker and zero the streak.
+     *
+     * `commit`, not `apply`: the confirmation is cheap, but the next launch reads this
+     * store synchronously and must see the write already on disk.
+     */
+    internal fun confirmStarted(context: Context) {
         runCatching {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
-                // Delete the marker: this launch *did* reach a first frame, so it is not
-                // an unfinished start. This is the whole mechanism — see check().
                 .remove(KEY_STARTED_AT)
                 .putInt(KEY_CRASH_STREAK, 0)
                 .commit()
@@ -192,9 +228,9 @@ object LaunchGuard {
      * Write the marker that says "a launch is in progress".
      *
      * Called at the very top of [uk.xa0.dsh.DshApplication.onCreate], before anything that
-     * can fail. It is deleted by [markStarted] once the first frame is up, so its mere
-     * presence at the next launch is the evidence: **this process died before it ever
-     * became usable.**
+     * can fail. It is deleted by [confirmStarted] once the process has stayed up past its
+     * first frame, so its mere presence at the next launch is the evidence: **this process
+     * died before it ever became usable.**
      *
      * `commit`, not `apply`: the process is about to start work that may kill it, and a
      * marker still queued in a background write is a marker that is not there when the

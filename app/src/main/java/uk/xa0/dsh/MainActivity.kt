@@ -78,18 +78,18 @@ class MainActivity : ComponentActivity() {
         // Here rather than in composition: the marker must be written once per process,
         // and it must be written before the first frame can crash, not after it.
         BootBeacon.mark("activity.onCreate: begin")
-        // "This launch became usable" is **not** onCreate.
+        // "This launch became usable" is **not** onCreate, and it is not even the first
+        // frame: the chat screen is composed a second or two after that frame and the
+        // measured crash lands during its first rasterisation, *after* the frame was drawn.
         //
-        // It used to be deleted here, and that is why the guard never counted anything: the
-        // crash happens during the first rasterisation of the chat screen, which is *after*
-        // onCreate has returned and after composition has finished — so the marker was
-        // always already gone by the time the process died. The guard kept seeing clean
-        // starts, and its log said "no change" on every launch.
-        //
-        // The honest moment is the first *drawn* frame. `reportFullyDrawn` is too late
-        // (it waits for everything), so this hooks the view's first pre-draw instead: it
-        // fires when the frame is about to be rendered, which is exactly the boundary the
-        // crash sits on.
+        // The guard used to delete its start marker here (and, before that, in onCreate),
+        // so the marker was always already gone by the time the process died — the guard
+        // kept seeing clean starts and its log said "no change" on every launch. Now
+        // LaunchGuard.markStarted only *schedules* the clean-start confirmation a few
+        // seconds out; a process killed before then never runs it, and the marker survives
+        // for the next launch to count. `reportFullyDrawn` is too late (it waits for
+        // everything), so we hook the view's first pre-draw as the moment to start that
+        // clock.
         window.decorView.viewTreeObserver.addOnPreDrawListener(
             object : android.view.ViewTreeObserver.OnPreDrawListener {
                 override fun onPreDraw(): Boolean {
@@ -243,11 +243,13 @@ class MainActivity : ComponentActivity() {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // The one recorded backdrop, owned by the composition root. Inside
                 // DshTheme because rememberGlassBarBackdrop() reads the theme's bgBase;
-                // publishing it here lets every pane, chip and sheet (including those in
-                // their own window) read the same handle through LocalGlassBarBackdrop
-                // instead of threading a parameter through every caller. Fixtures never
-                // go through this provider, so the ambient stays null and every surface
-                // falls back to the flat material — the screenshot contract is unchanged.
+                // publishing it here lets the bar and the three header seats read the same
+                // handle through LocalGlassBarBackdrop instead of threading a parameter
+                // through every caller. The panes take it too but stay flat — a pane that
+                // sampled the pager's own recorded layer is the measured RenderThread crash.
+                // Fixtures never go through this provider, so the ambient stays null and
+                // every surface falls back to the flat material — the screenshot contract
+                // is unchanged.
                 CompositionLocalProvider(
                     LocalGlassBarBackdrop provides rememberGlassBarBackdrop(),
                 ) {
