@@ -39,12 +39,13 @@ import androidx.core.view.WindowCompat
  *
  * Since API 35, `Window.setStatusBarColor` is a no-op: the bars are always transparent
  * and the app draws behind them. This app already does the right thing with the area —
- * `MainActivity`'s root `Box` paints `DshTheme.colors.bgBase` and each screen applies
- * `statusBarsPadding()` — so the bar shows the palette's base surface with no extra
- * drawing. What was missing was only the *icon* side, which is why this class sets
- * nothing but the two flags. On API 26–34 the same is true of the status bar
- * (`enableEdgeToEdge` already makes it transparent); the navigation bar keeps a scrim
- * from `enableEdgeToEdge` itself.
+ * `MainActivity`'s root `Box` paints `DshTheme.colors.bgBase`, and the conversation's
+ * own chrome pays the status-bar inset for its seats while the page itself runs to the
+ * top edge so a row can scroll through the clock strip — so the bar shows the palette's
+ * base surface with no extra drawing. What was missing was only the *icon* side,
+ * which is why this class sets nothing but the two flags. On API 26–34 the same is
+ * true of the status bar (`enableEdgeToEdge` already makes it transparent); the
+ * navigation bar keeps a scrim from `enableEdgeToEdge` itself.
  *
  * ## Why it lives beside [WindowBackground]
  *
