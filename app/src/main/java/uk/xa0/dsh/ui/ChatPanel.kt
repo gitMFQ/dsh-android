@@ -100,7 +100,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1310,17 +1309,26 @@ internal fun ChatPanel(
                     // rail above it) belongs to the dock, not to the drawer.
                     blockedBottomPx = { dockAreaPx.toFloat() },
                 )
-                .background(DshTheme.colors.bgBase)
-                .statusBarsPadding()
-                // **No `navigationBarsPadding()` on the screen.**
+                // **No background and no `statusBarsPadding()` on the screen.**
                 //
-                // It used to be here, which ended the transcript exactly where the system
-                // navigation bar starts: the conversation could not scroll into that strip
-                // at all, whatever the bar's colour, so "the bar is transparent" bought
-                // nothing. The pager now runs to the bottom of the window and the
-                // navigation bar's inset is paid by the dock instead (see the overlay
-                // below), so rows pass under the system bar while scrolling and are visible
-                // through it. See `docs/DESIGN.md`'s edge-to-edge note.
+                // Both used to be here, and together they painted the page colour across
+                // the clock strip and kept every page from ever reaching it. That is the
+                // other half of what hid the transcript behind the top bar: the header's
+                // own fill covered its strip, and this one covered the status bar above
+                // it. The window's root Box (MainActivity) already paints `bgBase`, so
+                // removing the fill here leaves the right colour behind the content
+                // rather than a hole; and with the inset gone the pager starts at the
+                // window's top edge, so a row scrolls through the clock strip exactly as
+                // it scrolls through the header. The header still pays the inset for its
+                // own seats (see ChatHeader), which is what keeps them below the clock.
+                //
+                // **No `navigationBarsPadding()` on the screen,** for the same reason:
+                // it used to end the transcript exactly where the system navigation bar
+                // starts, so the conversation could not scroll into that strip at all.
+                // The pager runs to the bottom of the window and the navigation bar's
+                // inset is paid by the dock instead (see the overlay below), so rows pass
+                // under the system bar while scrolling and are visible through it. See
+                // `docs/DESIGN.md`'s edge-to-edge note.
                 .imePadding(),
         ) {
         val wide = maxWidth >= WIDE_LAYOUT
@@ -1410,10 +1418,17 @@ internal fun ChatPanel(
                         )
                     },
                     backdrop = glassBackdrop,
-                    // Flat tier: the page colour, because a transparent header over a
-                    // flat page would put black text on moving text. Same page colour
-                    // the pager paints behind it.
-                    flatFill = colors.bgBase,
+                    // **No flat fill: the bar's strip has no background of its own.**
+                    //
+                    // The row used to paint `colors.bgBase` across its whole width, which
+                    // is exactly the slab that hid the transcript sliding up behind it.
+                    // Removing the fill (the strip now paints nothing) is the last
+                    // half of "顶栏整体透明内容可以滑动显示到顶栏和通知栏": the layout
+                    // already floats the chrome over full-height pages and the transcript
+                    // already pays its height as *content* padding, so a row now passes
+                    // through the strip and the status bar above it instead of stopping
+                    // at a painted edge. The three seats keep their own capsule surfaces
+                    // (see ChatHeader), so the labels never sit bare on moving text.
                     // Feeds the loading offset above: the header is the top half of
                     // the chrome, and its own height is not a constant.
                     // Above the pages, which are its Box siblings.
@@ -3136,19 +3151,18 @@ private fun ChatHeader(
      */
     overflow: List<HeaderAction> = emptyList(),
     /**
-     * The backdrop the chrome samples, or null on a device that paints the flat tier.
+     * The backdrop the three seats sample, or null on a device that paints the flat
+     * tier.
      *
-     * **Transparent, not painted.** The header no longer fills: content scrolls
-     * *behind* it and through the status-bar area above it, which is what was asked
-     * for in as many words (the whole top bar transparent so content slides up into
-     * the top bar and the notification bar). The material is therefore the only thing
-     * standing between the row's labels and the transcript sliding under them, and on
-     * a device that cannot blur it degrades to [flatFill] — which the caller passes as
-     * the page colour, because a transparent header over a flat page would put black
-     * text on moving text.
+     * **The strip itself is transparent, not painted.** The row no longer fills:
+     * content scrolls *behind* it and through the status-bar area above it, which is
+     * what was asked for in as many words (the whole top bar transparent so content
+     * slides up into the top bar and the notification bar). The row paints nothing at
+     * all — the old `flatFill = colors.bgBase` was the opaque slab hiding the moving
+     * transcript. What still has a surface is each of the three seats (menu circle,
+     * title pill, overflow circle), so the labels never sit bare on moving text.
      */
     backdrop: GlassBarBackdrop? = null,
-    flatFill: Color = Color.Transparent,
     modifier: Modifier = Modifier,
 ) {
     val colors = DshTheme.colors
@@ -3159,20 +3173,19 @@ private fun ChatHeader(
     val rowHeight = 56.dp
     var menuOpen by remember { mutableStateOf(false) }
     Row(
+        // **Nothing is painted on this Row.** No fill, no material, no clip: the
+        // strip is a hole the transcript shows through. The three children below wear
+        // their own capsule surfaces, which is what keeps their labels legible.
         modifier
             .fillMaxWidth()
-            .height(rowHeight)
-            .liquidPane(
-                backdrop = backdrop,
-                shape = RoundedCornerShape(0.dp),
-                flatFill = flatFill,
-            )
-            // The status-bar inset is *paid*, not avoided: the header's own content
-            // sits below the clock, while the material behind it runs to the top of
-            // the window. Padding rather than a spacer because the pane has to be the
-            // thing that grows, or the blur starts below the system bar and leaves a
-            // hard edge there.
+            // **Padding before the fixed height.** The strip starts at the window's
+            // top edge and its seats sit below the clock, so the row's total height is
+            // `statusBar + rowHeight`. With `height` first the inset would be carved
+            // *out of* 56dp and the 40dp seats would be squeezed into what is left.
+            // The screen no longer pays (and consumes) the status-bar inset itself,
+            // which is why this row has to grow by it rather than inherit a zero one.
             .statusBarsPadding()
+            .height(rowHeight)
             .padding(horizontal = DshSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
