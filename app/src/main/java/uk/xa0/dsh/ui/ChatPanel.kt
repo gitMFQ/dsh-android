@@ -212,6 +212,7 @@ import uk.xa0.dsh.ui.composer.replaceTrigger
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassBarLayer
 import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.liquidBarPane
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.glass.rememberGlassBarBackdrop
 import uk.xa0.dsh.ui.nav.BarHeight
@@ -3152,7 +3153,10 @@ private fun ChatHeader(
     overflow: List<HeaderAction> = emptyList(),
     /**
      * The backdrop the three seats sample, or null on a device that paints the flat
-     * tier.
+     * tier. It is the bar's own `glassBackdrop`, so at the liquid tier the seats wear
+     * the same blur + lens + vibrancy as the floating bottom bar; they are stable
+     * geometry outside the recorded pager subtree, which is the case the pane crash
+     * was not about. See `LiquidBarPane.kt`.
      *
      * **The strip itself is transparent, not painted.** The row no longer fills:
      * content scrolls *behind* it and through the status-bar area above it, which is
@@ -3175,7 +3179,9 @@ private fun ChatHeader(
     Row(
         // **Nothing is painted on this Row.** No fill, no material, no clip: the
         // strip is a hole the transcript shows through. The three children below wear
-        // their own capsule surfaces, which is what keeps their labels legible.
+        // their own capsule surfaces (`liquidBarPane`: the bar's liquid material at
+        // the liquid tier, an opaque bgLayer1 circle everywhere else), which is what
+        // keeps their labels legible.
         modifier
             .fillMaxWidth()
             // **Padding before the fixed height.** The strip starts at the window's
@@ -3196,7 +3202,7 @@ private fun ChatHeader(
             Modifier
                 .size(HEADER_SEAT)
                 .glassLift(CircleShape)
-                .liquidPane(
+                .liquidBarPane(
                     backdrop = backdrop,
                     shape = CircleShape,
                     flatFill = colors.bgLayer1,
@@ -3223,7 +3229,7 @@ private fun ChatHeader(
                 .weight(1f)
                 .height(HEADER_SEAT)
                 .glassLift(CircleShape)
-                .liquidPane(
+                .liquidBarPane(
                     backdrop = backdrop,
                     shape = CircleShape,
                     flatFill = colors.bgLayer1,
@@ -3255,7 +3261,7 @@ private fun ChatHeader(
             Modifier
                 .size(HEADER_SEAT)
                 .glassLift(CircleShape)
-                .liquidPane(
+                .liquidBarPane(
                     backdrop = backdrop,
                     shape = CircleShape,
                     flatFill = colors.bgLayer1,
