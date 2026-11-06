@@ -115,6 +115,13 @@ class ConfigStore(context: Context) {
                     ?: prefs.getString(KEY_LIQUID_GLASS_LEVEL, LiquidGlassLevel.OFF),
             ),
         ),
+        glassBackdrop = prefs.getBoolean(KEY_GLASS_BACKDROP, true),
+        glassShader = prefs.getBoolean(KEY_GLASS_SHADER, true),
+        glassLift = prefs.getBoolean(KEY_GLASS_LIFT, true),
+        glassPanes = prefs.getBoolean(KEY_GLASS_PANES, true),
+        glassBar = prefs.getBoolean(KEY_GLASS_BAR, true),
+        glassHeader = prefs.getBoolean(KEY_GLASS_HEADER, true),
+        glassCards = prefs.getBoolean(KEY_GLASS_CARDS, false),
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),
@@ -158,6 +165,13 @@ class ConfigStore(context: Context) {
             .putBoolean(KEY_AMOLED, config.amoled)
             .putBoolean(KEY_CHAT_VIEWS, config.chatViewsEnabled)
             .putString(KEY_LIQUID_GLASS_LEVEL, config.liquidGlassLevel)
+            .putBoolean(KEY_GLASS_BACKDROP, config.glassBackdrop)
+            .putBoolean(KEY_GLASS_SHADER, config.glassShader)
+            .putBoolean(KEY_GLASS_LIFT, config.glassLift)
+            .putBoolean(KEY_GLASS_PANES, config.glassPanes)
+            .putBoolean(KEY_GLASS_BAR, config.glassBar)
+            .putBoolean(KEY_GLASS_HEADER, config.glassHeader)
+            .putBoolean(KEY_GLASS_CARDS, config.glassCards)
             .putString(KEY_LANGUAGE, config.appLanguage)
             .putString(KEY_HOST_THEME, config.hostThemeMode)
             .putString(KEY_PRESET, config.agentPreset)
@@ -206,6 +220,15 @@ class ConfigStore(context: Context) {
 
         /** How much of it may run; see DshConfig.liquidGlassLevel. */
         const val KEY_LIQUID_GLASS_LEVEL = "liquidGlassLevel"
+
+        /** The seven per-effect switches; see DshConfig. */
+        const val KEY_GLASS_BACKDROP = "glassBackdrop"
+        const val KEY_GLASS_SHADER = "glassShader"
+        const val KEY_GLASS_LIFT = "glassLift"
+        const val KEY_GLASS_PANES = "glassPanes"
+        const val KEY_GLASS_BAR = "glassBar"
+        const val KEY_GLASS_HEADER = "glassHeader"
+        const val KEY_GLASS_CARDS = "glassCards"
 
         /** The in-app language override; blank follows the device. */
         const val KEY_LANGUAGE = "appLanguage"

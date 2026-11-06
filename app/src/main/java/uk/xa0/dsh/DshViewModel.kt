@@ -853,6 +853,14 @@ data class UiState(
      * express "blur yes, runtime shader no".
      */
     val liquidGlassLevel: String = LiquidGlassLevel.LIQUID,
+    /** The seven per-effect glass switches; see DshConfig. [liquidGlassLevel] is the ceiling. */
+    val glassBackdrop: Boolean = true,
+    val glassShader: Boolean = true,
+    val glassLift: Boolean = true,
+    val glassPanes: Boolean = true,
+    val glassBar: Boolean = true,
+    val glassHeader: Boolean = true,
+    val glassCards: Boolean = false,
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     /**
@@ -3211,6 +3219,13 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             chatViewsEnabled = config.chatViewsEnabled,
             liquidGlassEnabled = config.liquidGlassEnabled,
             liquidGlassLevel = config.liquidGlassLevel,
+            glassBackdrop = config.glassBackdrop,
+            glassShader = config.glassShader,
+            glassLift = config.glassLift,
+            glassPanes = config.glassPanes,
+            glassBar = config.glassBar,
+            glassHeader = config.glassHeader,
+            glassCards = config.glassCards,
             appLanguage = config.appLanguage,
             hostThemeMode = config.hostThemeMode,
             agentPreset = config.agentPreset,
@@ -3731,6 +3746,45 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
         configStore.save(config)
         _ui.value = _ui.value.copy(liquidGlassEnabled = on)
     }
+
+    /**
+     * One setter for all seven per-effect glass switches. The [field] name is the same on
+     * [DshConfig] and [UiState], so a single helper keeps the store and the composition in
+     * step whichever row the reader flipped. The level dropdown stays the ceiling: these
+     * can only remove an effect, never grant one the level withheld.
+     */
+    private fun setGlassSwitch(field: String, on: Boolean) {
+        val config = configStore.load()
+        val updated = when (field) {
+            "glassBackdrop" -> config.copy(glassBackdrop = on)
+            "glassShader" -> config.copy(glassShader = on)
+            "glassLift" -> config.copy(glassLift = on)
+            "glassPanes" -> config.copy(glassPanes = on)
+            "glassBar" -> config.copy(glassBar = on)
+            "glassHeader" -> config.copy(glassHeader = on)
+            "glassCards" -> config.copy(glassCards = on)
+            else -> return
+        }
+        configStore.save(updated)
+        _ui.value = when (field) {
+            "glassBackdrop" -> _ui.value.copy(glassBackdrop = on)
+            "glassShader" -> _ui.value.copy(glassShader = on)
+            "glassLift" -> _ui.value.copy(glassLift = on)
+            "glassPanes" -> _ui.value.copy(glassPanes = on)
+            "glassBar" -> _ui.value.copy(glassBar = on)
+            "glassHeader" -> _ui.value.copy(glassHeader = on)
+            "glassCards" -> _ui.value.copy(glassCards = on)
+            else -> return
+        }
+    }
+
+    fun setGlassBackdrop(on: Boolean) = setGlassSwitch("glassBackdrop", on)
+    fun setGlassShader(on: Boolean) = setGlassSwitch("glassShader", on)
+    fun setGlassLift(on: Boolean) = setGlassSwitch("glassLift", on)
+    fun setGlassPanes(on: Boolean) = setGlassSwitch("glassPanes", on)
+    fun setGlassBar(on: Boolean) = setGlassSwitch("glassBar", on)
+    fun setGlassHeader(on: Boolean) = setGlassSwitch("glassHeader", on)
+    fun setGlassCards(on: Boolean) = setGlassSwitch("glassCards", on)
 
     /**
      * Sets the in-app language, or clears it back to the device's own.

@@ -29,7 +29,10 @@ import uk.xa0.dsh.ui.ChatScreen
 import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.LocalGlassBarEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassCardsEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassHeaderEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassLiftEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassPaneEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassShaderEnabled
@@ -226,27 +229,38 @@ class MainActivity : ComponentActivity() {
             // complete, correct app rather than a broken one.
             CompositionLocalProvider(
                 LocalImageBytes provides vm::markdownImageBytes,
-                // The material's three layers, from the one stored level.
-                //
-                // They are separate locals because they are separate GPU mechanisms and
-                // the crash on the test handset was a driver fault: "the glass crashes"
-                // can only be turned into "the *shader* crashes" by switching them
-                // independently. See LiquidGlassLevel for the bisect, and each local for
-                // why it is not folded into its neighbour.
-                LocalGlassEnabled provides LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel),
-                LocalGlassShaderEnabled provides LiquidGlassLevel.paintsShader(ui.liquidGlassLevel),
-                LocalGlassLiftEnabled provides LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel),
+                // The material's three layers, from the one stored level. The level is the
+                // master ceiling: it decides *whether* a mechanism may run anywhere, and
+                // the reader's per-mechanism switch can only take it away from there, never
+                // add it back. They are separate locals because they are separate GPU
+                // mechanisms and the crash on the test handset was a driver fault: "the
+                // glass crashes" can only be turned into "the *shader* crashes" by
+                // switching them independently. See LiquidGlassLevel for the bisect.
+                LocalGlassEnabled provides
+                    (LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel) && ui.glassBackdrop),
+                LocalGlassShaderEnabled provides
+                    (LiquidGlassLevel.paintsShader(ui.liquidGlassLevel) && ui.glassShader),
+                LocalGlassLiftEnabled provides
+                    (LiquidGlassLevel.paintsMaterial(ui.liquidGlassLevel) && ui.glassLift),
                 // The panes as a group, so the device's own hypothesis — "the to-dos card
                 // started this" — can be tested without taking the bar's material away too.
-                LocalGlassPaneEnabled provides LiquidGlassLevel.paintsPanes(ui.liquidGlassLevel),
+                LocalGlassPaneEnabled provides
+                    (LiquidGlassLevel.paintsPanes(ui.liquidGlassLevel) && ui.glassPanes),
+                // Where the material is allowed to land. These are location switches, not
+                // mechanisms: the level above still has to permit the material at all.
+                // Cards default off — see #70 for the measured crash they re-enter.
+                LocalGlassBarEnabled provides ui.glassBar,
+                LocalGlassHeaderEnabled provides ui.glassHeader,
+                LocalGlassCardsEnabled provides ui.glassCards,
             ) {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // The one recorded backdrop, owned by the composition root. Inside
                 // DshTheme because rememberGlassBarBackdrop() reads the theme's bgBase;
                 // publishing it here lets the bar and the three header seats read the same
                 // handle through LocalGlassBarBackdrop instead of threading a parameter
-                // through every caller. The panes take it too but stay flat — a pane that
-                // sampled the pager's own recorded layer is the measured RenderThread crash.
+                // through every caller. The card panes take it too, but only when the
+                // reader opts in: a pane that samples the pager's own recorded layer is the
+                // measured RenderThread crash (#70), so LocalGlassCardsEnabled defaults off.
                 // Fixtures never go through this provider, so the ambient stays null and
                 // every surface falls back to the flat material — the screenshot contract
                 // is unchanged.

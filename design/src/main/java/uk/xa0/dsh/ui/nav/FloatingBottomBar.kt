@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.GlassTier
+import uk.xa0.dsh.ui.glass.LocalGlassBarEnabled
 import uk.xa0.dsh.ui.glass.currentGlassTier
 import uk.xa0.dsh.ui.glass.glassLift
 import uk.xa0.dsh.ui.glass.glassSurface
@@ -149,7 +150,7 @@ fun FloatingBottomBar(
     // split guarantees is now stronger than before: the only *execution* of miuix-blur code
     // on any tier happens inside `LiquidBottomBar`, in its own file, behind this check.
     val tier = currentGlassTier
-    if (tier == GlassTier.LIQUID && backdrop != null) {
+    if (tier == GlassTier.LIQUID && backdrop != null && LocalGlassBarEnabled.current) {
         LiquidBottomBar(
             modifier = modifier,
             selectedIndex = selectedIndex,

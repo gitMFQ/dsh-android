@@ -194,7 +194,10 @@ val LocalGlassPaneEnabled = compositionLocalOf { true }
  * RenderThread a second or two after the chat screen rasterises. Sharing one handle is
  * therefore safe only for siblings of the recorded subtree with stable geometry (the bar,
  * the header seats) — see [rememberGlassPaneBackdrop] for the layer a pane would need.
- * `liquidPane` ignores the backdrop and stays flat for exactly this reason.
+ *
+ * `liquidPane` keeps this handle flat by default: [LocalGlassCardsEnabled] is off, so the
+ * measured crash path stays closed. The reader can reopen it with the cards switch, with
+ * the launch guard as the net — the exposure is opt-in, not the default.
  *
  * Defaults to `null`. The screenshot fixtures do not provide it (they pin
  * [LocalGlassEnabled] to `false` and never go through `MainActivity`), so every surface
@@ -203,6 +206,37 @@ val LocalGlassPaneEnabled = compositionLocalOf { true }
  * the flat tier changed, only who owns the handle.
  */
 val LocalGlassBarBackdrop = compositionLocalOf<GlassBarBackdrop?> { null }
+
+/**
+ * Whether the floating bottom bar may paint the **liquid** material.
+ *
+ * A location switch, separate from the mechanism flags above: the level dropdown decides
+ * *whether* the material runs anywhere, these decide *where*. Default on — the bar has
+ * worn the material since 3.2 and has never crashed. `FloatingBottomBar.kt` gates its
+ * liquid branch on this, so turning it off leaves the bar on the flat tier alone.
+ */
+val LocalGlassBarEnabled = compositionLocalOf { true }
+
+/**
+ * Whether the three conversation header seats may paint the **liquid** material.
+ *
+ * Default on. `LiquidBarPane.kt` (the shared bar/header material) gates its liquid
+ * branch on this. The seats are siblings of the recorded pager with fixed geometry, so
+ * they share the bar's safe path rather than the panes' measured crash path.
+ */
+val LocalGlassHeaderEnabled = compositionLocalOf { true }
+
+/**
+ * Whether the card / chip / sheet panes may paint the **liquid** material.
+ *
+ * Default **off**. This is the switch that re-enters the path #70 removed: panes inside
+ * the recorded pager sample the pager's own backdrop and re-bind the shader as cards come
+ * and go, which is a `SIGSEGV (SEGV_MAPERR)` on the RenderThread on the test handset.
+ * `LiquidPane.kt` gates its liquid branch on this; off keeps every pane byte-identical
+ * to the flat tier. The reader who turns it on accepts the measured crash, with the launch
+ * guard as the net.
+ */
+val LocalGlassCardsEnabled = compositionLocalOf { false }
 
 /**
  * A backdrop for a **pane**, or null when panes may not paint the material.
