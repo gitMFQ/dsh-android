@@ -62,6 +62,7 @@ import uk.xa0.dsh.net.DoorFault
 import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.components.DshTextField
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
 import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
@@ -583,7 +584,7 @@ private fun ChoiceChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(DshRadius.pill)
     Box(
         Modifier
-            .liquidPane(backdrop, shape, flatFill = if (selected) colors.accentTertiary else colors.tip)
+            .liquidPane(backdrop, GlassComponent.CHOICE_CHIP, shape, flatFill = if (selected) colors.accentTertiary else colors.tip)
             .border(0.5.dp, if (selected) colors.accent else colors.borderL1, shape)
             .clickableNoRipple(onClick = onClick)
             .padding(horizontal = DshSpacing.xl, vertical = DshSpacing.sm),

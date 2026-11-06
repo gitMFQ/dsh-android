@@ -853,14 +853,15 @@ data class UiState(
      * express "blur yes, runtime shader no".
      */
     val liquidGlassLevel: String = LiquidGlassLevel.LIQUID,
-    /** The seven per-effect glass switches; see DshConfig. [liquidGlassLevel] is the ceiling. */
+    /** The per-effect glass switches; see DshConfig. [liquidGlassLevel] is the ceiling. */
     val glassBackdrop: Boolean = true,
     val glassShader: Boolean = true,
     val glassLift: Boolean = true,
     val glassPanes: Boolean = true,
     val glassBar: Boolean = true,
     val glassHeader: Boolean = true,
-    val glassCards: Boolean = false,
+    /** Enabled pane keys; see DshConfig.glassComponents. Empty keeps every pane flat. */
+    val glassComponents: Set<String> = emptySet(),
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     /**
@@ -3225,7 +3226,7 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             glassPanes = config.glassPanes,
             glassBar = config.glassBar,
             glassHeader = config.glassHeader,
-            glassCards = config.glassCards,
+            glassComponents = config.glassComponents,
             appLanguage = config.appLanguage,
             hostThemeMode = config.hostThemeMode,
             agentPreset = config.agentPreset,
@@ -3748,10 +3749,10 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * One setter for all seven per-effect glass switches. The [field] name is the same on
-     * [DshConfig] and [UiState], so a single helper keeps the store and the composition in
-     * step whichever row the reader flipped. The level dropdown stays the ceiling: these
-     * can only remove an effect, never grant one the level withheld.
+     * One setter for the six boolean per-effect glass switches. The [field] name is the same
+     * on [DshConfig] and [UiState], so a single helper keeps the store and the composition in
+     * step whichever row the reader flipped. The level dropdown stays the ceiling: these can
+     * only remove an effect, never grant one the level withheld.
      */
     private fun setGlassSwitch(field: String, on: Boolean) {
         val config = configStore.load()
@@ -3762,7 +3763,6 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             "glassPanes" -> config.copy(glassPanes = on)
             "glassBar" -> config.copy(glassBar = on)
             "glassHeader" -> config.copy(glassHeader = on)
-            "glassCards" -> config.copy(glassCards = on)
             else -> return
         }
         configStore.save(updated)
@@ -3773,9 +3773,21 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
             "glassPanes" -> _ui.value.copy(glassPanes = on)
             "glassBar" -> _ui.value.copy(glassBar = on)
             "glassHeader" -> _ui.value.copy(glassHeader = on)
-            "glassCards" -> _ui.value.copy(glassCards = on)
             else -> return
         }
+    }
+
+    /**
+     * Opt one pane in or out of the liquid material. The panes are a set of keys rather than
+     * one boolean so a RenderThread crash can be bisected down to the exact surface. The level
+     * dropdown and the mechanism switches above still gate it: enabling a key can only add the
+     * material where those permit, never grant what the level withheld.
+     */
+    fun setGlassComponent(key: String, on: Boolean) {
+        val config = configStore.load()
+        val next = if (on) config.glassComponents + key else config.glassComponents - key
+        configStore.save(config.copy(glassComponents = next))
+        _ui.value = _ui.value.copy(glassComponents = next)
     }
 
     fun setGlassBackdrop(on: Boolean) = setGlassSwitch("glassBackdrop", on)
@@ -3784,7 +3796,6 @@ class DshViewModel(application: Application) : AndroidViewModel(application) {
     fun setGlassPanes(on: Boolean) = setGlassSwitch("glassPanes", on)
     fun setGlassBar(on: Boolean) = setGlassSwitch("glassBar", on)
     fun setGlassHeader(on: Boolean) = setGlassSwitch("glassHeader", on)
-    fun setGlassCards(on: Boolean) = setGlassSwitch("glassCards", on)
 
     /**
      * Sets the in-app language, or clears it back to the device's own.

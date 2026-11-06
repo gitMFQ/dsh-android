@@ -195,9 +195,10 @@ val LocalGlassPaneEnabled = compositionLocalOf { true }
  * therefore safe only for siblings of the recorded subtree with stable geometry (the bar,
  * the header seats) — see [rememberGlassPaneBackdrop] for the layer a pane would need.
  *
- * `liquidPane` keeps this handle flat by default: [LocalGlassCardsEnabled] is off, so the
- * measured crash path stays closed. The reader can reopen it with the cards switch, with
- * the launch guard as the net — the exposure is opt-in, not the default.
+ * `liquidPane` keeps this handle flat by default: [LocalGlassComponentsEnabled] is an
+ * empty set, so the measured crash path stays closed. The reader can reopen it one pane at
+ * a time with a component switch, with the launch guard as the net — the exposure is
+ * opt-in, not the default.
  *
  * Defaults to `null`. The screenshot fixtures do not provide it (they pin
  * [LocalGlassEnabled] to `false` and never go through `MainActivity`), so every surface
@@ -227,16 +228,16 @@ val LocalGlassBarEnabled = compositionLocalOf { true }
 val LocalGlassHeaderEnabled = compositionLocalOf { true }
 
 /**
- * Whether the card / chip / sheet panes may paint the **liquid** material.
+ * The [GlassComponent] keys whose panes may paint the **liquid** material.
  *
- * Default **off**. This is the switch that re-enters the path #70 removed: panes inside
- * the recorded pager sample the pager's own backdrop and re-bind the shader as cards come
- * and go, which is a `SIGSEGV (SEGV_MAPERR)` on the RenderThread on the test handset.
- * `LiquidPane.kt` gates its liquid branch on this; off keeps every pane byte-identical
- * to the flat tier. The reader who turns it on accepts the measured crash, with the launch
- * guard as the net.
+ * Default **empty**. This set re-enters the path #70 removed: panes inside the recorded
+ * pager sample the pager's own backdrop and re-bind the shader as cards come and go, which
+ * is a `SIGSEGV (SEGV_MAPERR)` on the RenderThread on the test handset. `LiquidPane.kt`
+ * lights a call site only when its own [GlassComponent.key] is in this set; an empty set
+ * keeps every pane byte-identical to the flat tier. The reader who enables one accepts the
+ * measured crash for that one surface, with the launch guard as the net.
  */
-val LocalGlassCardsEnabled = compositionLocalOf { false }
+val LocalGlassComponentsEnabled = compositionLocalOf<Set<String>> { emptySet() }
 
 /**
  * A backdrop for a **pane**, or null when panes may not paint the material.

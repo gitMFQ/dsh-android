@@ -73,6 +73,7 @@ import uk.xa0.dsh.model.QueuedMessage
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -180,7 +181,7 @@ fun QueueDock(
             Modifier
                 .fillMaxWidth()
                 .glassLift(panelShape)
-                .liquidPane(backdrop, panelShape)
+                .liquidPane(backdrop, GlassComponent.QUEUE_DOCK, panelShape)
                 .padding(top = DshSpacing.xs, bottom = DshSpacing.md),
         ) {
             AnimatedVisibility(

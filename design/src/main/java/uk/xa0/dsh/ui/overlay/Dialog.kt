@@ -47,6 +47,7 @@ import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.window.WindowDialog
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -394,7 +395,7 @@ fun DshDialog(
         // Best-effort glass overlay on the content root. The window is a separate composition, so
         // the ambient is null there in practice; Color.Transparent keeps the flat branch unchanged.
         modifier = modifier
-            .liquidPane(backdrop, RoundedCornerShape(DshRadius.panel), flatFill = Color.Transparent)
+            .liquidPane(backdrop, GlassComponent.DIALOG, RoundedCornerShape(DshRadius.panel), flatFill = Color.Transparent)
             .windowInsetsPadding(
                 WindowInsets.systemBars.only(WindowInsetsSides.Top),
             ),

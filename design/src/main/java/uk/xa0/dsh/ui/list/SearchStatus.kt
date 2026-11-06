@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshTheme
@@ -98,7 +99,7 @@ data class SearchStatus(
                     .matchParentSize()
                     // RectangleShape: the original panel was an unclipped full-size rect, so
                     // any rounded shape would shave flat-tier corners and break the baseline.
-                    .liquidPane(backdrop, RectangleShape, flatFill = backgroundColor),
+                    .liquidPane(backdrop, GlassComponent.SEARCH_STATUS, RectangleShape, flatFill = backgroundColor),
             )
             Box(modifier = Modifier.graphicsLayer { alpha = if (visible) 1f else 0f }) { content() }
         }

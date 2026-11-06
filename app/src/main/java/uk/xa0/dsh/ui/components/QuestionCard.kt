@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.PendingQuestionSet
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -88,13 +89,13 @@ fun QuestionCard(
     Column(
         modifier
             .fillMaxWidth()
-            .liquidPane(backdrop, shape, flatFill = colors.inputMajor)
+            .liquidPane(backdrop, GlassComponent.QUESTION_CARD, shape, flatFill = colors.inputMajor)
             .border(1.dp, colors.accent, shape),
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .liquidPane(backdrop, RoundedCornerShape(0.dp), flatFill = colors.accentTertiary)
+                .liquidPane(backdrop, GlassComponent.QUESTION_CARD, RoundedCornerShape(0.dp), flatFill = colors.accentTertiary)
                 .padding(horizontal = DshSpacing.xl, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

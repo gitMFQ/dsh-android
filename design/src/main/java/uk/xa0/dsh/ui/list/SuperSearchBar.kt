@@ -68,6 +68,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.Search
 import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -130,7 +131,7 @@ fun SuperSearchBar(
             .padding(horizontal = DshSpacing.lg)
             .padding(top = topPadding, bottom = 6.dp)
             .heightIn(min = 45.dp)
-            .liquidPane(backdrop, CircleShape, flatFill = colors.bgLayer1)
+            .liquidPane(backdrop, GlassComponent.SUPER_SEARCH_BAR, CircleShape, flatFill = colors.bgLayer1)
             .clickable(interactionSource = null, indication = null, onClick = onClick),
     ) {
         Row(
@@ -363,7 +364,7 @@ fun SearchBar(
             .padding(horizontal = DshSpacing.lg)
             .padding(top = topPadding, bottom = 6.dp)
             .heightIn(min = 45.dp)
-            .liquidPane(backdrop, CircleShape, flatFill = colors.bgLayer1)
+            .liquidPane(backdrop, GlassComponent.SUPER_SEARCH_BAR, CircleShape, flatFill = colors.bgLayer1)
             .focusRequester(focusRequester),
         decorationBox = { innerTextField ->
             Row(

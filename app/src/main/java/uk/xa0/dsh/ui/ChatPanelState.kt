@@ -235,7 +235,7 @@ data class ChatActions(
     val setGlassPanes: (Boolean) -> Unit = {},
     val setGlassBar: (Boolean) -> Unit = {},
     val setGlassHeader: (Boolean) -> Unit = {},
-    val setGlassCards: (Boolean) -> Unit = {},
+    val setGlassComponent: (String, Boolean) -> Unit = { _, _ -> },
 
     /** Sets the in-app language, or clears it back to the device’s own. */
     val setAppLanguage: (String) -> Unit = {},

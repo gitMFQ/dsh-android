@@ -51,6 +51,7 @@ import uk.xa0.dsh.data.BusyEnter
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
@@ -320,7 +321,7 @@ private fun NavigationPane(
                     .fillMaxSize()
                     .graphicsLayer { alpha = compactAlpha }
                     .glassLift(CircleShape)
-                    .liquidPane(backdrop, CircleShape)
+                    .liquidPane(backdrop, GlassComponent.COMPOSER, CircleShape)
                     .clickableNoRipple(onClick = onCollapse)
                     .semantics { contentDescription = "Show navigation" },
                 contentAlignment = Alignment.Center,
@@ -391,7 +392,7 @@ private fun InputPane(
             .width(width)
             .heightIn(min = DockCircleSize)
             .glassLift(shape)
-            .liquidPane(backdrop, shape)
+            .liquidPane(backdrop, GlassComponent.COMPOSER, shape)
             .clip(shape)
             .clipToBounds(),
     ) {

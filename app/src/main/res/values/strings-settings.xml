@@ -95,8 +95,38 @@
     <string name="settings_glass_bar_summary">The liquid capsule of the floating bottom bar.</string>
     <string name="settings_glass_header_title">Header buttons</string>
     <string name="settings_glass_header_summary">The three round seats in the conversation header.</string>
-    <string name="settings_glass_cards_title">Cards and sheets</string>
-    <string name="settings_glass_cards_summary">The fourteen card, chip and sheet groups. Off by default: turning it on re-enters the pane path that crashed on the test handset, with the launch guard as the net.</string>
+    <string name="settings_glass_section_conversation_title">Conversation</string>
+    <string name="settings_glass_section_screens_title">Other screens</string>
+    <string name="settings_glass_section_widgets_title">Widgets</string>
+    <string name="settings_glass_pane_summary">Off by default: turning one on re-enters the pane path that crashed on the test handset, one surface at a time, with the launch guard as the net.</string>
+    <string name="settings_glass_pane_collapse_summary">This bar is passed a null backdrop, so its switch cannot light the material — it stays flat.</string>
+    <string name="settings_glass_pane_view_tabs_title">View tabs</string>
+    <string name="settings_glass_pane_small_glass_pill_title">Small glass pills</string>
+    <string name="settings_glass_pane_status_capsule_title">Status capsule</string>
+    <string name="settings_glass_pane_connection_pill_title">Connection pill</string>
+    <string name="settings_glass_pane_agent_preset_chip_title">Agent preset chip</string>
+    <string name="settings_glass_pane_scroll_to_bottom_title">Scroll-to-bottom button</string>
+    <string name="settings_glass_pane_composer_title">Composer dock</string>
+    <string name="settings_glass_pane_readout_pills_title">Readout pills</string>
+    <string name="settings_glass_pane_todo_card_title">To-dos card</string>
+    <string name="settings_glass_pane_goal_bar_title">Goal bar</string>
+    <string name="settings_glass_pane_queue_dock_title">Queued messages dock</string>
+    <string name="settings_glass_pane_approval_card_title">Approval card</string>
+    <string name="settings_glass_pane_question_card_title">Question card</string>
+    <string name="settings_glass_pane_tool_collapse_bar_title">Tool row collapse bar</string>
+    <string name="settings_glass_pane_files_panes_title">Files panes</string>
+    <string name="settings_glass_pane_settings_back_title">Settings back button</string>
+    <string name="settings_glass_pane_sessions_drawer_title">Sessions drawer</string>
+    <string name="settings_glass_pane_choice_chip_title">Choice chips</string>
+    <string name="settings_glass_pane_command_menu_title">Command menu</string>
+    <string name="settings_glass_pane_sheet_title">Sheets</string>
+    <string name="settings_glass_pane_dialog_title">Dialogs</string>
+    <string name="settings_glass_pane_side_rail_title">Side rail</string>
+    <string name="settings_glass_pane_super_search_bar_title">Search bars</string>
+    <string name="settings_glass_pane_segmented_list_title">Segmented lists</string>
+    <string name="settings_glass_pane_search_status_title">Search status</string>
+    <string name="settings_glass_pane_warning_card_title">Warning cards</string>
+    <string name="settings_glass_pane_scroll_to_top_title">Scroll-to-top button</string>
 
     <!-- ===================================================================== -->
     <!-- Appearance                                                            -->
