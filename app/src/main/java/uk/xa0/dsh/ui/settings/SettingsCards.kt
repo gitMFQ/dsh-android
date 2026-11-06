@@ -315,7 +315,6 @@ private fun GlassPaneSwitchRow(
 private fun glassPaneTitle(component: GlassComponent): Int = when (component) {
     GlassComponent.VIEW_TABS -> R.string.settings_glass_pane_view_tabs_title
     GlassComponent.SMALL_GLASS_PILL -> R.string.settings_glass_pane_small_glass_pill_title
-    GlassComponent.STATUS_CAPSULE -> R.string.settings_glass_pane_status_capsule_title
     GlassComponent.CONNECTION_PILL -> R.string.settings_glass_pane_connection_pill_title
     GlassComponent.AGENT_PRESET_CHIP -> R.string.settings_glass_pane_agent_preset_chip_title
     GlassComponent.SCROLL_TO_BOTTOM -> R.string.settings_glass_pane_scroll_to_bottom_title

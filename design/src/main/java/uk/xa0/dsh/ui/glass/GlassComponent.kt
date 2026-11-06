@@ -27,7 +27,6 @@ enum class GlassPaneSection { CONVERSATION, SCREENS, WIDGETS }
 enum class GlassComponent(val key: String, val section: GlassPaneSection) {
     VIEW_TABS("view_tabs", GlassPaneSection.CONVERSATION),
     SMALL_GLASS_PILL("small_glass_pill", GlassPaneSection.CONVERSATION),
-    STATUS_CAPSULE("status_capsule", GlassPaneSection.CONVERSATION),
     CONNECTION_PILL("connection_pill", GlassPaneSection.CONVERSATION),
     AGENT_PRESET_CHIP("agent_preset_chip", GlassPaneSection.CONVERSATION),
     SCROLL_TO_BOTTOM("scroll_to_bottom", GlassPaneSection.CONVERSATION),

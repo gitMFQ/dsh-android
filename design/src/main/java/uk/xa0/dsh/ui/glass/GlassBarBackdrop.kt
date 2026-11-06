@@ -195,10 +195,12 @@ val LocalGlassPaneEnabled = compositionLocalOf { true }
  * therefore safe only for siblings of the recorded subtree with stable geometry (the bar,
  * the header seats) — see [rememberGlassPaneBackdrop] for the layer a pane would need.
  *
- * `liquidPane` keeps this handle flat by default: [LocalGlassComponentsEnabled] is an
- * empty set, so the measured crash path stays closed. The reader can reopen it one pane at
- * a time with a component switch, with the launch guard as the net — the exposure is
- * opt-in, not the default.
+ * Panes inside the pager no longer sample this handle. The composition root overrides
+ * [LocalGlassBarBackdrop] for that subtree with [rememberGlassPaneBackdrop]'s independent
+ * layer, so a pane reads a backdrop recorded from an empty sibling instead of the layer
+ * recording the subtree it lives in. Only the bottom bar, the three header seats and the
+ * hoisted view-tab / Files pill strip sample this one — all siblings of the recorded pager
+ * with stable geometry.
  *
  * Defaults to `null`. The screenshot fixtures do not provide it (they pin
  * [LocalGlassEnabled] to `false` and never go through `MainActivity`), so every surface
@@ -230,12 +232,11 @@ val LocalGlassHeaderEnabled = compositionLocalOf { true }
 /**
  * The [GlassComponent] keys whose panes may paint the **liquid** material.
  *
- * Default **empty**. This set re-enters the path #70 removed: panes inside the recorded
- * pager sample the pager's own backdrop and re-bind the shader as cards come and go, which
- * is a `SIGSEGV (SEGV_MAPERR)` on the RenderThread on the test handset. `LiquidPane.kt`
- * lights a call site only when its own [GlassComponent.key] is in this set; an empty set
- * keeps every pane byte-identical to the flat tier. The reader who enables one accepts the
- * measured crash for that one surface, with the launch guard as the net.
+ * Default **empty**, so every pane stays byte-identical to the flat tier until the reader
+ * opts one in. `LiquidPane.kt` lights a call site only when its own [GlassComponent.key]
+ * is in this set. Enabling one no longer re-enters the #70 crash path: those panes sample
+ * the independent [rememberGlassPaneBackdrop] layer recorded outside the pager, rather
+ * than the pager's own backdrop.
  */
 val LocalGlassComponentsEnabled = compositionLocalOf<Set<String>> { emptySet() }
 
@@ -254,9 +255,11 @@ val LocalGlassComponentsEnabled = compositionLocalOf<Set<String>> { emptySet() }
  * panes on the flat tier the app runs; put the panes back on the bar's backdrop and it dies.
  *
  * So a pane samples its **own** recorded layer, exactly as the bar's own tab strip already
- * does (`tabsBackdrop` in `FloatingBottomBarLiquid`). That is a second recording per pane
- * group, which costs some GPU work — but it is a correct graph: nothing samples a layer it
- * is inside.
+ * does (`tabsBackdrop` in `FloatingBottomBarLiquid`). The composition root records this
+ * layer from an empty, full-size `Box` that is the pager's sibling, publishes it to the
+ * pager's content through [LocalGlassBarBackdrop], and leaves the real bar backdrop for the
+ * bar, the header seats and the hoisted pill strip. Nothing samples a layer it is inside.
+ * That second recording costs some GPU work, but it is a correct graph.
  *
  * The layer is remembered per appearance and per level, like the bar's, so it is rebuilt
  * when the palette changes and never survives a level change.
@@ -278,20 +281,17 @@ fun rememberGlassPaneBackdrop(): GlassBarBackdrop? {
  *
  * ## Why the panes need their own recording, and why sharing the bar's was wrong
  *
- * The bar's layer is recorded from the pager. A pane that samples it is sampling a layer
- * whose recording subtree it is *not* part of — which is fine in principle, and was the
- * shape before, but it means the pane's own background (the transcript rows behind it) is
- * the only thing it can ever refract. That is what the bar wants: it sits over the page.
+ * The bar's layer is recorded from the pager. A pane composed inside that pager and
+ * sampling the same layer is a consumer in the subtree being recorded: every card that
+ * appears or disappears re-binds a runtime shader against a layer that is still being
+ * re-recorded, which is the measured RenderThread crash. `8ee8983` fixed one instance by
+ * moving the To-dos card out of the pager; this fixes the rest without moving layouts that
+ * cannot be hoisted (scrollable settings lists, fixed file headers, the hero chip).
  *
- * A pane sits *in* the composer stack, over the transcript's last rows. Sampling the bar's
- * pager layer gives it the transcript, which is right; but the pager's layer is recorded
- * once and shared by every pane plus the bar, and miuix's `DrawBackdropNode` keeps its own
- * GraphicsLayers per node. Several nodes sampling one recorded layer while the layer is
- * being re-recorded is the crash this whole investigation is about.
- *
- * So a pane records from its **own** sibling subtree — the same trick the bar's tab strip
- * uses (`tabsBackdrop`), and the shape `8ee8983` arrived at from the other direction when
- * it moved the To-dos card out of the pager.
+ * The composition root applies this modifier to an empty, full-size `Box` that is the
+ * pager's sibling, so the recorded subtree contains no pane at all. The panes sample that
+ * layer; the bar, the header seats and the hoisted pill strip keep the real pager layer and
+ * stay its siblings.
  *
  * A no-op when [backdrop] is null, so the caller writes one line on every device.
  */
