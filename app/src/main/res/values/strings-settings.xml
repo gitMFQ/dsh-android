@@ -98,11 +98,10 @@
     <string name="settings_glass_section_conversation_title">Conversation</string>
     <string name="settings_glass_section_screens_title">Other screens</string>
     <string name="settings_glass_section_widgets_title">Widgets</string>
-    <string name="settings_glass_pane_summary">Off by default: turning one on re-enters the pane path that crashed on the test handset, one surface at a time, with the launch guard as the net.</string>
+    <string name="settings_glass_pane_summary">Off by default. Each pane now samples its own backdrop outside the pager, so turning one on no longer re-enters the old crash path.</string>
     <string name="settings_glass_pane_collapse_summary">This bar is passed a null backdrop, so its switch cannot light the material — it stays flat.</string>
     <string name="settings_glass_pane_view_tabs_title">View tabs</string>
     <string name="settings_glass_pane_small_glass_pill_title">Small glass pills</string>
-    <string name="settings_glass_pane_status_capsule_title">Status capsule</string>
     <string name="settings_glass_pane_connection_pill_title">Connection pill</string>
     <string name="settings_glass_pane_agent_preset_chip_title">Agent preset chip</string>
     <string name="settings_glass_pane_scroll_to_bottom_title">Scroll-to-bottom button</string>

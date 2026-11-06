@@ -43,9 +43,9 @@ import uk.xa0.dsh.ui.theme.DshTheme
  * argument: a call site cannot be left silently untagged.
  * [LocalGlassComponentsEnabled] is the set of enabled keys and defaults **empty**, so every
  * pane stays byte-identical to the flat tier until the reader opts that one component in.
- * Turning one on re-opens exactly the path #70 closed, with `LaunchGuard` (#66) stepping
- * the level down on any native crash as the net. The liquid branch itself is the one from
- * #69, unchanged.
+ * The panes sample the independent [rememberGlassPaneBackdrop] layer recorded outside the
+ * pager, so enabling one no longer re-opens the #70 crash path. The liquid branch itself
+ * is the one from #69, unchanged.
  *
  * ## The gate
  *

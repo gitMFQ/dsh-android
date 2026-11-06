@@ -134,7 +134,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import uk.xa0.dsh.BalanceState
 import uk.xa0.dsh.PENDING_DRAFT_KEY
-import uk.xa0.dsh.PendingKind
 import uk.xa0.dsh.R
 import uk.xa0.dsh.ReferenceCandidate
 import uk.xa0.dsh.UiState
@@ -145,16 +144,12 @@ import uk.xa0.dsh.diag.ScrollDiag
 import uk.xa0.dsh.diag.diagDrag
 import uk.xa0.dsh.diag.diagOffset
 import uk.xa0.dsh.diag.diagRowGrowth
-import uk.xa0.dsh.model.CapsuleState
 import uk.xa0.dsh.model.ChatEntry
 import uk.xa0.dsh.model.DisplayRow
 import uk.xa0.dsh.model.GeneralSettings
 import uk.xa0.dsh.model.LiveAttempt
-import uk.xa0.dsh.model.PendingKindWire
 import uk.xa0.dsh.model.SessionFiles
 import uk.xa0.dsh.model.SessionTarget
-import uk.xa0.dsh.model.StatusCapsule
-import uk.xa0.dsh.model.StatusCapsules
 import uk.xa0.dsh.model.SubagentComposerState
 import uk.xa0.dsh.model.SubagentReadOnlyReason
 import uk.xa0.dsh.model.TurnDeliverables
@@ -217,6 +212,8 @@ import uk.xa0.dsh.ui.glass.glassLift
 import uk.xa0.dsh.ui.glass.liquidBarPane
 import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
+import uk.xa0.dsh.ui.glass.glassPaneLayer
+import uk.xa0.dsh.ui.glass.rememberGlassPaneBackdrop
 import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
 import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
@@ -695,17 +692,21 @@ internal fun ChatPanel(
 
     // The bar's material needs something to sample (3.2b).
     //
-    // The handle is opaque on purpose: this file must not name a miuix-blur type, or the
-    // rule in NOTICE.md that keeps those names inside `:design` would be broken by the
-    // one caller that is hardest to audit. MainActivity owns the one recorded layer
-    // (inside DshTheme) and publishes it in the ambient; only the bar tab strip and the
-    // three header seats actually sample it (see LiquidBarPane.kt). The panes below take
-    // the handle for signature compatibility but stay on the flat material — a pane that
-    // samples the layer recording the pager it lives in is the RenderThread SIGSEGV this
-    // build is recovering from. Null (as in the screenshot fixtures, which never provide
-    // the ambient) means the flat tier; either way the flat-tier pixels are unchanged. See
-    // `ui/glass/GlassBarBackdrop.kt` for the capability test.
+    // MainActivity owns the bar's recorded layer (inside DshTheme) and publishes it in
+    // the ambient. The pager is recorded INTO that layer with glassBarLayer; the bar tab
+    // strip and the three header seats are siblings of the pager, so they can sample it
+    // safely. A pane composed inside the pager cannot: it would be sampling the layer
+    // its own subtree is being recorded into, which is the RenderThread SIGSEGV #70
+    // measured. Panes therefore sample paneBackdrop instead, an independent layer
+    // recorded from an empty sibling of the pager. The pill strip is hoisted out of the
+    // pager so it can keep the real, content-refracting bar layer.
+    //
+    // Both handles are opaque: this file names no miuix-blur type (NOTICE.md). Null
+    // (as in the screenshot fixtures, which pin LocalGlassEnabled to false) means the
+    // flat tier; either way the flat-tier pixels are unchanged. See
+    // ui/glass/GlassBarBackdrop.kt for the capability test.
     val glassBackdrop = LocalGlassBarBackdrop.current
+    val paneBackdrop = rememberGlassPaneBackdrop()
     // A session switch returns to the conversation *and* to its transcript view, which is
     // what re-creating the old `rememberSaveable(ui.currentSessionId)` on the pager used
     // to do at both levels.
@@ -1532,6 +1533,7 @@ internal fun ChatPanel(
             // what lets the transcript slide under the header and through the
             // status bar instead of stopping below them.
             Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().glassPaneLayer(paneBackdrop))
             HorizontalPager(
                 state = destinationState,
                 // Keyed per destination so each page keeps its own vertical scroll
@@ -1563,6 +1565,7 @@ internal fun ChatPanel(
                 // derivation of the transcript; paying for both while the reader looks
                 // at neither would cost more than the swipe saves.
             ) { page ->
+            CompositionLocalProvider(LocalGlassBarBackdrop provides paneBackdrop) {
                 when (Destination.entries[page]) {
                     // Files stopped being a panel over the conversation and became a
                     // place (3.3). The surface is the one 2.4's panel already drew, so
@@ -1607,7 +1610,7 @@ internal fun ChatPanel(
                             scope.launch { saver.save(path, text) }
                         }
                     },
-                    backdrop = glassBackdrop,
+                    backdrop = paneBackdrop,
                     onClose = {
                         // The tree is a per-open reading; leaving the cache up
                         // would show a stale directory the next time it opens.
@@ -1640,125 +1643,19 @@ internal fun ChatPanel(
                             state = meSettings,
                             actions = meSettingsActions,
                             onOpenAbout = { showAbout = true },
-                            backdrop = glassBackdrop,
+                            backdrop = paneBackdrop,
                         )
                     }
 
                     // The conversation: three readings of one session, chosen by the
-                    // pill under the header rather than by the bar below (3.3).
-                    // **A Box: the pill strip floats over the transcript.**
+                    // pill strip above (a sibling of this pager) rather than by the bar
+                    // below (3.3).
                     //
-                    // In a Column the strip reserved its height, so the transcript began
-                    // below it and could never be seen through either it or the header
-                    // above it. Floating the strip and making the transcript pay both
-                    // heights as *content* padding is what lets a long answer slide up
-                    // under the chrome and out through the status bar, which is the
-                    // behaviour "内容可以滑动显示到顶栏和通知栏" describes.
+                    // The transcript pays the chrome and the strip as *content* padding,
+                    // so a long answer slides up under them and out through the status
+                    // bar, which is the behaviour "内容可以滑动显示到顶栏和通知栏" describes.
                     Destination.CHAT -> Box(Modifier.fillMaxSize()) {
 
-                        // The pill strip under the header.
-                        //
-                        // The seats that left the header land here, as small pills: the
-                        // view tabs (always the "three readings" pill), the session's one
-                        // ranked status fact, and the Files door.
-                        //
-                        // **Not a horizontal scroll.** It was one for one revision, and
-                        // it was the wrong instrument twice over: a scrollable row inside
-                        // a `HorizontalPager` is a gesture it has to win from its parent,
-                        // so swiping across the strip stopped turning the page; and a
-                        // strip whose pills can be scrolled off the edge hides controls
-                        // a thumb is aiming at. The row wraps instead — three pills fit on
-                        // any phone this app runs on, and a fourth would be a reason to
-                        // reconsider the contents rather than to scroll them.
-                        FlowRow(
-                            Modifier
-                                // Floats below the header, over the transcript.
-                                .align(Alignment.TopCenter)
-                                .fillMaxWidth()
-                                // Measured, because the transcript has to reserve
-                                // exactly this much above its first row: a strip that
-                                // grows a pill (the status capsule appears mid-session)
-                                // must push the transcript down with it.
-                                .onSizeChanged { pillStripPx = it.height }
-                                .padding(
-                                    start = DshSpacing.xl,
-                                    end = DshSpacing.xl,
-                                    top = chromeDp + DshSpacing.sm,
-                                    bottom = DshSpacing.xs,
-                                ),
-                            horizontalArrangement = Arrangement.spacedBy(DshSpacing.sm),
-                            verticalArrangement = Arrangement.spacedBy(DshSpacing.xs),
-                        ) {
-                            ViewPill(
-                                // Filtered, not replaced: with the setting off the strip
-                                // holds Chat alone, which is what a reader who never opens
-                                // the trajectory asked for.
-                                items = if (ui.chatViewsEnabled) {
-                                    CHAT_VIEW_ITEMS
-                                } else {
-                                    CHAT_VIEW_ITEMS.filter { it.key == ChatView.CHAT.name }
-                                },
-                                selectedKey = chatView.name,
-                                onSelect = { key ->
-                                    ChatView.entries.firstOrNull { it.name == key }?.let(goToView)
-                                },
-                            )
-                            // One status fact, ranked. The derivation reads the whole
-                            // `UiState` because the four facts it ranks live in four
-                            // different places — the attention mirrors, the mux poll, the
-                            // running flag and the session id — and doing that ranking at
-                            // the call site is what keeps the chip a pure function of its
-                            // arguments. `isDrawn` is the filter, not an extra `if` here:
-                            // "an idle session shows nothing" is one statement in
-                            // `:core:model`, and a second copy at the call site is how the
-                            // two drift.
-                            StatusCapsules
-                                .derive(
-                                    pending = pendingKindOf(ui.pendingInteractions[ui.currentSessionId]),
-                                    connectionLabel = ui.connectionLabel,
-                                    running = ui.running,
-                                    // A seat, not a session id: the new-session hero has
-                                    // no id yet and is still a real seat; a cold start with
-                                    // nothing to reopen has neither and is the one genuinely
-                                    // seatless case.
-                                    seatOpen = ui.currentSessionId != null || ui.pendingSession != null,
-                                )
-                                .takeIf { StatusCapsules.isDrawn(it.state) }
-                                ?.let { capsule ->
-                                    // Only one of the four states has somewhere to go, and
-                                    // the chip is a button for that one and a plain chip for
-                                    // the rest rather than a button that does nothing:
-                                    // OFFLINE opens About (whose "Restart connection" is the
-                                    // action this state actually has); WAITING has no tap
-                                    // because the card that answers it is already floating
-                                    // over the conversation; WORKING and UNKNOWN have none.
-                                    StatusCapsuleChip(
-                                        capsule,
-                                        onClick = if (capsuleStateIsOffline(ui)) {
-                                            { showAbout = true }
-                                        } else {
-                                            null
-                                        },
-                                    )
-                                }
-                            // The Files door. It left the header because the header is now
-                            // three fixed seats; a page you can go to belongs with the other
-                            // things that move you around the conversation, not with the
-                            // overflow. Withheld entirely when there is no session to
-                            // resolve paths against, rather than opening an empty list.
-                            if (ui.currentSessionId != null) {
-                                SmallGlassPill(
-                                    label = "Files",
-                                    icon = DshIconVectors.FolderOpenOutline,
-                                    active = false,
-                                    backdrop = glassBackdrop,
-                                    onClick = {
-                                        filesFocus = null
-                                        goToDestination(Destination.FILES)
-                                    },
-                                )
-                            }
-                        }
                         // The transcript’s selection menu. Drawn at the page level
                         // rather than inside a row: the popup has to outlive the row that
                         // opened it, and a row can be recycled mid-selection.
@@ -2216,7 +2113,64 @@ internal fun ChatPanel(
                         }
                 }
             }
+            }
         }
+
+            // The pill strip is the pager's sibling, not its child. The panes down in
+            // the pager sample paneBackdrop; this strip stays outside so the view tabs
+            // and the Files door keep the bar's real, content-refracting layer. Hoisting
+            // it breaks their self-recording cycle without flattening the material.
+            if (destination == Destination.CHAT) {
+                FlowRow(
+                    Modifier
+                        // Floats below the header, over the transcript.
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        // Measured: the transcript reserves exactly this height above
+                        // its first row as content padding.
+                        .onSizeChanged { pillStripPx = it.height }
+                        .padding(
+                            start = DshSpacing.xl,
+                            end = DshSpacing.xl,
+                            top = chromeDp + DshSpacing.sm,
+                            bottom = DshSpacing.xs,
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(DshSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(DshSpacing.xs),
+                ) {
+                    ViewPill(
+                        // Filtered, not replaced: with the setting off the strip
+                        // holds Chat alone, which is what a reader who never opens
+                        // the trajectory asked for.
+                        items = if (ui.chatViewsEnabled) {
+                            CHAT_VIEW_ITEMS
+                        } else {
+                            CHAT_VIEW_ITEMS.filter { it.key == ChatView.CHAT.name }
+                        },
+                        selectedKey = chatView.name,
+                        onSelect = { key ->
+                            ChatView.entries.firstOrNull { it.name == key }?.let(goToView)
+                        },
+                    )
+                    // The Files door. It left the header because the header is now
+                    // three fixed seats; a page you can go to belongs with the other
+                    // things that move you around the conversation, not with the
+                    // overflow. Withheld entirely when there is no session to
+                    // resolve paths against, rather than opening an empty list.
+                    if (ui.currentSessionId != null) {
+                        SmallGlassPill(
+                            label = "Files",
+                            icon = DshIconVectors.FolderOpenOutline,
+                            active = false,
+                            backdrop = glassBackdrop,
+                            onClick = {
+                                filesFocus = null
+                                goToDestination(Destination.FILES)
+                            },
+                        )
+                    }
+                }
+            }
 
             // Everything docked to the composer floats over the transcript instead of
             // sitting below it. Stacked below, the list's box ends at the stack's top
@@ -3163,13 +3117,12 @@ private fun ChatHeader(
      * Everything the overflow circle holds, in order.
      *
      * The row used to be a cluster of icon seats (Files, Router, Jobs, the lineage
-     * chip, the status capsule) and the user's read of it was that the header is
-     * crowded: the files button goes away and the other controls move below the
-     * header as small pills, with a round three-dot button on the right. So the row
-     * is now **three things** — a circle, one pill, one circle — and every other seat
-     * moved: the ones that describe the open session (view tabs, Files, status) became
-     * pills *under* the header, and the ones that are rare one-shot actions (Jobs,
-     * Router, lineage) went in here.
+     * chip) and the user's read of it was that the header is crowded: the files
+     * button goes away and the other controls move below the header as small pills,
+     * with a round three-dot button on the right. So the row is now **three things**
+     * — a circle, one pill, one circle — and every other seat moved: the ones that
+     * describe the open session (view tabs, Files) became pills *under* the header,
+     * and the ones that are rare one-shot actions (Jobs, Router, lineage) went in here.
      *
      * A caller that has nothing to put in the menu passes an empty list and the
      * trailing circle still draws — as a dimmed placeholder, because the row is three
@@ -3789,18 +3742,6 @@ private val HEADER_SEAT = 40.dp
 private val HEADER_SEAT_GAP = DshSpacing.xs
 
 /**
- * The widest the status capsule may be.
- *
- * The header row has no trailing inset — every other seat is a fixed 40dp circle, so
- * none of them ever needed one — and the first recorded capture of the capsule showed
- * "Waiting for approval" running off the right edge. This is the width that fits the
- * longest of the four labels alongside the utilities on a 411dp phone, with the row's
- * own end padding after it. A label a future state adds that does not fit ellipsizes
- * rather than clipping.
- */
-private val CAPSULE_MAX_WIDTH = 148.dp
-
-/**
  * The drawer's edge drag, on the screen **and** on the sheet.
  *
  * ## It follows the finger
@@ -4213,121 +4154,6 @@ private fun ErrorBanner(
             )
         }
         Text("Dismiss", style = DshType.bodySmall, color = colors.link)
-    }
-}
-
-/**
- * The app's `PendingKind` as the model layer's mirror of it.
- *
- * Two enums rather than one because the ranking lives in `:core:model` (where it can
- * be tested without Android) and the kind is minted in `AttentionCenter`, next to the
- * event stream that produces it. This is the one place the two meet; an unmapped value
- * becomes null rather than throwing, because a kind this build does not know is a
- * reason to draw no capsule, not a reason to crash the header.
- */
-private fun pendingKindOf(kind: PendingKind?): PendingKindWire? = when (kind) {
-    PendingKind.APPROVAL -> PendingKindWire.APPROVAL
-    PendingKind.QUESTION -> PendingKindWire.QUESTION
-    PendingKind.PLAN_REVIEW -> PendingKindWire.PLAN_REVIEW
-    null -> null
-}
-
-/**
- * Whether the capsule would be showing the offline state, computed from the same
- * inputs `StatusCapsules.derive` reads.
- *
- * Recomputed rather than read off the derived value because the derived value is
- * passed inline as an argument and the tap handler is chosen in the same expression
- * list — naming it would need a local outside the call, and a `remember`ed capsule
- * would go stale against `UiState`. The duplication is two boolean reads against one
- * source of truth (`connectionLabel`), which is the smaller of the two evils.
- */
-private fun capsuleStateIsOffline(ui: UiState): Boolean =
-    ui.connectionLabel != null && ui.pendingInteractions[ui.currentSessionId] == null
-
-/**
- * The header's status capsule: one fact, one word, one tint.
- *
- * ## Why a chip and not a dot
- *
- * A coloured dot is the cheapest status indicator and the worst one here: the four
- * states this can show are not a severity ramp (an approval is not "redder" than a
- * dropped socket), and a dot cannot say *which* interaction is waiting. The word is
- * the payload; the tint only groups the state.
- *
- * ## Why the tint is not the palette's semantic colour alone
- *
- * [CapsuleState.WAITING] wears the warning tint because the agent is stopped until a
- * human answers — the same colour the Full-access option and the truncated-entry note
- * wear, which is the app's existing vocabulary for "this is on you". [OFFLINE] wears
- * the error tint, [WORKING] the accent, and [UNKNOWN] tertiary ink: a state the client
- * cannot name should not be loud.
- *
- * The dot is the same `StateDot` the rest of the app uses, so a waiting approval
- * chases exactly like a running job does rather than inventing a second animation.
- */
-@Composable
-private fun StatusCapsuleChip(
-    capsule: StatusCapsule,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-) {
-    val colors = DshTheme.colors
-    val backdrop = LocalGlassBarBackdrop.current
-    val tint = when (capsule.state) {
-        CapsuleState.WAITING -> colors.warn
-        CapsuleState.OFFLINE -> colors.error
-        CapsuleState.WORKING -> colors.accent
-        CapsuleState.UNKNOWN -> colors.labelTertiary
-        // Not drawn — `StatusCapsules.isDrawn` says so and the caller filters it — but
-        // the branch has to exist, and tertiary ink is the honest choice for a state
-        // that is deliberately not shown.
-        CapsuleState.IDLE -> colors.labelTertiary
-    }
-    Row(
-        modifier = modifier
-            .liquidPane(backdrop, GlassComponent.STATUS_CAPSULE, RoundedCornerShape(DshRadius.pill), flatFill = colors.bgLayer1)
-            .then(if (onClick != null) Modifier.clickableNoRipple(onClick = onClick) else Modifier)
-            .semantics { contentDescription = capsule.label }
-            .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xxs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // A chase for the two states that are *moving* — a blocked agent that the host
-        // is still holding, and a socket that is redialling. A still dot for the two
-        // that are not: a running turn is motion but its indicator does not need to
-        // animate twice (the composer's stop affordance already does), and "no session"
-        // is a standing fact.
-        when (capsule.state) {
-            CapsuleState.WAITING, CapsuleState.OFFLINE ->
-                StateDot(state = DotState.ONGOING, size = 6.dp)
-
-            else -> Box(
-                Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(tint),
-            )
-        }
-        Spacer(Modifier.width(DshSpacing.xs))
-        Text(
-            text = capsule.label,
-            style = DshType.micro,
-            color = tint,
-            maxLines = 1,
-            // `weight(1f)` — with `fill` left at its default `true` — is what makes the
-            // label take the space that is left and then ellipsize inside it. A bare
-            // `Text` measures at its intrinsic width, so a `widthIn` on the Row only
-            // shrinks the *container* and the label keeps drawing past its edge.
-            //
-            // `fill = false` was tried first and is wrong here: it asks for the
-            // intrinsic width, which is the very thing that overflows. The cost of
-            // `fill = true` is that a short label ("Working") reserves the cap's width
-            // and the pill reads slightly wide — accepted, because a pill that is a few
-            // dp too wide is a cosmetic imprecision and a label running off the screen
-            // is a bug.
-            modifier = Modifier.weight(1f),
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 

@@ -896,19 +896,13 @@ class ScreenBaselineTest {
     }
 
     /**
-     * The header wearing its one status capsule, in the state that outranks everything:
-     * an approval the agent is blocked on.
+     * The conversation with an approval the agent is blocked on.
      *
-     * A capture of its own rather than a variation of the transcript above, because
-     * the capsule is the only part of the header that changes with live state and no
-     * existing fixture reaches it — every other capture has either no session or a
-     * session that is neither running nor pending. That is precisely the coverage gap
-     * the ranking exists to fill, so leaving it unpinned would make the ranking
-     * unobservable in a diff.
-     *
-     * What it pins: the capsule sits **after** the utilities (so a changing label
-     * cannot shift them), it is the last thing on the row, and its warning tint is the
-     * same one the Full-access option wears.
+     * The status capsule this capture used to pin is gone: a pending approval already
+     * has the floating attention card, so a second pill in the header said nothing new.
+     * Kept as its own baseline anyway — it now pins that a pending interaction does
+     * **not** add a header pill, i.e. the header keeps the plain transcript's frame. A
+     * regression that puts a status back up there shows up as a diff.
      */
     @Test
     fun chatTranscriptWaiting() {
@@ -988,10 +982,10 @@ class ScreenBaselineTest {
      * them: a second copy of these rows would let the collapsed capture drift from the
      * open one without anyone noticing.
      *
-     * [pending] puts an approval in the header's way. It is a parameter rather than a
-     * second fixture because the capsule's whole point is that it *replaces* a status
-     * rather than adding one: the capture that proves it is the same screen with one
-     * fact changed.
+     * [pending] puts an approval in the session's pending map. It is a parameter rather
+     * than a second fixture because the capture that uses it is the same screen with one
+     * fact changed; with the status capsule removed, that fact no longer paints a header
+     * pill, which is exactly what the waiting baseline pins.
      */
     @Composable
     private fun ChatTranscriptContent(
