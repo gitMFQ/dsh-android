@@ -229,6 +229,13 @@ data class ChatActions(
     val setChatViewsEnabled: (Boolean) -> Unit = {},
     val setLiquidGlassEnabled: (Boolean) -> Unit = {},
     val setLiquidGlassLevel: (String) -> Unit = {},
+    val setGlassBackdrop: (Boolean) -> Unit = {},
+    val setGlassShader: (Boolean) -> Unit = {},
+    val setGlassLift: (Boolean) -> Unit = {},
+    val setGlassPanes: (Boolean) -> Unit = {},
+    val setGlassBar: (Boolean) -> Unit = {},
+    val setGlassHeader: (Boolean) -> Unit = {},
+    val setGlassCards: (Boolean) -> Unit = {},
 
     /** Sets the in-app language, or clears it back to the device’s own. */
     val setAppLanguage: (String) -> Unit = {},

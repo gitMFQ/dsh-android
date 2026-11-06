@@ -178,6 +178,9 @@ internal fun LocalSettingCard(state: MeSettingsState, actions: MeSettingsActions
                 // Three levels and not a switch, because "the glass crashes" cannot be
                 // acted on and "the runtime shader crashes" can. Blur keeps the look and
                 // drops the two AGSL shaders — see LiquidGlassLevel.
+                //
+                // The level is the ceiling for everything below: these switches can only
+                // take a mechanism or a surface away from what the level permits.
                 SegmentedDropdownItem(
                     title = stringResource(R.string.settings_local_liquid_glass_title),
                     summary = stringResource(R.string.settings_local_liquid_glass_summary),
@@ -187,6 +190,79 @@ internal fun LocalSettingCard(state: MeSettingsState, actions: MeSettingsActions
                     onItemSelected = { picked ->
                         actions.onLiquidGlassLevel(levelChoices[picked].value)
                     },
+                )
+            },
+        ),
+    )
+
+    // Four mechanisms: each is a separate GPU layer, so each gets its own switch rather
+    // than one "glass" toggle that can only blame the driver in the aggregate.
+    SegmentedColumn(
+        title = stringResource(R.string.settings_glass_mechanisms_title),
+        content = listOf(
+            {
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_glass_backdrop_title),
+                    checked = state.glassBackdrop,
+                    onCheckedChange = actions.onGlassBackdrop,
+                    summary = stringResource(R.string.settings_glass_backdrop_summary),
+                )
+            },
+            {
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_glass_shader_title),
+                    checked = state.glassShader,
+                    onCheckedChange = actions.onGlassShader,
+                    summary = stringResource(R.string.settings_glass_shader_summary),
+                )
+            },
+            {
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_glass_lift_title),
+                    checked = state.glassLift,
+                    onCheckedChange = actions.onGlassLift,
+                    summary = stringResource(R.string.settings_glass_lift_summary),
+                )
+            },
+            {
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_glass_panes_title),
+                    checked = state.glassPanes,
+                    onCheckedChange = actions.onGlassPanes,
+                    summary = stringResource(R.string.settings_glass_panes_summary),
+                )
+            },
+        ),
+    )
+
+    // Three locations. The bar and the header seats are stable-geometry siblings of the
+    // recorded pager and have never crashed; the cards are the path #70 closed, so their
+    // switch defaults off and the row says what turning it on risks.
+    SegmentedColumn(
+        title = stringResource(R.string.settings_glass_surfaces_title),
+        content = listOf(
+            {
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_glass_bar_title),
+                    checked = state.glassBar,
+                    onCheckedChange = actions.onGlassBar,
+                    summary = stringResource(R.string.settings_glass_bar_summary),
+                )
+            },
+            {
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_glass_header_title),
+                    checked = state.glassHeader,
+                    onCheckedChange = actions.onGlassHeader,
+                    summary = stringResource(R.string.settings_glass_header_summary),
+                )
+            },
+            {
+                SegmentedSwitchItem(
+                    title = stringResource(R.string.settings_glass_cards_title),
+                    checked = state.glassCards,
+                    onCheckedChange = actions.onGlassCards,
+                    summary = stringResource(R.string.settings_glass_cards_summary),
                 )
             },
         ),

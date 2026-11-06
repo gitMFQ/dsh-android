@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -422,6 +423,124 @@ class MeSettingsPageTest {
         rule.onNodeWithText("Configure and inspect the plugins installed in this deployment.")
             .assertIsDisplayed()
         rule.onNodeWithText("This deployment stores settings read-only.").assertIsDisplayed()
+    }
+
+    // ------------------------------------------------------------------- glass
+    //
+    // The local page is a tall verticalScroll with three switch columns; rows below the
+    // fold must be scrolled into view before they can be asserted or tapped. Every
+    // interaction here calls performScrollTo() for that reason — see AutomationTasksTest.
+
+    /** The local page draws both glass headings and all seven switch titles verbatim. */
+    @Test
+    fun `the local page draws every glass heading and switch title`() {
+        page(id = "local")
+        listOf(
+            "Glass mechanisms",
+            "Glass surfaces",
+            "Backdrop blur",
+            "Refraction and highlight",
+            "Floating shadow",
+            "Pane material",
+            "Bottom bar",
+            "Header buttons",
+            "Cards and sheets",
+        ).forEach { rule.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
+    }
+
+    /** Backdrop blur is on by default, so one tap reports false. */
+    @Test
+    fun `backdrop blur reports false on a tap`() {
+        val recorded = mutableListOf<Boolean>()
+        page(
+            id = "local",
+            actions = MeSettingsActions(onGlassBackdrop = { recorded += it }),
+        )
+        rule.onNodeWithText("Backdrop blur").performScrollTo().performClick()
+        assertEquals(listOf(false), recorded)
+    }
+
+    /** Refraction and highlight is on by default, so one tap reports false. */
+    @Test
+    fun `refraction and highlight reports false on a tap`() {
+        val recorded = mutableListOf<Boolean>()
+        page(
+            id = "local",
+            actions = MeSettingsActions(onGlassShader = { recorded += it }),
+        )
+        rule.onNodeWithText("Refraction and highlight").performScrollTo().performClick()
+        assertEquals(listOf(false), recorded)
+    }
+
+    /** Floating shadow is on by default, so one tap reports false. */
+    @Test
+    fun `floating shadow reports false on a tap`() {
+        val recorded = mutableListOf<Boolean>()
+        page(
+            id = "local",
+            actions = MeSettingsActions(onGlassLift = { recorded += it }),
+        )
+        rule.onNodeWithText("Floating shadow").performScrollTo().performClick()
+        assertEquals(listOf(false), recorded)
+    }
+
+    /** Pane material is on by default, so one tap reports false. */
+    @Test
+    fun `pane material reports false on a tap`() {
+        val recorded = mutableListOf<Boolean>()
+        page(
+            id = "local",
+            actions = MeSettingsActions(onGlassPanes = { recorded += it }),
+        )
+        rule.onNodeWithText("Pane material").performScrollTo().performClick()
+        assertEquals(listOf(false), recorded)
+    }
+
+    /** Bottom bar is on by default, so one tap reports false. */
+    @Test
+    fun `bottom bar reports false on a tap`() {
+        val recorded = mutableListOf<Boolean>()
+        page(
+            id = "local",
+            actions = MeSettingsActions(onGlassBar = { recorded += it }),
+        )
+        rule.onNodeWithText("Bottom bar").performScrollTo().performClick()
+        assertEquals(listOf(false), recorded)
+    }
+
+    /** Header buttons is on by default, so one tap reports false. */
+    @Test
+    fun `header buttons reports false on a tap`() {
+        val recorded = mutableListOf<Boolean>()
+        page(
+            id = "local",
+            actions = MeSettingsActions(onGlassHeader = { recorded += it }),
+        )
+        rule.onNodeWithText("Header buttons").performScrollTo().performClick()
+        assertEquals(listOf(false), recorded)
+    }
+
+    /** Cards and sheets is off by default, so one tap reports true. */
+    @Test
+    fun `cards and sheets reports true on a tap`() {
+        val recorded = mutableListOf<Boolean>()
+        page(
+            id = "local",
+            actions = MeSettingsActions(onGlassCards = { recorded += it }),
+        )
+        rule.onNodeWithText("Cards and sheets").performScrollTo().performClick()
+        assertEquals(listOf(true), recorded)
+    }
+
+    /** A state's own glass values are drawn as rows, whatever those values are. */
+    @Test
+    fun `the local page draws the glass rows from its state`() {
+        page(
+            id = "local",
+            state = MeSettingsState(glassCards = true, glassBackdrop = false),
+        )
+        rule.onNodeWithText("Cards and sheets").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Backdrop blur").performScrollTo().assertIsDisplayed()
     }
 
     // ----------------------------------------------------------------- helpers

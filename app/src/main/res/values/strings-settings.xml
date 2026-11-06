@@ -81,6 +81,22 @@
     <string name="settings_liquid_glass_blur">Backdrop and blur</string>
     <string name="settings_liquid_glass_bar">Bar only</string>
     <string name="settings_liquid_glass_off">Off</string>
+    <string name="settings_glass_mechanisms_title">Glass mechanisms</string>
+    <string name="settings_glass_surfaces_title">Glass surfaces</string>
+    <string name="settings_glass_backdrop_title">Backdrop blur</string>
+    <string name="settings_glass_backdrop_summary">Records the page behind the glass and blurs it. Off keeps every surface flat.</string>
+    <string name="settings_glass_shader_title">Refraction and highlight</string>
+    <string name="settings_glass_shader_summary">The AGSL runtime shaders that bend light and draw the specular rim. Off keeps the plain blur.</string>
+    <string name="settings_glass_lift_title">Floating shadow</string>
+    <string name="settings_glass_lift_summary">The drop shadow under a glass surface. Off draws it flush with the page.</string>
+    <string name="settings_glass_panes_title">Pane material</string>
+    <string name="settings_glass_panes_summary">Lets panes sample a recorded backdrop. Off keeps the header seats and the cards flat; the bar is unaffected.</string>
+    <string name="settings_glass_bar_title">Bottom bar</string>
+    <string name="settings_glass_bar_summary">The liquid capsule of the floating bottom bar.</string>
+    <string name="settings_glass_header_title">Header buttons</string>
+    <string name="settings_glass_header_summary">The three round seats in the conversation header.</string>
+    <string name="settings_glass_cards_title">Cards and sheets</string>
+    <string name="settings_glass_cards_summary">The fourteen card, chip and sheet groups. Off by default: turning it on re-enters the pane path that crashed on the test handset, with the launch guard as the net.</string>
 
     <!-- ===================================================================== -->
     <!-- Appearance                                                            -->

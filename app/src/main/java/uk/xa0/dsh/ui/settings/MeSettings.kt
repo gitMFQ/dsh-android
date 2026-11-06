@@ -59,6 +59,15 @@ data class MeSettingsState(
     val liquidGlassEnabled: Boolean = true,
     /** How much of it may run; see DshConfig.liquidGlassLevel. Off is the shipped default. */
     val liquidGlassLevel: String = LiquidGlassLevel.OFF,
+    /** Seven per-effect glass switches; see DshConfig. The level above is the ceiling. */
+    val glassBackdrop: Boolean = true,
+    val glassShader: Boolean = true,
+    val glassLift: Boolean = true,
+    val glassPanes: Boolean = true,
+    val glassBar: Boolean = true,
+    val glassHeader: Boolean = true,
+    /** Off by default: opting in re-enters the pane path #70 traced to a driver crash. */
+    val glassCards: Boolean = false,
     /** The in-app language override (BCP-47), or blank to follow the device. */
     val appLanguage: String = "",
     val busyEnter: String = BusyEnter.QUEUE,
@@ -109,6 +118,14 @@ data class MeSettingsActions(
     val onLiquidGlass: (Boolean) -> Unit = {},
     /** The material's level; see LiquidGlassLevel. */
     val onLiquidGlassLevel: (String) -> Unit = {},
+    /** The seven per-effect glass switches; see DshConfig. */
+    val onGlassBackdrop: (Boolean) -> Unit = {},
+    val onGlassShader: (Boolean) -> Unit = {},
+    val onGlassLift: (Boolean) -> Unit = {},
+    val onGlassPanes: (Boolean) -> Unit = {},
+    val onGlassBar: (Boolean) -> Unit = {},
+    val onGlassHeader: (Boolean) -> Unit = {},
+    val onGlassCards: (Boolean) -> Unit = {},
     /** The language row; blank clears the override. */
     val onLanguage: (String) -> Unit = {},
     val onBusyEnter: (String) -> Unit = {},

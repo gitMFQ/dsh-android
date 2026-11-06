@@ -95,6 +95,7 @@ fun Modifier.liquidBarPane(
     flatFill: Color? = null,
 ): Modifier {
     val liquid = backdrop != null &&
+        LocalGlassHeaderEnabled.current &&
         LocalGlassEnabled.current &&
         LocalGlassPaneEnabled.current &&
         currentGlassTier == GlassTier.LIQUID
