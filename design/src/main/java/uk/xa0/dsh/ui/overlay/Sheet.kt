@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import top.yukonga.miuix.kmp.window.WindowBottomSheet
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -69,7 +70,7 @@ fun DshSheet(
         // the ambient is null there in practice; Color.Transparent keeps the flat branch unchanged.
         modifier = modifier
             .fillMaxWidth()
-            .liquidPane(backdrop, RoundedCornerShape(DshRadius.panel), flatFill = Color.Transparent),
+            .liquidPane(backdrop, GlassComponent.SHEET, RoundedCornerShape(DshRadius.panel), flatFill = Color.Transparent),
         title = title,
         backgroundColor = colors.bgBase,
         // The shell's own panel radius, so a sheet and a card are the same family.

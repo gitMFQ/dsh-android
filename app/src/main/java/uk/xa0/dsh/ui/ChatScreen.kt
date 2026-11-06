@@ -209,7 +209,7 @@ fun ChatScreen(vm: DshViewModel) {
             setGlassPanes = vm::setGlassPanes,
             setGlassBar = vm::setGlassBar,
             setGlassHeader = vm::setGlassHeader,
-            setGlassCards = vm::setGlassCards,
+            setGlassComponent = vm::setGlassComponent,
             setAppLanguage = vm::setAppLanguage,
             workspaceFileDownloader = vm::workspaceFileDownloader,
             loadPluginInventory = vm::loadPluginInventory,

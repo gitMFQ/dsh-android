@@ -103,6 +103,7 @@ import uk.xa0.dsh.ui.markdown.MarkdownText
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -811,7 +812,7 @@ fun ExpandedProcessCollapseBar(
     Row(
         modifier
             .glassLift(shape)
-            .liquidPane(backdrop, shape)
+            .liquidPane(backdrop, GlassComponent.TOOL_COLLAPSE_BAR, shape)
             .clickableNoRipple(onClick = onCollapse)
             .padding(start = DshSpacing.lg, end = DshSpacing.md, top = DshSpacing.sm, bottom = DshSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
@@ -1501,7 +1502,7 @@ fun TodoCard(
             // liquid material as the dock it is lifted above rather than an opaque
             // `tip` slab beside it.
             .glassLift(shape)
-            .liquidPane(backdrop, shape),
+            .liquidPane(backdrop, GlassComponent.TODO_CARD, shape),
     ) {
         Row(
             Modifier
@@ -1762,7 +1763,7 @@ fun ApprovalCard(
     Column(
         modifier
             .fillMaxWidth()
-            .liquidPane(backdrop, shape, flatFill = colors.inputMajor)
+            .liquidPane(backdrop, GlassComponent.APPROVAL_CARD, shape, flatFill = colors.inputMajor)
             .border(1.dp, colors.warn, shape),
     ) {
         Row(
@@ -2004,7 +2005,7 @@ fun GoalBar(
             // The same floating material as the To-dos card it shares a seat with: one
             // of the cards lifted above the dock, not an opaque slab beside them.
             .glassLift(shape)
-            .liquidPane(backdrop, shape),
+            .liquidPane(backdrop, GlassComponent.GOAL_BAR, shape),
     ) {
         Row(
             Modifier

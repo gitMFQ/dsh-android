@@ -15,6 +15,7 @@ import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.NavigationRailState
 import top.yukonga.miuix.kmp.basic.NavigationRailValue
 import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -53,6 +54,7 @@ fun SideRail(
     NavigationRail(
         modifier = modifier.liquidPane(
             backdrop,
+            GlassComponent.SIDE_RAIL,
             RoundedCornerShape(DshRadius.card),
             flatFill = Color.Transparent,
         ),

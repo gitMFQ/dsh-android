@@ -121,7 +121,12 @@ class ConfigStore(context: Context) {
         glassPanes = prefs.getBoolean(KEY_GLASS_PANES, true),
         glassBar = prefs.getBoolean(KEY_GLASS_BAR, true),
         glassHeader = prefs.getBoolean(KEY_GLASS_HEADER, true),
-        glassCards = prefs.getBoolean(KEY_GLASS_CARDS, false),
+        // Copy on the way out: getStringSet hands back the set the prefs object is still
+        // using, and a caller that mutated it would edit stored state out from under the
+        // store. The enabled panes default to none.
+        glassComponents = prefs.getStringSet(KEY_GLASS_COMPONENTS, null)
+            ?.toSet()
+            ?: emptySet(),
         appLanguage = prefs.getString(KEY_LANGUAGE, "").orEmpty(),
         hostThemeMode = prefs.getString(KEY_HOST_THEME, "").orEmpty(),
         agentPreset = prefs.getString(KEY_PRESET, "").orEmpty(),
@@ -171,7 +176,10 @@ class ConfigStore(context: Context) {
             .putBoolean(KEY_GLASS_PANES, config.glassPanes)
             .putBoolean(KEY_GLASS_BAR, config.glassBar)
             .putBoolean(KEY_GLASS_HEADER, config.glassHeader)
-            .putBoolean(KEY_GLASS_CARDS, config.glassCards)
+            // Fresh copy, same reason as drawerCollapsedSections below: `apply` may keep a
+            // reference to the set, so the caller (a UiState copy) must not be able to mutate
+            // what was stored.
+            .putStringSet(KEY_GLASS_COMPONENTS, config.glassComponents.toSet())
             .putString(KEY_LANGUAGE, config.appLanguage)
             .putString(KEY_HOST_THEME, config.hostThemeMode)
             .putString(KEY_PRESET, config.agentPreset)
@@ -228,7 +236,7 @@ class ConfigStore(context: Context) {
         const val KEY_GLASS_PANES = "glassPanes"
         const val KEY_GLASS_BAR = "glassBar"
         const val KEY_GLASS_HEADER = "glassHeader"
-        const val KEY_GLASS_CARDS = "glassCards"
+        const val KEY_GLASS_COMPONENTS = "glassComponents"
 
         /** The in-app language override; blank follows the device. */
         const val KEY_LANGUAGE = "appLanguage"

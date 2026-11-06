@@ -43,6 +43,7 @@ import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.settings.MeSettingsActions
 import uk.xa0.dsh.ui.settings.MeSettingsPage
@@ -208,7 +209,7 @@ private fun SettingsBar(
                 Modifier
                     .size(40.dp)
                     .glassLift(CircleShape)
-                    .liquidPane(backdrop, CircleShape, flatFill = colors.bgLayer1)
+                    .liquidPane(backdrop, GlassComponent.SETTINGS_BACK, CircleShape, flatFill = colors.bgLayer1)
                     .clip(CircleShape)
                     .clickableNoRipple(onClick = onBack)
                     // A description, not a visible label: TalkBack reads it, so it is

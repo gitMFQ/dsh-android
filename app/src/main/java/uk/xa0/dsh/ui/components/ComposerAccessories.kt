@@ -61,6 +61,7 @@ import uk.xa0.dsh.ui.ModelTriggerState
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -287,7 +288,7 @@ internal fun GlassPill(
             // The lift first, as the bar does: a shadow is drawn outside the pane, and on a
             // light appearance `glassLift` declines to draw one at all.
             .glassLift(shape)
-            .liquidPane(backdrop, shape, tint)
+            .liquidPane(backdrop, GlassComponent.READOUT_PILLS, shape, tint)
             .then(
                 if (pillDescription != null) {
                     Modifier.semantics { contentDescription = pillDescription }

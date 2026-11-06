@@ -30,7 +30,7 @@ import uk.xa0.dsh.ui.SetupScreen
 import uk.xa0.dsh.ui.StartupScreen
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.LocalGlassBarEnabled
-import uk.xa0.dsh.ui.glass.LocalGlassCardsEnabled
+import uk.xa0.dsh.ui.glass.LocalGlassComponentsEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassHeaderEnabled
 import uk.xa0.dsh.ui.glass.LocalGlassLiftEnabled
@@ -248,19 +248,21 @@ class MainActivity : ComponentActivity() {
                     (LiquidGlassLevel.paintsPanes(ui.liquidGlassLevel) && ui.glassPanes),
                 // Where the material is allowed to land. These are location switches, not
                 // mechanisms: the level above still has to permit the material at all.
-                // Cards default off — see #70 for the measured crash they re-enter.
+                // The pane set defaults empty — see #70 for the measured crash a pane
+                // re-enters, and GlassComponent for the per-surface switches.
                 LocalGlassBarEnabled provides ui.glassBar,
                 LocalGlassHeaderEnabled provides ui.glassHeader,
-                LocalGlassCardsEnabled provides ui.glassCards,
+                LocalGlassComponentsEnabled provides ui.glassComponents,
             ) {
             DshTheme(themeMode = ui.themeMode, amoled = ui.amoled) {
                 // The one recorded backdrop, owned by the composition root. Inside
                 // DshTheme because rememberGlassBarBackdrop() reads the theme's bgBase;
                 // publishing it here lets the bar and the three header seats read the same
                 // handle through LocalGlassBarBackdrop instead of threading a parameter
-                // through every caller. The card panes take it too, but only when the
-                // reader opts in: a pane that samples the pager's own recorded layer is the
-                // measured RenderThread crash (#70), so LocalGlassCardsEnabled defaults off.
+                // through every caller. A card pane takes it too, but only when the reader
+                // opts that exact component in: a pane that samples the pager's own
+                // recorded layer is the measured RenderThread crash (#70), so
+                // LocalGlassComponentsEnabled defaults to an empty set.
                 // Fixtures never go through this provider, so the ambient stays null and
                 // every surface falls back to the flat material — the screenshot contract
                 // is unchanged.

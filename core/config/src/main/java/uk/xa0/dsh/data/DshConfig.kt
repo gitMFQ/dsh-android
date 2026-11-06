@@ -159,10 +159,12 @@ data class DshConfig(
      * bisected a crash down to "the lens" no longer has to give up the whole material for it.
      *
      * The four *mechanism* switches — [glassBackdrop], [glassShader], [glassLift],
-     * [glassPanes] — each remove one GPU feature family everywhere it is used. The three
-     * *location* switches — [glassBar], [glassHeader], [glassCards] — remove the material
-     * from one family of surfaces while leaving the others alone. All default on except
-     * [glassCards]; see its note.
+     * [glassPanes] — each remove one GPU feature family everywhere it is used. The two
+     * *location* switches — [glassBar], [glassHeader] — remove the material from one family
+     * of surfaces while leaving the others alone. The card / chip / sheet panes are addressed
+     * individually instead: [glassComponents] holds the `GlassComponent` keys the reader has
+     * opted in, and defaults empty. The level dropdown stays the master ceiling for all of
+     * them — a switch can only take an effect away, never grant one the level withheld.
      */
     val glassBackdrop: Boolean = true,
     val glassShader: Boolean = true,
@@ -171,12 +173,15 @@ data class DshConfig(
     val glassBar: Boolean = true,
     val glassHeader: Boolean = true,
     /**
-     * Off by default. #70 measured a RenderThread SIGSEGV when the card panes sampled the
-     * pager's *own* recorded layer. Opting in lights the #69 liquid branch again on that
-     * same layer, so it re-enters the path that closed the app on the test handset; it stays
-     * behind an explicit switch with LaunchGuard as the net.
+     * The `GlassComponent` keys whose panes may paint the liquid material, empty by default.
+     *
+     * #70 measured a RenderThread SIGSEGV when the card panes sampled the pager's *own*
+     * recorded layer. Enabling one key lights the #69 liquid branch again for exactly that
+     * pane, so it re-enters the path that closed the app on the test handset one surface at a
+     * time — with LaunchGuard as the net. The keys are the enum's stable snake_case `key`
+     * strings, persisted in preferences; renaming one would silently turn that pane back off.
      */
-    val glassCards: Boolean = false,
+    val glassComponents: Set<String> = emptySet(),
     /**
      * The language this app draws in, as a BCP-47 tag, or blank for "follow the device".
      *

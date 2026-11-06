@@ -215,6 +215,7 @@ import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassBarLayer
 import uk.xa0.dsh.ui.glass.glassLift
 import uk.xa0.dsh.ui.glass.liquidBarPane
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.nav.BarHeight
 import uk.xa0.dsh.ui.nav.BottomBarItem
@@ -312,7 +313,7 @@ internal fun ChatPanel(
         glassPanes = ui.glassPanes,
         glassBar = ui.glassBar,
         glassHeader = ui.glassHeader,
-        glassCards = ui.glassCards,
+        glassComponents = ui.glassComponents,
         appLanguage = ui.appLanguage,
         // The system night setting, read here rather than inside the card so the
         // settings module stays a pure function of its arguments.
@@ -353,7 +354,7 @@ internal fun ChatPanel(
         onGlassPanes = actions.setGlassPanes,
         onGlassBar = actions.setGlassBar,
         onGlassHeader = actions.setGlassHeader,
-        onGlassCards = actions.setGlassCards,
+        onGlassComponent = actions.setGlassComponent,
         onLanguage = actions.setAppLanguage,
         onBusyEnter = actions.updateBusyEnter,
         onPreset = actions.updatePreset,
@@ -1988,10 +1989,10 @@ internal fun ChatPanel(
                             label = openLabel,
                             onCollapse = expandedProcess::collapseAll,
                             // Deliberately no backdrop: the in-transcript collapse bar was an
-                            // explicit exclusion from the rollout, and every pane now stays on
-                            // the flat material anyway. A null backdrop keeps this bar on the
-                            // flat branch of liquidPane, which is what it wore before;
-                            // flat-tier pixels are unchanged either way.
+                            // explicit exclusion from the rollout, and a null backdrop keeps it on
+                            // the flat branch of liquidPane whatever its per-pane switch reads;
+                            // the switch can therefore never light this bar, and the flat-tier
+                            // pixels are unchanged either way.
                             backdrop = null,
                             // Below the chrome, not at the top of the window: this bar has
                             // to be reachable, and a bar under the header is the one thing
@@ -3371,6 +3372,7 @@ private fun SmallGlassPill(
             .glassLift(shape)
             .liquidPane(
                 backdrop = backdrop,
+                component = GlassComponent.SMALL_GLASS_PILL,
                 shape = shape,
                 tint = if (active) colors.accent.copy(alpha = 0.18f) else null,
             )
@@ -3530,7 +3532,7 @@ private fun ScrollToBottomButton(
         modifier
             .size(34.dp)
             .glassLift(CircleShape)
-            .liquidPane(backdrop, CircleShape)
+            .liquidPane(backdrop, GlassComponent.SCROLL_TO_BOTTOM, CircleShape)
             .clickableNoRipple(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -4138,7 +4140,7 @@ private fun AgentPresetChip(label: String, onClick: () -> Unit) {
             // Transparent in the flat tier (the flat branch returns `this`); the panes no
             // longer sample a backdrop, so the chip stays flat on every tier. It sits in
             // the pill strip over the transcript.
-            .liquidPane(backdrop, RoundedCornerShape(DshRadius.thumb), flatFill = Color.Transparent)
+            .liquidPane(backdrop, GlassComponent.AGENT_PRESET_CHIP, RoundedCornerShape(DshRadius.thumb), flatFill = Color.Transparent)
             .clickableNoRipple(onClick = onClick)
             .padding(horizontal = DshSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -4284,7 +4286,7 @@ private fun StatusCapsuleChip(
     }
     Row(
         modifier = modifier
-            .liquidPane(backdrop, RoundedCornerShape(DshRadius.pill), flatFill = colors.bgLayer1)
+            .liquidPane(backdrop, GlassComponent.STATUS_CAPSULE, RoundedCornerShape(DshRadius.pill), flatFill = colors.bgLayer1)
             .then(if (onClick != null) Modifier.clickableNoRipple(onClick = onClick) else Modifier)
             .semantics { contentDescription = capsule.label }
             .padding(horizontal = DshSpacing.sm, vertical = DshSpacing.xxs),
@@ -4350,7 +4352,7 @@ private fun ConnectionPill(label: String, modifier: Modifier = Modifier) {
         // the clip insets the whole pill; after it, it would only shrink the fill.
         modifier
             .padding(horizontal = DshSpacing.xl)
-            .liquidPane(backdrop, RoundedCornerShape(DshRadius.pill), flatFill = colors.tip)
+            .liquidPane(backdrop, GlassComponent.CONNECTION_PILL, RoundedCornerShape(DshRadius.pill), flatFill = colors.tip)
             .padding(horizontal = DshSpacing.md, vertical = DshSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -158,7 +159,7 @@ fun CommandMenu(
         modifier
             .fillMaxWidth()
             .shadow(6.dp, shape)
-            .liquidPane(backdrop, shape, flatFill = colors.menu)
+            .liquidPane(backdrop, GlassComponent.COMMAND_MENU, shape, flatFill = colors.menu)
             .border(0.5.dp, colors.borderL1, shape)
             .heightIn(max = 300.dp)
             .verticalScroll(rememberScrollState())
@@ -253,7 +254,7 @@ fun ReferenceMenu(
     Column(
         modifier
             .fillMaxWidth()
-            .liquidPane(backdrop, shape, flatFill = colors.menu)
+            .liquidPane(backdrop, GlassComponent.COMMAND_MENU, shape, flatFill = colors.menu)
             .border(0.5.dp, colors.borderL1, shape)
             .heightIn(max = 260.dp)
             .verticalScroll(rememberScrollState())

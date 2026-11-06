@@ -427,11 +427,11 @@ class MeSettingsPageTest {
 
     // ------------------------------------------------------------------- glass
     //
-    // The local page is a tall verticalScroll with three switch columns; rows below the
+    // The local page is a tall verticalScroll with six switch columns; rows below the
     // fold must be scrolled into view before they can be asserted or tapped. Every
     // interaction here calls performScrollTo() for that reason — see AutomationTasksTest.
 
-    /** The local page draws both glass headings and all seven switch titles verbatim. */
+    /** The local page draws every glass heading, the six switch titles and one pane per section. */
     @Test
     fun `the local page draws every glass heading and switch title`() {
         page(id = "local")
@@ -444,7 +444,12 @@ class MeSettingsPageTest {
             "Pane material",
             "Bottom bar",
             "Header buttons",
-            "Cards and sheets",
+            "Conversation",
+            "Other screens",
+            "Widgets",
+            "View tabs",
+            "Files panes",
+            "Sheets",
         ).forEach { rule.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
     }
 
@@ -520,16 +525,41 @@ class MeSettingsPageTest {
         assertEquals(listOf(false), recorded)
     }
 
-    /** Cards and sheets is off by default, so one tap reports true. */
+    /** A pane is off by default, so one tap reports its key with true. */
     @Test
-    fun `cards and sheets reports true on a tap`() {
-        val recorded = mutableListOf<Boolean>()
+    fun `a view tabs pane reports its key with true on a tap`() {
+        val recorded = mutableListOf<Pair<String, Boolean>>()
         page(
             id = "local",
-            actions = MeSettingsActions(onGlassCards = { recorded += it }),
+            actions = MeSettingsActions(onGlassComponent = { key, on -> recorded += key to on }),
         )
-        rule.onNodeWithText("Cards and sheets").performScrollTo().performClick()
-        assertEquals(listOf(true), recorded)
+        rule.onNodeWithText("View tabs").performScrollTo().performClick()
+        assertEquals(listOf("view_tabs" to true), recorded)
+    }
+
+    /** Every pane toggle goes through the same action with its own key. */
+    @Test
+    fun `a files pane reports its own key on a tap`() {
+        val recorded = mutableListOf<Pair<String, Boolean>>()
+        page(
+            id = "local",
+            actions = MeSettingsActions(onGlassComponent = { key, on -> recorded += key to on }),
+        )
+        rule.onNodeWithText("Files panes").performScrollTo().performClick()
+        assertEquals(listOf("files_panes" to true), recorded)
+    }
+
+    /** A pane already on reports false when tapped. */
+    @Test
+    fun `a pane already on reports false when tapped`() {
+        val recorded = mutableListOf<Pair<String, Boolean>>()
+        page(
+            id = "local",
+            state = MeSettingsState(glassComponents = setOf("todo_card")),
+            actions = MeSettingsActions(onGlassComponent = { key, on -> recorded += key to on }),
+        )
+        rule.onNodeWithText("To-dos card").performScrollTo().performClick()
+        assertEquals(listOf("todo_card" to false), recorded)
     }
 
     /** A state's own glass values are drawn as rows, whatever those values are. */
@@ -537,9 +567,9 @@ class MeSettingsPageTest {
     fun `the local page draws the glass rows from its state`() {
         page(
             id = "local",
-            state = MeSettingsState(glassCards = true, glassBackdrop = false),
+            state = MeSettingsState(glassComponents = setOf("todo_card"), glassBackdrop = false),
         )
-        rule.onNodeWithText("Cards and sheets").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("To-dos card").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Backdrop blur").performScrollTo().assertIsDisplayed()
     }
 

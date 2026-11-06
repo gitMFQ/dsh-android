@@ -131,6 +131,7 @@ import uk.xa0.dsh.ui.components.DshTextField
 import uk.xa0.dsh.ui.components.LocalAnimatedDots
 import uk.xa0.dsh.ui.components.StateDot
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.overlay.DshDialog
 import uk.xa0.dsh.ui.search.SessionSearchCopy
@@ -892,6 +893,7 @@ fun SessionsDrawer(
             .fillMaxSize()
             .liquidPane(
                 backdrop = backdrop,
+                component = GlassComponent.SESSIONS_DRAWER,
                 shape = RoundedCornerShape(0.dp),
                 flatFill = colors.sidebarFill,
             )
@@ -1032,6 +1034,7 @@ fun SessionsDrawer(
                 .height(38.dp)
                 .liquidPane(
                     backdrop = backdrop,
+                    component = GlassComponent.SESSIONS_DRAWER,
                     shape = newSessionShape,
                     flatFill = colors.sidebarItemActive,
                 )

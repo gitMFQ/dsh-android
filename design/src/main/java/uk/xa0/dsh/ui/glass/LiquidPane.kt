@@ -28,7 +28,7 @@ import uk.xa0.dsh.ui.theme.DshTheme
  * passes its old colour as [flatFill]; at the liquid tier that fill is *replaced* by the
  * blur rather than painted underneath it.
  *
- * ## Why the liquid branch is behind a switch that defaults off
+ * ## Why the liquid branch is behind a switch per pane
  *
  * `77fb9de` took the material off every pane after a measured `SIGSEGV (SEGV_MAPERR)` on
  * the RenderThread: a pane is composed the moment its card appears and disposed when it
@@ -38,16 +38,20 @@ import uk.xa0.dsh.ui.theme.DshTheme
  * every pane; the boot log confirmed the same crash a second or two after the first frame,
  * and `b5c0ff9` (#70) removed it again.
  *
- * The reader asked for a switch per effect. This one re-opens exactly the path #70 closed:
- * [LocalGlassCardsEnabled] defaults **off**, so every pane stays byte-identical to the flat
- * tier until the reader opts in. Turning it on accepts the measured crash, with
- * `LaunchGuard` (#66) stepping the level down on any native crash as the net. The liquid
- * branch itself is the one from #69, unchanged.
+ * The reader asked to split the one cards switch into a switch per component, so a crash
+ * can be bisected down to the exact pane. [component] is therefore a **required**
+ * argument: a call site cannot be left silently untagged.
+ * [LocalGlassComponentsEnabled] is the set of enabled keys and defaults **empty**, so every
+ * pane stays byte-identical to the flat tier until the reader opts that one component in.
+ * Turning one on re-opens exactly the path #70 closed, with `LaunchGuard` (#66) stepping
+ * the level down on any native crash as the net. The liquid branch itself is the one from
+ * #69, unchanged.
  *
  * ## The gate
  *
  * Liquid needs a real backdrop (null on API < 33 and under Robolectric), the material on,
- * [LocalGlassCardsEnabled] on, panes allowed, and [currentGlassTier] == [GlassTier.LIQUID]
+ * [component]'s key in [LocalGlassComponentsEnabled], panes allowed, and
+ * [currentGlassTier] == [GlassTier.LIQUID]
  * — the NOTICE.md rule that every new blur execution point is tier-gated. All blur code
  * lives in this package; no caller outside `:design` names a miuix-blur type. The effect
  * chain is the bar's own [liquidGlassEffects], so a pane cannot drift from it. There is no
@@ -57,12 +61,13 @@ import uk.xa0.dsh.ui.theme.DshTheme
 @Composable
 fun Modifier.liquidPane(
     backdrop: GlassBarBackdrop?,
+    component: GlassComponent,
     shape: Shape,
     tint: Color? = null,
     flatFill: Color? = null,
 ): Modifier {
     val liquid = backdrop != null &&
-        LocalGlassCardsEnabled.current &&
+        component.key in LocalGlassComponentsEnabled.current &&
         LocalGlassEnabled.current &&
         LocalGlassPaneEnabled.current &&
         currentGlassTier == GlassTier.LIQUID

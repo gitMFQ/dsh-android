@@ -40,6 +40,7 @@ import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshSpacing
@@ -214,7 +215,7 @@ fun ScrollToTopButton(
             // on the liquid tier; panes stay flat now. Color.Transparent makes the flat branch
             // return this unchanged.
             modifier = Modifier
-                .liquidPane(backdrop, CircleShape, flatFill = Color.Transparent)
+                .liquidPane(backdrop, GlassComponent.SCROLL_TO_TOP, CircleShape, flatFill = Color.Transparent)
                 .semantics { this.contentDescription = contentDescription },
         ) {
             Row(

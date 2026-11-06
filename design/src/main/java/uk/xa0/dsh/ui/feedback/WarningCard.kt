@@ -19,6 +19,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshColors
@@ -78,6 +79,7 @@ fun WarningCard(
         // return this unchanged.
         modifier = modifier.liquidPane(
             backdrop,
+            GlassComponent.WARNING_CARD,
             RoundedCornerShape(DshRadius.card),
             flatFill = Color.Transparent,
         ),

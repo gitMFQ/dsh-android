@@ -96,6 +96,7 @@ import uk.xa0.dsh.model.WorkspaceFileLoader
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.glass.GlassBarBackdrop
 import uk.xa0.dsh.ui.glass.glassLift
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.markdown.MarkdownText
 import uk.xa0.dsh.ui.markdown.highlightCodeLine
@@ -760,7 +761,7 @@ private fun FilesGlassHeader(
             // The lift first, as the bar does: a shadow is drawn outside the pane, and
             // on a light appearance glassLift declines to draw one at all.
             .glassLift(shape)
-            .liquidPane(backdrop, shape),
+            .liquidPane(backdrop, GlassComponent.FILES_PANES, shape),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -936,7 +937,7 @@ private fun GlassToolPill(
         modifier
             .height(30.dp)
             .glassLift(shape)
-            .liquidPane(backdrop, shape)
+            .liquidPane(backdrop, GlassComponent.FILES_PANES, shape)
             .then(if (enabled) Modifier.clickableNoRipple(onClick = onClick) else Modifier)
             .padding(horizontal = DshSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -1173,7 +1174,7 @@ private fun FileListPane(
                 .padding(horizontal = DshSpacing.lg, vertical = DshSpacing.sm)
                 .height(44.dp)
                 .glassLift(shape)
-                .liquidPane(backdrop, shape),
+                .liquidPane(backdrop, GlassComponent.FILES_PANES, shape),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -1566,7 +1567,7 @@ private fun PreviewGlassHeader(
             .fillMaxWidth()
             .height(44.dp)
             .glassLift(shape)
-            .liquidPane(backdrop, shape),
+            .liquidPane(backdrop, GlassComponent.FILES_PANES, shape),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(

@@ -49,6 +49,8 @@ import uk.xa0.dsh.ui.agentPresetLabel
 import uk.xa0.dsh.ui.clickableNoRipple
 import uk.xa0.dsh.ui.components.DshIconVectors
 import uk.xa0.dsh.ui.components.DshTextField
+import uk.xa0.dsh.ui.glass.GlassComponent
+import uk.xa0.dsh.ui.glass.GlassPaneSection
 import uk.xa0.dsh.ui.isBuiltInPreset
 import uk.xa0.dsh.ui.list.SegmentedColumn
 import uk.xa0.dsh.ui.list.SegmentedDropdownItem
@@ -235,9 +237,10 @@ internal fun LocalSettingCard(state: MeSettingsState, actions: MeSettingsActions
         ),
     )
 
-    // Three locations. The bar and the header seats are stable-geometry siblings of the
-    // recorded pager and have never crashed; the cards are the path #70 closed, so their
-    // switch defaults off and the row says what turning it on risks.
+    // Two locations. The bar and the header seats are stable-geometry siblings of the
+    // recorded pager and have never crashed. The card / chip / sheet panes are the path #70
+    // closed, so they are not lumped into one switch here: each gets its own row below and
+    // each defaults off, so a crash can be bisected down to the exact surface.
     SegmentedColumn(
         title = stringResource(R.string.settings_glass_surfaces_title),
         content = listOf(
@@ -257,16 +260,86 @@ internal fun LocalSettingCard(state: MeSettingsState, actions: MeSettingsActions
                     summary = stringResource(R.string.settings_glass_header_summary),
                 )
             },
-            {
-                SegmentedSwitchItem(
-                    title = stringResource(R.string.settings_glass_cards_title),
-                    checked = state.glassCards,
-                    onCheckedChange = actions.onGlassCards,
-                    summary = stringResource(R.string.settings_glass_cards_summary),
-                )
-            },
         ),
     )
+
+    // One switch per pane, in the three sections the catalog names. The row is its own
+    // @Composable so its title and summary can read resources: content is a List of
+    // composable lambdas, and a stringResource in the map that builds it would be outside
+    // any composable scope. This is the PluginsPage / ModelRow shape.
+    SegmentedColumn(
+        title = stringResource(R.string.settings_glass_section_conversation_title),
+        content = GlassComponent.entries
+            .filter { it.section == GlassPaneSection.CONVERSATION }
+            .map { component -> { GlassPaneSwitchRow(component, state, actions) } },
+    )
+    SegmentedColumn(
+        title = stringResource(R.string.settings_glass_section_screens_title),
+        content = GlassComponent.entries
+            .filter { it.section == GlassPaneSection.SCREENS }
+            .map { component -> { GlassPaneSwitchRow(component, state, actions) } },
+    )
+    SegmentedColumn(
+        title = stringResource(R.string.settings_glass_section_widgets_title),
+        content = GlassComponent.entries
+            .filter { it.section == GlassPaneSection.WIDGETS }
+            .map { component -> { GlassPaneSwitchRow(component, state, actions) } },
+    )
+}
+
+/** One pane's switch, resolved through resources in its own composable scope. */
+@Composable
+private fun GlassPaneSwitchRow(
+    component: GlassComponent,
+    state: MeSettingsState,
+    actions: MeSettingsActions,
+) {
+    SegmentedSwitchItem(
+        title = stringResource(glassPaneTitle(component)),
+        checked = component.key in state.glassComponents,
+        onCheckedChange = { on -> actions.onGlassComponent(component.key, on) },
+        // ExpandedProcessCollapseBar is handed a null backdrop (ChatPanel.kt), so this one
+        // switch can never light the material. Say so rather than offer a dead control.
+        summary = stringResource(
+            if (component == GlassComponent.TOOL_COLLAPSE_BAR) {
+                R.string.settings_glass_pane_collapse_summary
+            } else {
+                R.string.settings_glass_pane_summary
+            }
+        ),
+    )
+}
+
+/** The stable resource id for one pane's label; a when keeps every id reachable by R8. */
+@StringRes
+private fun glassPaneTitle(component: GlassComponent): Int = when (component) {
+    GlassComponent.VIEW_TABS -> R.string.settings_glass_pane_view_tabs_title
+    GlassComponent.SMALL_GLASS_PILL -> R.string.settings_glass_pane_small_glass_pill_title
+    GlassComponent.STATUS_CAPSULE -> R.string.settings_glass_pane_status_capsule_title
+    GlassComponent.CONNECTION_PILL -> R.string.settings_glass_pane_connection_pill_title
+    GlassComponent.AGENT_PRESET_CHIP -> R.string.settings_glass_pane_agent_preset_chip_title
+    GlassComponent.SCROLL_TO_BOTTOM -> R.string.settings_glass_pane_scroll_to_bottom_title
+    GlassComponent.COMPOSER -> R.string.settings_glass_pane_composer_title
+    GlassComponent.READOUT_PILLS -> R.string.settings_glass_pane_readout_pills_title
+    GlassComponent.TODO_CARD -> R.string.settings_glass_pane_todo_card_title
+    GlassComponent.GOAL_BAR -> R.string.settings_glass_pane_goal_bar_title
+    GlassComponent.QUEUE_DOCK -> R.string.settings_glass_pane_queue_dock_title
+    GlassComponent.APPROVAL_CARD -> R.string.settings_glass_pane_approval_card_title
+    GlassComponent.QUESTION_CARD -> R.string.settings_glass_pane_question_card_title
+    GlassComponent.TOOL_COLLAPSE_BAR -> R.string.settings_glass_pane_tool_collapse_bar_title
+    GlassComponent.FILES_PANES -> R.string.settings_glass_pane_files_panes_title
+    GlassComponent.SETTINGS_BACK -> R.string.settings_glass_pane_settings_back_title
+    GlassComponent.SESSIONS_DRAWER -> R.string.settings_glass_pane_sessions_drawer_title
+    GlassComponent.CHOICE_CHIP -> R.string.settings_glass_pane_choice_chip_title
+    GlassComponent.COMMAND_MENU -> R.string.settings_glass_pane_command_menu_title
+    GlassComponent.SHEET -> R.string.settings_glass_pane_sheet_title
+    GlassComponent.DIALOG -> R.string.settings_glass_pane_dialog_title
+    GlassComponent.SIDE_RAIL -> R.string.settings_glass_pane_side_rail_title
+    GlassComponent.SUPER_SEARCH_BAR -> R.string.settings_glass_pane_super_search_bar_title
+    GlassComponent.SEGMENTED_LIST -> R.string.settings_glass_pane_segmented_list_title
+    GlassComponent.SEARCH_STATUS -> R.string.settings_glass_pane_search_status_title
+    GlassComponent.WARNING_CARD -> R.string.settings_glass_pane_warning_card_title
+    GlassComponent.SCROLL_TO_TOP -> R.string.settings_glass_pane_scroll_to_top_title
 }
 
 /**

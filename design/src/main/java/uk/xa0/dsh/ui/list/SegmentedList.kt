@@ -58,6 +58,7 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.LocalDismissState
 import top.yukonga.miuix.kmp.window.WindowListPopup
+import uk.xa0.dsh.ui.glass.GlassComponent
 import uk.xa0.dsh.ui.glass.LocalGlassBarBackdrop
 import uk.xa0.dsh.ui.glass.liquidPane
 import uk.xa0.dsh.ui.theme.DshRadius
@@ -136,7 +137,7 @@ fun SegmentedColumn(
                 .fillMaxWidth()
                 // The Card paints its own opaque fill internally, so the glass is a flat-safe
                 // best-effort overlay: flatFill = Transparent leaves the flat tier untouched.
-                .liquidPane(backdrop, RoundedCornerShape(DshRadius.card), flatFill = Color.Transparent)
+                .liquidPane(backdrop, GlassComponent.SEGMENTED_LIST, RoundedCornerShape(DshRadius.card), flatFill = Color.Transparent)
                 .border(0.5.dp, colors.borderL1, RoundedCornerShape(DshRadius.card)),
             colors = CardDefaults.defaultColors(
                 color = colors.codeBlock,
