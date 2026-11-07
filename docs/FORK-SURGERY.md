@@ -55,7 +55,7 @@
 | 单测 | 1 116 个 @Test（47 个走 Robolectric，无需真机） | `bash build.sh :app:testDebugUnitTest`；CI 里作为构建前门禁 |
 | UI 测试 | 无 androidTest（上游仅少量） | 先不引入；用 Roborazzi 截图测试作为**视觉回归**（换皮阶段必备） |
 | 构建 | `build.sh` 唯一入口；无 wrapper；JDK 17 + Gradle 8.7 + `/opt/android-sdk` | CI 用 `ubuntu-latest` 复现 toolchain；本地见 [BUILD-AND-CI.md](BUILD-AND-CI.md) |
-| 签名 | release 走环境变量（`SIGNING_STORE_FILE` 等 4 个）或 CI secrets | **首发前定死 keystore**，否则 debug 签名包无法被正式包覆盖安装 |
+| 签名 | release 走环境变量（`SIGNING_STORE_FILE` 等 4 个）或 CI secrets；debug 用**仓库内固定**的 `app/debug.keystore`（刻意提交，见 [BUILD-AND-CI.md](BUILD-AND-CI.md) §4.1） | release **首发前定死 keystore**，否则 debug 签名包无法被正式包覆盖安装；debug 的 key 固定后，同机覆盖安装才不用先卸载 |
 | 版本 | `versionCode=15`, `versionName=0.6.6`，debug 有 `.debug` 后缀 | 改为 `versionCode` 递增策略 + 自己的 `versionName`（如 `1.0.0-<sha>`） |
 | 分发 | GitHub Release（`release.yml`，tag `v*`） | 沿用；接 Obtainium 需要 release APK 名稳定、附带 changelog |
 

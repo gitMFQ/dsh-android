@@ -349,6 +349,20 @@ fun SessionsDrawer(
      */
     activeScheduleTotal: Int = 0,
     /**
+     * Closes the screen, after asking, or null to draw no entry.
+     *
+     * The drawer's bottom band used to end at Automation tasks; this is the row below
+     * it, and the only place in the app that closes the screen on purpose. Back does
+     * not ask and does not close — it leaves the task in the background, the way Back
+     * behaves everywhere else — so the one gesture that really ends the screen is this
+     * deliberate tap, and it is the one that gets the confirmation.
+     *
+     * Optional for the same reason [onAutomations] is: tests and surfaces that do not
+     * own the Activity's lifecycle compose this drawer too, and a null here draws no
+     * row rather than a row that does nothing.
+     */
+    onExit: (() -> Unit)? = null,
+    /**
      * The persisted Group/Order modes. Passed in rather than held here: they are
      * client-local preferences, so the ViewModel owns them and a cold start
      * restores the user's last choice.
@@ -1470,15 +1484,17 @@ fun SessionsDrawer(
             sections.forEach { section -> this.drawGroup(section) }
         }
 
-        // The footer is one destination and nothing else.
+        // The footer: a fixed band under the list, not another item in it. It holds
+        // at most two rows — Automation tasks when the host offers the schedule
+        // catalogue, and Close DSH when the caller owns an Activity to close.
         //
         // It used to be a hairline, the Automation tasks row, and then a 48dp band
         // split between Settings and About. Two of those three were *places*, not
         // preferences, and all three competed with the list for the last strip of
-        // the drawer. Settings and About are reachable from the app's own chrome;
-        // the drawer's bottom band is now the one host-wide shelf that has nowhere
-        // else to go — and when the host offers no Automations entry the band is
-        // empty rather than reserved.
+        // the drawer. Settings and About are reachable from the app's own chrome, so
+        // the band is now the shelf for the two things that genuinely have nowhere
+        // else to go: the host-wide task list, and the deliberate act of leaving the
+        // screen. When neither is supplied, the band is empty rather than reserved.
         //
         // `onSettings` and `onAbout` are still accepted as parameters and are
         // deliberately not read: retiring a named argument from a public composable
@@ -1495,7 +1511,71 @@ fun SessionsDrawer(
                 onClick = open,
             )
         }
+
+        // The exit. The band's second row, and the only control in the app that closes
+        // the screen on purpose.
+        //
+        // Back does not close it and does not ask — it leaves the task in the
+        // background, the way Back behaves in every other app on the phone, so the
+        // session and the connection are still there when the reader comes back. That
+        // makes closing the screen a decision rather than a slip of the thumb, and a
+        // decision deserves a visible place to make it. Down here it is out of the way
+        // of the list and of the two gestures a thumb actually uses (opening a session,
+        // starting one), which is what the row's quiet colour is for.
+        onExit?.let { exit ->
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(colors.borderL1),
+            )
+            ExitFooterRow(onClick = exit)
+        }
     }
+    }
+}
+
+/**
+ * The drawer's last row: close the screen.
+ *
+ * Worded **Close DSH** rather than "Exit" or "Quit", and deliberately the same verb as
+ * the dialog it opens. The control finishes the Activity and nothing else — the
+ * process, the client, the event socket and the connection service all carry on, and
+ * a question waiting for the reader is still waiting afterwards. A label promising a
+ * shutdown would be the one lie this row could tell; "Close" is exactly what happens.
+ * Force quit, which really does stop everything, stays on the About page and says so
+ * there.
+ */
+@Composable
+private fun ExitFooterRow(onClick: () -> Unit) {
+    val colors = DshTheme.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(RoundedCornerShape(DshRadius.md))
+            .clickableNoRipple(onClick = onClick)
+            .testTag("drawer-exit"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = DshIconVectors.CloseCircleFill,
+            contentDescription = null,
+            tint = colors.labelSecondary,
+            modifier = Modifier
+                .size(28.dp)
+                .padding(DshSpacing.sm),
+        )
+        Spacer(Modifier.width(DshSpacing.md))
+        Text(
+            text = stringResource(R.string.drawer_exit),
+            style = DshType.bodyMedium,
+            color = colors.labelSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(DshSpacing.md))
     }
 }
 

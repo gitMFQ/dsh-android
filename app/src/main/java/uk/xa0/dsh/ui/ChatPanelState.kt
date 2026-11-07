@@ -31,7 +31,7 @@ import uk.xa0.dsh.model.translationTextOf
  *
  * ## Why this exists (2.5a)
  *
- * `ChatScreen(vm: DshViewModel)` was the only entry point to the most-read screen in
+ * `ChatScreen(vm, onRequestExit)` was the only entry point to the most-read screen in
  * the app, and that made it impossible to photograph: a baseline needs a fixture, and
  * a fixture cannot be a 9 000-line view model wired to a live host socket. The same
  * argument that produced `TerminalPanel` in 2.2b applies here, one size larger — so
@@ -263,6 +263,15 @@ data class ChatActions(
     val connect: () -> Unit = {},
     val restartConnection: () -> Unit = {},
     val forceQuit: () -> Unit = {},
+    /**
+     * The drawer's last row: close this screen, after asking.
+     *
+     * Distinct from [forceQuit], which stops the app dead. This one ends the Activity
+     * and nothing else — the process, the client and the connection service keep
+     * running — so it is answered by the root's confirmation dialog rather than by
+     * the About page's Force quit.
+     */
+    val requestExit: () -> Unit = {},
     val updateLanUrl: (String) -> Unit = {},
     val checkCertificate: (String) -> Unit = {},
     val trustCertificate: (String, java.security.cert.X509Certificate) -> Unit = { _, _ -> },

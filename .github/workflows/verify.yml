@@ -51,13 +51,13 @@ jobs:
           test -x .toolchain/gradle-9.5.0/bin/gradle
           echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
 
-      # L1 gate: the whole 1116-test suite on Kotlin 2.4.21. This is the step that
+      # L1 gate: the whole 1286-test suite on Kotlin 2.4.21. This is the step that
       # proves the compiler migration did not break anything, before any of the
       # AGP / Compose / miuix upgrades land on top of it.
       # Four test tasks, every one named. Depending on a module does not run its
-      # tests, so `:app:testDebugUnitTest` alone would quietly run only the 517 that
-      # still live in :app and report a green check over a 599-test-smaller suite.
-      # All four are required; together they are the 1116 this gate quotes.
+      # tests, so `:app:testDebugUnitTest` alone would quietly run only the 513 that
+      # still live in :app and report a green check over a 773-test-smaller suite.
+      # All four are required; together they are the 1286 this gate quotes.
       # :core:term is a plain JVM module, hence `:test` rather than `testDebugUnitTest`.
       # :core:config is an Android library like :core:model, hence testDebugUnitTest.
       # It currently holds no tests of its own (the certificate and config tests still
@@ -72,7 +72,7 @@ jobs:
       # diff image attached.
       #
       # `-Pscreenshots` is what admits the screenshot class: the build excludes it
-      # from the ordinary test task, so the 1 116 functional tests above are not
+      # from the ordinary test task, so the 1 286 functional tests above are not
       # re-run or double-counted here, and their count stays the evidence quoted
       # in every PR. The build is warm by this point, so the incremental cost is
       # the four captures.
@@ -97,7 +97,7 @@ jobs:
 
       # Always uploaded (not only on failure): the XML under test-results carries
       # the executed test count, which is the evidence that the Kotlin 2.4.21
-      # migration actually ran 1116 tests rather than skipping them.
+      # migration actually ran 1286 tests rather than skipping them.
       #
       # `**/build/...`, not `app/build/...`: since :core:model was extracted its
       # 413 tests live under core/model/build/test-results/, and a glob pinned to
@@ -114,12 +114,12 @@ jobs:
 
       # Two numbers, reported separately on purpose.
       #
-      # The functional suite is the gate every PR quotes — "tests=1116" — and it
-      # must stay exactly 1116, because a number that quietly grew is how a
+      # The functional suite is the gate every PR quotes — "tests=1286" — and it
+      # must stay exactly 1286, because a number that quietly grew is how a
       # deleted test goes unnoticed. The screenshot captures are a different
       # kind of test (they assert pixels, not behaviour) and live in their own
       # XML files under uk/xa0/dsh/screenshot/, so they are counted apart rather
-      # than folded in and silently raising the functional total to 1120.
+      # than folded in and silently raising the functional total to 1315 (29 captures).
       #
       # The scan covers every module's test-results (see the note on the artifact
       # step above) and prints a per-module breakdown, because with two modules

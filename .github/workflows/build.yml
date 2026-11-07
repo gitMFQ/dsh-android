@@ -103,6 +103,11 @@ jobs:
       - name: Build
         run: bash build.sh :app:assembleDebug
 
+      # Signed with the committed `app/debug.keystore` (see app/build.gradle.kts), so
+      # the signature is identical on every run. That is what makes an in-place
+      # upgrade possible: left to itself AGP generated a fresh keystore under
+      # `.toolchain/android-home` for each job, and a new key per job meant a new
+      # signature per job, which Android refuses to install over the previous one.
       - name: Rename artifact for the release name
         id: apk
         run: |
@@ -129,7 +134,8 @@ jobs:
             echo
             echo "\`${{ steps.apk.outputs.path }}\` (${{ steps.apk.outputs.size }})"
             echo
-            echo "Signed with the debug key, so it installs over an existing"
-            echo "debug build (\`uk.xa0.dsh.debug\`) without uninstalling it."
+            echo "Signed with the repository's fixed debug key (\`app/debug.keystore\`),"
+            echo "so it installs over an existing debug build (\`uk.xa0.dsh.debug\`)"
+            echo "without uninstalling it first."
             echo "Download it from the Artifacts section of this run."
           } >> "$GITHUB_STEP_SUMMARY"

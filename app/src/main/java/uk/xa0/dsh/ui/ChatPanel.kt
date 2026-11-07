@@ -233,7 +233,7 @@ import uk.xa0.dsh.ui.theme.DshType
  *
  * ## Why (2.5a)
  *
- * The conversation screen was reachable only as `ChatScreen(vm: DshViewModel)`, and
+ * The conversation screen was reachable only as `ChatScreen(vm, onRequestExit)`, and
  * that made it the one screen in the app no baseline could photograph: a screenshot
  * needs a fixture, and a fixture cannot be a nine-thousand-line view model wired to a
  * live host socket. The same argument produced [TerminalPanel] in 2.2b; this is that
@@ -897,7 +897,7 @@ internal fun ChatPanel(
     // than a route: the draft, the session and the send path stay exactly where they are.
     var fullScreenComposer by rememberSaveable(ui.currentSessionId) { mutableStateOf(false) }
 
-    // Back walks *up* the screen before it is allowed anywhere near the close gate.
+    // Back walks *up* the screen before it is allowed anywhere near leaving the app.
     //
     // One handler with an explicit order rather than several `BackHandler`s: which of
     // those wins is a question about registration order, and the answer here has to be
@@ -907,10 +907,11 @@ internal fun ChatPanel(
     // Chat, then go up to the parent.
     //
     // `enabled` only while one of those applies, which matters: a handler always
-    // consumes the press, and consuming one it cannot use would hold the close dialog
-    // hostage. The sheets (jobs, lineage, settings, about) are modal and already
-    // dismiss themselves. Composed here rather than at the root because this is where
-    // the state lives, and the root gate is asked only after the screen declines.
+    // consumes the press, and consuming one it cannot use would send the reader to
+    // the home screen when all they meant was "put this panel away". The sheets (jobs,
+    // lineage, settings, about) are modal and already dismiss themselves. Composed
+    // here rather than at the root because this is where the state lives, and the root
+    // gate — which backgrounds the task — is asked only after the screen declines.
     //
     // The panels come before the view: an open panel is on top of whatever view it
     // covers, so it has to close first or the press would change the view underneath
@@ -1296,6 +1297,14 @@ internal fun ChatPanel(
                         scope.launch { drawerState.close() }
                     },
                     activeScheduleTotal = ui.activeScheduleTotal,
+                    // The drawer's last row. The sheet closes first for the same reason
+                    // About's does: the root's confirmation dialog is its own scrim, and
+                    // two scrims stacked eat the first back gesture — which here would
+                    // mean a Back that neither closed the dialog nor the drawer.
+                    onExit = {
+                        actions.requestExit()
+                        scope.launch { drawerState.close() }
+                    },
                 )
             }
         },

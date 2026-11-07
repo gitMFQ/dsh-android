@@ -126,6 +126,7 @@ fork 已有两条工作流，直接沿用：
 - 用 runner 的 JDK/Gradle 复现 `.toolchain/` 布局，再调用项目自己的 `build.sh` —— 本地与 CI 不是两套构建定义
 - `concurrency` 按 ref 去重，新 push 取消旧构建
 - release 走 `RELEASE_KEYSTORE_BASE64` / `RELEASE_KEYSTORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD`；缺失时回退 debug key（**但 debug 签名的包无法被正式包覆盖安装**）
+- debug APK 用仓库内固定的 `app/debug.keystore` 签名（§4.1），所以**同一台手机上装新 build 直接覆盖**，不必卸载 —— 这也是用户要的「不用每次卸载重装」
 
 ### 3.1 建议新增第三条工作流 `verify.yml`
 
@@ -152,9 +153,27 @@ jobs:
 |---|---|
 | `versionCode` | 从 1 起单调递增、**永不重用**；CI 可用 `git rev-list --count HEAD` 或语义版本映射 |
 | `versionName` | `1.0.0` 起步；预发 `1.0.0-beta.1`；debug 包追加 `-debug` |
-| 签名 | **首发前生成并固化 keystore**（RSA 4096 / 有效期 25 年以上），私钥进 CI secrets + 加密备份；丢失 = 已发布用户无法升级 |
+| 签名（release） | **首发前生成并固化 keystore**（RSA 4096 / 有效期 25 年以上），私钥进 CI secrets + 加密备份；丢失 = 已发布用户无法升级 |
+| 签名（debug） | **仓库内固定**：`app/debug.keystore`（`androiddebugkey` / `android`，RSA 2048，10000 天）**刻意提交**，`app/build.gradle.kts` 里 `signingConfigs.debug` 恒指向它 |
 | 产物命名 | `dsh-android-<versionName>.apk` + 同名 `.sha256` |
-| 覆盖安装 | 同包名不同签名无法覆盖；因此 debug 与 release **包名后缀不同**（`.debug`） |
+| 覆盖安装 | 同包名不同签名无法覆盖；因此 debug 与 release **包名后缀不同**（`.debug`），且 debug 每次构建签名必须相同 |
+
+### 4.1 为什么 debug 的 key 要提交进仓库
+
+用户报的问题原话是「每次安装都要卸载重装」。根因不是包名，是**签名每次都变**：
+
+1. `debug` buildType 原先没有 `signingConfig`，AGP 于是用 `$ANDROID_USER_HOME/debug.keystore`，缺了就**当场生成一把随机新 key**；
+2. `build.sh` / CI 把 `ANDROID_USER_HOME` 指到 `.toolchain/android-home`，而 `.toolchain/` 被 gitignore；
+3. 于是每个 CI job（以及每次清理过工具链的本地构建）都是一把全新的 key → 签名不同 → `adb install -r` 报
+   `INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package uk.xa0.dsh.debug signatures do not match previously installed version`。
+
+现在 `app/debug.keystore` 随仓库走，`signingConfigs.debug` 无条件指向它，所以无论本机还是 CI、无论 `.toolchain/` 是否新建，debug 包的签名恒定，覆盖安装成立（`.github/workflows/build.yml` 的 Summary 那句话从此才真的成立）。
+
+**边界，必须守住**：
+
+- 这把 key 是 Android 公开的 debug 身份，密码就是 `android`，进了 git 历史就等于全世界都有。**绝不可用于正式发布**，也不要用它签任何要分发的东西。
+- release 仍走 `SIGNING_STORE_FILE` 等 4 个环境变量（`release.yml` 的 `RELEASE_KEYSTORE_BASE64` 一族）。**没有**这些变量时，`buildTypes.release` 现在**显式**回退到这把 debug key（以前是 AGP 隐式回退它自己的默认 debug key）——语义没变：仍产出可安装物，但**debug 签名的 release 包无法被正式包覆盖安装**，只适合自测。
+- 因此 `.gitignore` 里 `*.keystore` 之后有一条 `!app/debug.keystore` 例外，带注释说明原因。新增任何**别的** keystore 都不需要开例外——它们必须留在仓库外。
 
 ## 5. 分发（自托管场景）
 

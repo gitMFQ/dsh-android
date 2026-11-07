@@ -47,7 +47,17 @@ import uk.xa0.dsh.DshViewModel
 
 /** The conversation screen. The only production caller of [ChatPanel]. */
 @Composable
-fun ChatScreen(vm: DshViewModel) {
+fun ChatScreen(
+    vm: DshViewModel,
+    /**
+     * The drawer's last row was tapped: somebody wants to close the screen.
+     *
+     * A callback up to the root rather than a dialog here, because the dialog's
+     * **Close** is `finish()` and only the Activity owns that. Defaulted so the
+     * screenshot fixtures can compose the screen without one.
+     */
+    onRequestExit: () -> Unit = {},
+) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val entries by vm.entries.collectAsStateWithLifecycle()
     val live by vm.live.collectAsStateWithLifecycle()
@@ -234,6 +244,7 @@ fun ChatScreen(vm: DshViewModel) {
             connect = vm::connect,
             restartConnection = vm::restartConnection,
             forceQuit = vm::forceQuit,
+            requestExit = onRequestExit,
             updateLanUrl = vm::updateLanUrl,
             checkCertificate = vm::checkCertificate,
             trustCertificate = vm::trustCertificate,

@@ -17,6 +17,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -118,6 +120,14 @@ class MainActivity : ComponentActivity() {
             BootBeacon.mark("composition: view model")
             val ui by vm.ui.collectAsStateWithLifecycle()
             BootBeacon.mark("composition: state collected")
+
+            // Whether the drawer's last row has asked to close the screen.
+            //
+            // Hoisted to the root because the request comes from *below* it: the
+            // drawer knows somebody wants to leave, but only this Activity can
+            // `finish()`. Saved across a configuration change so the dialog is not
+            // swallowed by a rotation it happened to survive.
+            var closeConfirming by rememberSaveable { mutableStateOf(false) }
 
             // The window behind Compose is painted once above and again here, so an
             // appearance change — or the system flipping light/dark under "follow the
@@ -272,9 +282,21 @@ class MainActivity : ComponentActivity() {
                 // Composed before the screen so the screen's own Back handlers — the
                 // drawer, the sheets, the Files panel, a non-Chat view — are asked
                 // first; what reaches the gate is the press with nothing to dismiss.
-                // `finish()` closes this Activity only: the process, its client and
-                // the connection service carry on, which is why the gate says Close.
-                BackGate(onClose = { finish() })
+                //
+                // That press leaves the task in the background rather than asking to
+                // close: Back is how you leave an app, and the process, its client and
+                // the connection service carry on behind the home screen. Closing the
+                // screen is the drawer's last row instead — see `ChatScreen`'s
+                // `onRequestExit`, which is the only thing that raises this dialog.
+                BackGate(
+                    confirming = closeConfirming,
+                    onBackground = { moveTaskToBack(true) },
+                    onDismiss = { closeConfirming = false },
+                    onClose = {
+                        closeConfirming = false
+                        finish()
+                    },
+                )
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -310,7 +332,10 @@ class MainActivity : ComponentActivity() {
 
                         AppPhase.READY -> {
                             BootBeacon.mark("composition: chat screen")
-                            ChatScreen(vm)
+                            ChatScreen(
+                                vm = vm,
+                                onRequestExit = { closeConfirming = true },
+                            )
                             BootBeacon.mark("composition: chat screen returned")
                         }
                     }

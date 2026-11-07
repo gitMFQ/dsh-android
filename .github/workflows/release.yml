@@ -16,10 +16,10 @@ name: Release
 # base64 a keystore and set repository secrets
 #   RELEASE_KEYSTORE_BASE64, RELEASE_KEYSTORE_PASSWORD,
 #   RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD
-# Without them the build falls back to the debug key so the job still produces
-# something installable — but a debug-key release cannot be upgraded in place by
-# a later release-key build, so set them before the first public release if you
-# care about that.
+# Without them the build falls back to the committed `app/debug.keystore` (see
+# app/build.gradle.kts) so the job still produces something installable — but a
+# debug-key release cannot be upgraded in place by a later release-key build, so
+# set them before the first public release if you care about that.
 
 on:
   push:
@@ -80,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${KEYSTORE:-}" ]; then
-            echo "No release keystore configured; the APK will carry the debug key."
+            echo "No release keystore configured; the APK will carry the committed debug key (app/debug.keystore)."
             echo "configured=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi

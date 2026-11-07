@@ -13,8 +13,8 @@ package uk.xa0.dsh.model
  * The three verbs on the About page must not read alike, and the difference is
  * in the confirmation's words rather than only in the code:
  *
- *  * **Close** finishes the screen and keeps the connection (the drawer's
- *    BackGate copy says so);
+ *  * **Close** finishes the screen and keeps the connection (the "Close DSH?"
+ *    dialog's copy says so, and the drawer's last row is the only thing that asks);
  *  * **Restart connection** rebuilds the transport in this process, keeping the
  *    process and everything waiting for the reader;
  *  * **Force quit** ends the process: nothing in flight survives.

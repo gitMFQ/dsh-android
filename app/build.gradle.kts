@@ -34,6 +34,34 @@ android {
         }
     }
 
+    // A **committed** debug keystore, and the only reason this repository carries a
+    // private key at all. `app/debug.keystore` is the standard Android debug identity
+    // (alias `androiddebugkey`, password `android`), and pinning it is what makes
+    // consecutive debug builds share one signature — so `adb install -r` upgrades the
+    // app in place instead of failing with INSTALL_FAILED_UPDATE_INCOMPATIBLE and
+    // demanding an uninstall.
+    //
+    // Left to itself AGP signs each debug build with `$ANDROID_USER_HOME/debug.keystore`,
+    // which it generates on demand. CI lays out a fresh `.toolchain/android-home` for
+    // every job (the directory is gitignored), so every build got a brand-new random
+    // key, hence a different signature, hence the uninstall-then-reinstall loop.
+    //
+    // This key is public and worthless by design: it is the well-known debug identity,
+    // it is in git history, and it MUST NOT sign anything published. Release signing
+    // still goes through `signingConfigs.release` (from SIGNING_STORE_FILE); see the
+    // fallback in `buildTypes.release` below.
+    signingConfigs {
+        // `maybeCreate`, not `create`: AGP may already have registered a signing config
+        // named "debug" (the one bound to the default keystore), and `create` would then
+        // fail with "Cannot add a signing config with name 'debug' as it already exists".
+        maybeCreate("debug").apply {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     // This box ships build-tools 35.0.0/36.0.0 but not AGP's default 34.0.0,
     // and there is no writable SDK root to auto-download into.
     buildToolsVersion = "37.0.0"
@@ -75,7 +103,7 @@ android {
         // The screenshot class is a *baseline* test, not a functional one: it
         // asserts nothing about behaviour, and its whole value is the image diff
         // that `verifyRoborazziDebug` runs. Letting it into the functional suite
-        // would do two bad things at once — inflate the 1116-test count that
+        // would do two bad things at once — inflate the 1286-test count that
         // every PR quotes as evidence, and turn a pixel diff into a red "unit
         // test" with no image attached.
         //
@@ -105,13 +133,18 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Null unless a key was supplied above, in which case this leaves
-            // Gradle's own debug-key default in place.
-            signingConfig = signingConfigs.findByName("release")
+            // A key supplied above wins. With none — the normal local case — this
+            // falls back to the committed debug key explicitly, rather than leaving
+            // AGP's implicit `$ANDROID_USER_HOME` debug keystore in charge, so an
+            // `assembleRelease` without secrets is at least signed reproducibly.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
         debug {
             applicationIdSuffix = ".debug"
             isDebuggable = true
+            // Pin the signature to `app/debug.keystore`; see the signingConfigs block
+            // above for why the key is committed.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

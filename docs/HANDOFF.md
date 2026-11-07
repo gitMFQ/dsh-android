@@ -174,6 +174,11 @@ editing the live copy. There is no install step to forget.
    the phone, so Wireless debugging could not authenticate and every transport
    landed as `offline` — advertised forever, never usable. The keys live in
    `~/.android`, so that file now `unset`s the variable instead of setting it.
+   The **app**'s signing key is no longer that keystore: `app/build.gradle.kts`
+   pins `signingConfigs.debug` to the committed `app/debug.keystore`, because a
+   keystore that is regenerated whenever `.toolchain/` is rebuilt means a new
+   signature per build, and a new signature per build means every install is an
+   uninstall-then-reinstall. See `docs/BUILD-AND-CI.md` §4.1.
 4. **The keepalive must not drop the emulator.** `adbtrack` sweeps transports that
    are not in `device` state, and an emulator mid-boot is exactly that. Emulator
    transports are exempt (odd `55xx` ports and `emulator-*`; even ports are the

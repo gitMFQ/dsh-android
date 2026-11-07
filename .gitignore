@@ -24,6 +24,12 @@ app/build/
 local.properties
 *.apk
 *.keystore
+# …except the debug identity, which is committed on purpose. A *stable* debug
+# signature is what lets `adb install -r` upgrade a debug build in place instead of
+# failing with INSTALL_FAILED_UPDATE_INCOMPATIBLE. It is the public, well-known
+# Android debug key (`androiddebugkey`/`android`) and must never sign a release —
+# see app/build.gradle.kts and docs/BUILD-AND-CI.md §4.
+!app/debug.keystore
 
 # Editor
 .idea/

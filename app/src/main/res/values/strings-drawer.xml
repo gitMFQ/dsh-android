@@ -82,6 +82,14 @@
     </plurals>
 
     <!--
+      The footer's last row. Deliberately the same verb as the confirmation dialog
+      it opens ("Close DSH?"): the control only finishes the Activity, while the
+      process, the connection and the agent carry on, so "Exit"/"Quit" would
+      promise a shutdown it never performs.
+    -->
+    <string name="drawer_exit">Close DSH</string>
+
+    <!--
       A Workspace header. The folder glyph *is* the disclosure on this row, so its
       content description is a sentence rather than a pair of words; the row menu's
       is named after the Workspace it acts on (%1$s is the title).
