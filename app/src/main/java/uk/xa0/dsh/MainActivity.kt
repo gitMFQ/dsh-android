@@ -283,14 +283,15 @@ class MainActivity : ComponentActivity() {
                 // drawer, the sheets, the Files panel, a non-Chat view — are asked
                 // first; what reaches the gate is the press with nothing to dismiss.
                 //
-                // That press leaves the task in the background rather than asking to
-                // close: Back is how you leave an app, and the process, its client and
-                // the connection service carry on behind the home screen. Closing the
+                // That press is intentionally NOT handled here: with nothing to
+                // confirm, `BackGate` registers no enabled callback, so the platform
+                // owns Back and draws the predictive-back animation (the home screen
+                // under the finger) before finishing this Activity. The connection,
+                // the agent and the service carry on behind the launcher. Closing the
                 // screen is the drawer's last row instead — see `ChatScreen`'s
-                // `onRequestExit`, which is the only thing that raises this dialog.
+                // `onRequestExit`, the only thing that raises this dialog.
                 BackGate(
                     confirming = closeConfirming,
-                    onBackground = { moveTaskToBack(true) },
                     onDismiss = { closeConfirming = false },
                     onClose = {
                         closeConfirming = false

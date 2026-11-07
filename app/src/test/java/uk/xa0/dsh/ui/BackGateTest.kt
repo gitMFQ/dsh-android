@@ -7,7 +7,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -19,19 +18,18 @@ import uk.xa0.dsh.scroll.HarnessApplication
 import uk.xa0.dsh.ui.theme.DshTheme
 
 /**
- * What the root does with Back, and what the drawer's last row asks before closing.
+ * The root's contract with the platform's predictive-back gesture.
  *
- * These are now two different gestures. Back with nothing left to dismiss leaves the
- * task in the background — no dialog, no `finish()`, the connection and the agent
- * carry on behind the home screen. Closing the screen is an explicit act from the
- * drawer, and only that act raises [CLOSE_DSH_TITLE]. The test pins both halves: the
- * press goes to the background callback alone, and the dialog's **Close** is the one
- * path that calls [BackGate]'s `onClose`.
+ * Since Android 13 the system animates the home screen under the finger only while
+ * the app has **no enabled Back callback**. So the gate's whole job is to stay out
+ * of the way: with nothing to confirm it must register zero enabled callbacks and
+ * let the platform finish the Activity. This is the regression that a
+ * `moveTaskToBack(true)` handler caused — it consumed Back, so the animation never
+ * appeared and the screen simply jumped to the launcher.
  *
- * It cannot prove the connection survives, because the callbacks here are flags
- * rather than `moveTaskToBack(true)` / `finish()` and the harness has no client or
- * service; that half is a property of `MainActivity` wiring those two calls and of
- * nothing else in the close path touching `DshApplication`.
+ * Closing the screen is a separate, explicit act from the drawer, and only that act
+ * raises [CLOSE_DSH_TITLE]. Those tests pin the dialog's copy and its **Close**
+ * button, while the dispatcher assertions pin the animation precondition.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = HarnessApplication::class)
@@ -41,51 +39,76 @@ class BackGateTest {
     val rule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun `back goes to the background and never asks to close`() {
-        var backgrounded = 0
-        var closed = false
+    fun `with nothing to confirm the app claims no Back callback`() {
         rule.setContent {
             DshTheme {
                 BackGate(
                     confirming = false,
-                    onBackground = { backgrounded++ },
                     onDismiss = { error("nothing was asking") },
-                    onClose = { closed = true },
+                    onClose = { error("Back must not close the screen") },
                 )
             }
         }
-        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
 
-        assertEquals(1, backgrounded)
-        assertFalse("Back must not finish the Activity", closed)
+        // Zero enabled callbacks is exactly the state in which the platform owns the
+        // gesture and draws the predictive-back animation.
+        assertFalse(
+            "an enabled Back callback suppresses the platform's predictive-back animation",
+            rule.activity.onBackPressedDispatcher.hasEnabledCallbacks(),
+        )
         rule.onNodeWithText(CLOSE_DSH_TITLE).assertDoesNotExist()
     }
 
     @Test
+    fun `the confirmation claims Back and dismissing it releases the claim`() {
+        var confirming by mutableStateOf(true)
+        rule.setContent {
+            DshTheme {
+                BackGate(
+                    confirming = confirming,
+                    onDismiss = { confirming = false },
+                    onClose = { error("Back must not close the screen") },
+                )
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText(CLOSE_DSH_TITLE).assertExists()
+        assertTrue(
+            "while asking, Back must belong to the app so it can mean Stay",
+            rule.activity.onBackPressedDispatcher.hasEnabledCallbacks(),
+        )
+
+        rule.onNodeWithText(CLOSE_DSH_STAY).performClick()
+        rule.waitForIdle()
+        assertFalse(
+            "after Stay the platform must own Back again",
+            rule.activity.onBackPressedDispatcher.hasEnabledCallbacks(),
+        )
+    }
+
+    @Test
     fun `back while the dialog is up keeps the screen open`() {
-        var backgrounded = 0
-        var dismissed = 0
+        var confirming by mutableStateOf(true)
         var closed = false
         rule.setContent {
             DshTheme {
                 BackGate(
-                    confirming = true,
-                    onBackground = { backgrounded++ },
-                    onDismiss = { dismissed++ },
+                    confirming = confirming,
+                    onDismiss = { confirming = false },
                     onClose = { closed = true },
                 )
             }
         }
+        rule.waitForIdle()
         rule.onNodeWithText(CLOSE_DSH_TITLE).assertExists()
+
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
 
-        assertEquals("Back behind a dialog must not leave the app", 0, backgrounded)
-        assertFalse("Back behind a dialog must not close it", closed)
-        // Either the dialog's own dismiss handler or our guarded BackHandler answers it;
-        // both routes mean Stay, and both reach the same callback.
-        assertTrue("Back while asking means Stay", dismissed > 0)
+        assertFalse("Back behind a dialog must not close the screen", closed)
+        rule.onNodeWithText(CLOSE_DSH_TITLE).assertDoesNotExist()
+        assertFalse(rule.activity.onBackPressedDispatcher.hasEnabledCallbacks())
     }
 
     @Test
@@ -96,7 +119,6 @@ class BackGateTest {
             DshTheme {
                 BackGate(
                     confirming = confirming,
-                    onBackground = { error("Back was not pressed") },
                     onDismiss = { confirming = false },
                     onClose = {
                         confirming = false
@@ -118,29 +140,6 @@ class BackGateTest {
         rule.onNodeWithText(CLOSE_DSH_CONFIRM).performClick()
         rule.waitForIdle()
         assertTrue("the confirm button is the one path out", closed)
-        rule.onNodeWithText(CLOSE_DSH_TITLE).assertDoesNotExist()
-    }
-
-    @Test
-    fun `staying leaves the screen open`() {
-        var confirming by mutableStateOf(false)
-        var closed = false
-        rule.setContent {
-            DshTheme {
-                BackGate(
-                    confirming = confirming,
-                    onBackground = { error("Back was not pressed") },
-                    onDismiss = { confirming = false },
-                    onClose = { closed = true },
-                )
-            }
-        }
-        rule.runOnUiThread { confirming = true }
-        rule.waitForIdle()
-
-        rule.onNodeWithText(CLOSE_DSH_STAY).performClick()
-        rule.waitForIdle()
-        assertFalse(closed)
         rule.onNodeWithText(CLOSE_DSH_TITLE).assertDoesNotExist()
     }
 

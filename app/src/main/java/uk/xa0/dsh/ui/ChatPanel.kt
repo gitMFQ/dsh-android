@@ -906,23 +906,27 @@ internal fun ChatPanel(
     // under the session that spawned it — so: close the Files panel, then return to
     // Chat, then go up to the parent.
     //
-    // `enabled` only while one of those applies, which matters: a handler always
-    // consumes the press, and consuming one it cannot use would send the reader to
-    // the home screen when all they meant was "put this panel away". The sheets (jobs,
-    // lineage, settings, about) are modal and already dismiss themselves. Composed
-    // here rather than at the root because this is where the state lives, and the root
-    // gate — which backgrounds the task — is asked only after the screen declines.
+    // `enabled` only while one of those applies, and deliberately *not* for
+    // `composerExpanded`: the expanded composer is the chat page's resting state,
+    // not a layer on top of it. Keeping it in this condition registered an enabled
+    // Back callback on every ordinary chat, which is exactly what stops Android 13+
+    // from drawing the predictive-back animation when there is genuinely nothing
+    // left to dismiss. Collapsing the composer has its own control; it is not a
+    // navigation step. The same rule keeps a handler that always consumes the press
+    // from stealing a gesture the platform should animate.
+    //
+    // The sheets (jobs, lineage, settings, about) are modal and already dismiss
+    // themselves. Composed here rather than at the root because this is where the
+    // state lives, and the root's dialog is asked only after the screen declines.
     //
     // The panels come before the view: an open panel is on top of whatever view it
     // covers, so it has to close first or the press would change the view underneath
     // something still on screen.
     BackHandler(
         enabled = showRouter || destination != Destination.CHAT || chatView != ChatView.CHAT ||
-            subagentParent != null || composerExpanded,
+            subagentParent != null,
     ) {
         when {
-            // An open composer is the topmost thing on the screen that Back can close.
-            composerExpanded -> composerExpanded = false
             showRouter -> showRouter = false
             // The pill first, then the destination: inside Chat the pill is the shallower
             // level, so leaving Shell returns to the transcript rather than all the way

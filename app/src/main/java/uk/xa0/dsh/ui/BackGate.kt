@@ -6,31 +6,35 @@ import uk.xa0.dsh.ui.overlay.ConfirmDialogHost
 import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
 
 /**
- * The root's two Back-shaped decisions: what a press with nothing left to dismiss
- * does, and what the drawer's last row asks before it closes the screen.
+ * The root's one Back-shaped decision: what the drawer's last row asks before it
+ * closes the screen.
  *
  * Android's Back is a *stack* gesture and this app's screens are states rather than
- * activities, so a press with nothing open used to finish the Activity outright —
- * including from a chat whose Files panel was open, which is the press a reader most
- * often means as "close this". Those surfaces consume Back themselves (see
- * `ChatPanel`'s handler, and the drawer's and the sheets' own); what reaches here is
- * only the press with nothing left to dismiss.
+ * activities. The surfaces that have something to dismiss consume Back themselves
+ * (see `ChatPanel`'s handler, and the drawer's and the sheets' own); what is left is
+ * the press with nothing open.
  *
- * That press now sends the task to the background, the way Back behaves in every
- * other app on the phone: the reader lands on the home screen and the session, the
- * client and the connection service keep running behind it, ready to be reopened from
- * Recents. It deliberately no longer asks first. A dialog on the Back gesture made the
- * commonest way out of an app a two-step one, and it guarded `finish()` — which is not
- * what Back means here anyway: [uk.xa0.dsh.DshApplication]'s process-wide state, the
- * client, its event socket, [uk.xa0.dsh.AttentionCenter] and the widget's writer all
- * outlive the screen, and the connection service keeps the process alive with no
- * Activity at all.
+ * For that press this composable deliberately registers **no enabled Back callback
+ * at all**. That is the whole point: since Android 13 the system draws the
+ * predictive-back animation — the home screen appearing under the finger as the
+ * edge gesture progresses — only when the app has not claimed Back with an enabled
+ * `OnBackInvokedCallback`. Registering even a callback that immediately calls
+ * `moveTaskToBack(true)` makes the platform treat Back as app-handled, and the
+ * animation disappears; the screen just jumps to the launcher. Handing Back to the
+ * system instead gives the reader the normal, interruptible gesture, and on release
+ * the platform finishes the Activity. The process, its client, its event socket,
+ * [uk.xa0.dsh.AttentionCenter], the widget's writer and the connection service all
+ * outlive the screen, so nothing is lost — the connection service keeps the process
+ * alive with no Activity at all, ready to be reopened from Recents.
  *
- * Closing the screen is therefore an explicit act: the drawer's last row asks for it,
- * and [confirming] is the caller's state rather than this composable's. The root owns
- * the dialog because the root owns `finish()`; the drawer only knows that somebody
- * wants to leave. **Close** calls [onClose], and Back, a tap outside or **Stay** all
- * mean "keep the screen open".
+ * Closing the screen is therefore an explicit act: the drawer's last row asks for
+ * it, and [confirming] is the caller's state rather than this composable's. The root
+ * owns the dialog because the root owns `finish()`; the drawer only knows that
+ * somebody wants to leave. **Close** calls [onClose], and Back, a tap outside or
+ * **Stay** all mean "keep the screen open".
+ *
+ * The one time this *does* register a callback is while [confirming]: Back must
+ * then mean Stay, not "leave", and a dialog is a thing the app can dismiss.
  *
  * The label is **Close**, not "Exit". The control finishes the Activity and does
  * nothing else: the process, the connection and the agent carry on, so "Exit" would
@@ -43,39 +47,40 @@ import uk.xa0.dsh.ui.overlay.ConfirmDialogVisuals
 @Composable
 fun BackGate(
     confirming: Boolean,
-    onBackground: () -> Unit,
     onDismiss: () -> Unit,
     onClose: () -> Unit,
 ) {
-    // Back with nothing left to dismiss. Not a dialog: this is the gesture every other
-    // app on the phone answers by leaving the task in the background, and it is
-    // reversible in one tap from Recents.
-    //
-    // While the confirmation is up, Back means "keep the screen open", not "leave":
-    // the check is here as well as on the dialog's own back handling because that
-    // handling lives in the dialog window's dispatcher, and a stray press that reaches
-    // the Activity's must not background the task out from under the question.
-    BackHandler(enabled = true) {
-        if (confirming) onDismiss() else onBackground()
-    }
+    // The one place a Back callback is wanted. A disabled callback does not count as
+    // an enabled one, so with nothing to confirm the dispatcher reports zero enabled
+    // callbacks and the system takes the gesture — including its predictive animation.
+    BackHandler(enabled = confirming) { onDismiss() }
 
-    // The vendored dialog rather than Material's `AlertDialog`, so a confirmation is
-    // drawn in the same design language as the sheets it sits over. The labels are
-    // passed rather than defaulted: `ConfirmDialogHost` falls back to the platform's
-    // English "OK"/"Cancel", and a "Close" that turns into "OK" on the one screen where
-    // the word is load-bearing would be a regression, not a re-skin.
-    ConfirmDialogHost(
-        show = confirming,
-        visuals = ConfirmDialogVisuals(
-            title = CLOSE_DSH_TITLE,
-            content = CLOSE_DSH_BODY,
-            confirm = CLOSE_DSH_CONFIRM,
-            dismiss = CLOSE_DSH_STAY,
-        ),
-        onConfirm = onClose,
-        // Back, a tap outside, or Stay: all three mean "keep the screen open".
-        onDismiss = onDismiss,
-    )
+    // Not composed at all when there is nothing to confirm. `WindowDialog` (which
+    // `ConfirmDialogHost` is built on) installs a window-level navigation-event
+    // scope; hiding it with `show = false` alone is not a guarantee that no Back
+    // callback is registered, and even one enabled callback would suppress the
+    // platform's predictive-back animation. This is the same guard
+    // `LoadingDialogHost` uses in design/ui/overlay/Dialog.kt.
+    if (confirming) {
+        // The vendored dialog rather than Material's `AlertDialog`, so a confirmation
+        // is drawn in the same design language as the sheets it sits over. The labels
+        // are passed rather than defaulted: `ConfirmDialogHost` falls back to the
+        // platform's English "OK"/"Cancel", and a "Close" that turns into "OK" on the
+        // one screen where the word is load-bearing would be a regression, not a
+        // re-skin.
+        ConfirmDialogHost(
+            show = true,
+            visuals = ConfirmDialogVisuals(
+                title = CLOSE_DSH_TITLE,
+                content = CLOSE_DSH_BODY,
+                confirm = CLOSE_DSH_CONFIRM,
+                dismiss = CLOSE_DSH_STAY,
+            ),
+            onConfirm = onClose,
+            // Back, a tap outside, or Stay: all three mean "keep the screen open".
+            onDismiss = onDismiss,
+        )
+    }
 }
 
 /**

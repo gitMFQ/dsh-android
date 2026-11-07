@@ -53,6 +53,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!--
+      Predictive back. With targetSdk 37 this is the default, but saying it
+      explicitly documents the contract the code depends on: when the app has
+      no enabled Back callback the platform owns the gesture and animates the
+      home screen under the finger (Android 13+). BackGate and ChatPanel are
+      written to leave zero enabled callbacks whenever there is nothing to
+      dismiss; see ui/BackGate.kt. Ignored below API 33, where Back is a key
+      event and the same zero-callback rule simply finishes the Activity.
+    -->
     <application
         android:name=".DshApplication"
         android:allowBackup="false"
@@ -61,7 +70,8 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.DSH">
+        android:theme="@style/Theme.DSH"
+        android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"
